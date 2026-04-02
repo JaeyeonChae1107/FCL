@@ -1,0 +1,11 @@
+results/*
+time_results/*
+data/*
+logs/*
+
+__pycache__/*
+*.pyc
+
+AutonomousDCN/__pycache__/*
+FeatureExtractors/__pycache__/*
+FeatureExtractors/modules/__pycache__/*
