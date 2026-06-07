@@ -1,0 +1,51 @@
+{
+  "exp_name": "unswnb15__dr=cade__sl=ssf__mm=ssf__af=lwf__sc=pca",
+  "dataset": "unswnb15",
+  "drift_detector": "cade",
+  "sample_selector": "ssf",
+  "memory_manager": "ssf",
+  "anti_forgetting": "lwf_ssf",
+  "anomaly_scorer": "pca",
+  "f1": 0.0,
+  "bwt": 0.0,
+  "fwt": -0.5,
+  "label_efficiency": 0.9875,
+  "avg_inference_ms": 0.36,
+  "perf_matrix": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ]
+}
