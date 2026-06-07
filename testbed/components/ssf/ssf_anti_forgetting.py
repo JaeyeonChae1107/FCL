@@ -1,7 +1,16 @@
-"""SSF Anti-Forgetting — Learning without Forgetting (LwF) with InfoNCE.
+"""SSF Anti-Forgetting — weighted BCE + LwF distillation.
 
-FROM: SSF-Strategic-Selection-and-Forgetting/ssf.py (line 262-334)
-      SSF-Strategic-Selection-and-Forgetting/utils.py::InfoNCELoss (line 458-492)
+FROM: Zhang et al. "SSF: Strategic Selection and Forgetting for Federated
+      Continual Learning" INFOCOM 2025.
+      ssf.py (line 262-334)
+
+Loss rules:
+  No drift  →  L_total = L_task + λ · L_reg
+  Drift     →  L_total = L_task   (fast adaptation; skip regularisation)
+
+  L_task : weighted binary cross-entropy on classifier logit
+           new samples receive new_sample_weight; replay gets weight 1.0
+  L_reg  : MSE(z_current, z_teacher)  LwF latent-space distillation
 """
 
 import sys, os
@@ -15,88 +24,39 @@ from copy import deepcopy
 from testbed.base.anti_forgetting import BaseAntiForgetting
 
 
-# FROM: utils.py::InfoNCELoss (line 458-492)
-class _InfoNCELoss(nn.Module):
-    """InfoNCE contrastive loss that separates normal vs. abnormal samples."""
-
-    def __init__(self, temperature: float = 0.02):
-        super().__init__()
-        self.temperature = temperature
-
-    def forward(self, features: torch.Tensor,
-                labels: torch.Tensor) -> torch.Tensor:
-        features = F.normalize(features, p=2, dim=1)
-        batch_size = features.shape[0]
-        labels = labels.contiguous().view(-1, 1)
-        mask = torch.eq(labels, labels.T).float()
-
-        logits = torch.div(torch.matmul(features, features.T), self.temperature)
-        logits_mask = (torch.ones_like(mask)
-                       - torch.eye(batch_size, device=mask.device))
-        logits_wo_diag = logits * logits_mask
-
-        normal_mask = (labels == 0).squeeze()
-        abnormal_mask = (labels > 0).squeeze()
-
-        if normal_mask.sum() == 0:
-            return torch.tensor(0.0, requires_grad=True, device=features.device)
-
-        logits_normal = logits_wo_diag[normal_mask]
-        logits_nn = logits_normal[:, normal_mask]
-        logits_na = logits_normal[:, abnormal_mask]
-
-        if logits_na.numel() == 0:
-            # All samples are normal — no negatives, return 0
-            return torch.tensor(0.0, requires_grad=True, device=features.device)
-
-        sum_neg = torch.sum(torch.exp(logits_na), dim=1, keepdim=True)
-        denom = torch.exp(logits_nn) + sum_neg
-        log_probs = logits_nn - torch.log(denom.clamp(min=1e-12))
-        loss = -log_probs * self.temperature
-        return loss
-
-
 class SSFAntiForgetting(BaseAntiForgetting):
-    """LwF distillation (no drift) + weighted InfoNCE.
+    """Weighted binary cross-entropy + optional LwF distillation.
 
     FROM: SSF-Strategic-Selection-and-Forgetting/ssf.py (line 262-334)
-
-    When drift is detected (replay_batch is None):
-        loss = weighted_InfoNCE only  (fast adaptation)
-    When no drift (replay_batch provided):
-        loss = weighted_InfoNCE + lwf_lambda * MSE(student_output, teacher_output)
     """
 
-    def __init__(self, lwf_lambda: float = 0.5, temperature: float = 0.02,
+    def __init__(self, lwf_lambda: float = 0.5,
                  new_sample_weight: float = 100.0):
         """
         Args:
-            lwf_lambda: Weight of the distillation loss (default 0.5).
-            temperature: InfoNCE temperature (default 0.02).
-            new_sample_weight: Loss scaling for newly added samples (default 100.0).
+            lwf_lambda:        Weight of the LwF regularisation term (default 0.5).
+            new_sample_weight: Loss multiplier for newly selected samples
+                               (replay samples get weight 1.0). Default 100.0.
         """
         self.lwf_lambda = lwf_lambda
-        self.temperature = temperature
         self.new_sample_weight = new_sample_weight
         self.teacher: Optional[nn.Module] = None
-        self._criterion = _InfoNCELoss(temperature)
 
     def compute_loss(self,
                      model: nn.Module,
                      new_batch: Tuple[torch.Tensor, torch.Tensor],
                      replay_batch: Optional[Tuple[torch.Tensor, torch.Tensor]],
                      old_model: Optional[nn.Module] = None) -> torch.Tensor:
-        """Compute weighted InfoNCE + optional LwF distillation.
+        """Weighted BCE + optional LwF.
 
         FROM: ssf.py (line 262-334)
 
         Args:
-            model: Current model. Expected to return (features, recon_vec)
-                   or (features, recon_vec, logits).
+            model: Current model. Expected forward: x → (z, x_hat, logit).
             new_batch: (data, labels) — newly selected samples this round.
-            replay_batch: (data, labels) from memory buffer. If None, drift
-                          is assumed → distillation is skipped.
-            old_model: Unused (teacher stored internally); kept for API compat.
+            replay_batch: (mem_data, mem_labels) or None.
+                          None signals drift mode → skip regularisation.
+            old_model: Explicit teacher override (falls back to self.teacher).
 
         Returns:
             Scalar loss tensor.
@@ -104,64 +64,56 @@ class SSFAntiForgetting(BaseAntiForgetting):
         data, labels = new_batch
         device = data.device
         model = model.to(device)
-        self._criterion = self._criterion.to(device) if hasattr(self._criterion, 'to') else self._criterion
 
         drift_mode = (replay_batch is None)
 
-        # Build training batch: memory + new samples
+        # Build combined batch (replay + new)
         if replay_batch is not None and replay_batch[0] is not None:
-            mem_data, mem_labels = replay_batch
-            mem_data = mem_data.to(device)
-            mem_labels = mem_labels.to(device)
+            mem_data = replay_batch[0].to(device)
+            mem_labels = replay_batch[1].to(device)
             inputs = torch.cat([mem_data, data], dim=0)
             combined_labels = torch.cat([mem_labels, labels], dim=0)
-            # new_sample_mask: 1 for new samples, 0 for replay
-            new_mask = torch.cat([
-                torch.zeros(len(mem_data), device=device),
-                torch.ones(len(data), device=device)
-            ])
+            n_mem = len(mem_data)
         else:
             inputs = data
             combined_labels = labels
-            new_mask = torch.ones(len(data), device=device)
+            n_mem = 0
 
-        # Forward pass
+        # Forward
         out = model(inputs)
-        if isinstance(out, (tuple, list)):
-            recon_vec = out[1]
+        z = out[0] if isinstance(out, (tuple, list)) else out
+        # logit at position 2; fall back to a linear projection of z if absent
+        if isinstance(out, (tuple, list)) and len(out) >= 3:
+            logit = out[2].squeeze(-1)          # (N,)
         else:
-            recon_vec = out
+            logit = z[:, 0]                     # fallback: first latent dim
 
-        # Weighted InfoNCE loss
-        # FROM: ssf.py (line 280-288)
-        normal_new_mask = new_mask[combined_labels == 0]
-        con_loss = self._criterion(recon_vec, combined_labels)
-        if isinstance(con_loss, torch.Tensor) and con_loss.dim() > 0:
-            weight = (1 - normal_new_mask) + normal_new_mask * self.new_sample_weight
-            if len(weight) == len(con_loss):
-                weighted_loss = (con_loss * weight).mean()
-            else:
-                weighted_loss = con_loss.mean()
-        else:
-            weighted_loss = con_loss if isinstance(con_loss, torch.Tensor) else torch.tensor(0.0)
+        # Weighted binary cross-entropy (FROM: ssf.py line 280-288)
+        weights = torch.ones(len(inputs), device=device)
+        if n_mem < len(inputs):
+            weights[n_mem:] = self.new_sample_weight
+
+        l_task = F.binary_cross_entropy_with_logits(
+            logit, combined_labels.float(), weight=weights
+        )
 
         if drift_mode or self.teacher is None:
-            # FROM: ssf.py (line 262-291) — drift: no distillation
-            return weighted_loss
+            # Drift mode: fast adaptation without distillation
+            # FROM: ssf.py line 262-291
+            return l_task
 
-        # FROM: ssf.py (line 323-334) — no drift: add LwF distillation
+        # No-drift mode: add LwF regularisation (FROM: ssf.py line 323-334)
         teacher = (old_model or self.teacher).to(device)
         teacher.eval()
         with torch.no_grad():
             t_out = teacher(inputs)
-            teacher_recon = t_out[1] if isinstance(t_out, (tuple, list)) else t_out
+            teacher_z = t_out[0] if isinstance(t_out, (tuple, list)) else t_out
 
-        distillation_loss = F.mse_loss(recon_vec, teacher_recon)
-        return weighted_loss + self.lwf_lambda * distillation_loss
+        l_reg = F.mse_loss(z, teacher_z.to(device))
+        return l_task + self.lwf_lambda * l_reg
 
-    # FROM: ssf.py (line 336) — teacher_model.load_state_dict(model.state_dict())
     def on_task_end(self, model: nn.Module) -> None:
-        """Update the teacher model with the current student weights.
+        """Update teacher with current student weights.
 
         FROM: ssf.py line 336: teacher_model.load_state_dict(model.state_dict())
         """

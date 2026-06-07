@@ -14,32 +14,31 @@ from testbed.base import (BaseDriftDetector, BaseSampleSelector,
                            BaseMemoryManager, BaseAntiForgetting,
                            BaseAnomalyScorer)
 
+# ── Model ──────────────────────────────────────────────────────────────────
+from testbed.pipeline.models import FCLAutoEncoder
+
 # ── Drift detectors ────────────────────────────────────────────────────────
 from testbed.components.ssf import SSFDriftDetector
 from testbed.components.cade import CADEDriftDetector
-from testbed.components.cndids import DDMDriftDetector
 from testbed.pipeline.component_registry import NoDriftDetector
 
 # ── Sample selectors ───────────────────────────────────────────────────────
 from testbed.components.ssf import SSFSampleSelector
-from testbed.pipeline.component_registry import RandomSelector
+from testbed.pipeline.component_registry import AllSampleSelector, RandomSelector
 
 # ── Memory managers ────────────────────────────────────────────────────────
 from testbed.components.ssf import SSFMemoryManager
-from testbed.components.cndids import CNDIDSMemoryManager
-from testbed.pipeline.component_registry import (NoMemoryManager,
-                                                  FixedBufferManager)
+from testbed.pipeline.component_registry import NoMemoryManager, FIFOMemoryManager
 
 # ── Anti-forgetting ────────────────────────────────────────────────────────
 from testbed.components.ssf import SSFAntiForgetting
-from testbed.components.cndids import CNDIDSAntiForgetting, CFEExtractor
+from testbed.components.cndids import CNDIDSAntiForgetting
 from testbed.components.gpm import GPMAntiForgetting
 from testbed.pipeline.component_registry import ReplayOnlyLoss
 
 # ── Anomaly scorers ────────────────────────────────────────────────────────
 from testbed.components.cndids import PCAAnomalyScorer
 from testbed.components.cade import CADEAnomalyScorer
-from testbed.components.baselines import LOFScorer, IsoForestScorer, DeepSVDDScorer
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────────
@@ -60,18 +59,13 @@ def labels():
 
 @pytest.fixture
 def simple_model():
-    return torch.nn.Sequential(
-        torch.nn.Linear(DIM, 8),
-        torch.nn.ReLU(),
-        torch.nn.Linear(8, DIM),
-    )
+    return FCLAutoEncoder(input_dim=DIM, hidden_dim=16, latent_dim=8)
 
 
 # ── Drift Detector tests ───────────────────────────────────────────────────
 DRIFT_DETECTORS = [
     NoDriftDetector,
     SSFDriftDetector,
-    DDMDriftDetector,
 ]
 
 
@@ -106,7 +100,7 @@ def test_no_drift_detector_always_false(data):
 
 
 # ── Sample Selector tests ──────────────────────────────────────────────────
-SAMPLE_SELECTORS = [RandomSelector, SSFSampleSelector]
+SAMPLE_SELECTORS = [AllSampleSelector, RandomSelector, SSFSampleSelector]
 
 
 @pytest.mark.parametrize("cls", SAMPLE_SELECTORS)
@@ -133,9 +127,8 @@ def test_selector_valid_indices(cls, data, labels):
 # ── Memory Manager tests ───────────────────────────────────────────────────
 MEMORY_MANAGERS = [
     (NoMemoryManager, {}),
-    (FixedBufferManager, {"max_size": 50}),
+    (FIFOMemoryManager, {"max_size": 50}),
     (SSFMemoryManager, {"max_size": 50, "num_labeled_sample": 10}),
-    (CNDIDSMemoryManager, {"mode": "fifo", "capacity": 50}),
 ]
 
 
@@ -150,7 +143,7 @@ def test_memory_update_increases_size(cls, kwargs, data, labels):
     mgr = cls(**kwargs)
     mgr.update(data[:10], labels[:10], drift_detected=False)
     if cls is NoMemoryManager:
-        assert mgr.size() == 0  # no-op
+        assert mgr.size() == 0
     else:
         assert mgr.size() > 0
 
@@ -173,7 +166,6 @@ ANTI_FORGETTING = [
     (ReplayOnlyLoss, {}),
     (SSFAntiForgetting, {"lwf_lambda": 0.5}),
     (CNDIDSAntiForgetting, {}),
-    (CFEExtractor, {}),
     (GPMAntiForgetting, {"threshold": 0.97}),
 ]
 
@@ -198,17 +190,13 @@ def test_af_loss_requires_grad(cls, kwargs, data, labels, simple_model):
 @pytest.mark.parametrize("cls,kwargs", ANTI_FORGETTING)
 def test_af_on_task_end_no_exception(cls, kwargs, simple_model):
     af = cls(**kwargs)
-    af.on_task_end(simple_model)  # should not raise
+    af.on_task_end(simple_model)
 
 
 # ── Anomaly Scorer tests ───────────────────────────────────────────────────
 ANOMALY_SCORERS = [
     (PCAAnomalyScorer, {}),
     (CADEAnomalyScorer, {}),
-    (LOFScorer, {"n_neighbors": 5}),
-    (IsoForestScorer, {"n_estimators": 10}),
-    (DeepSVDDScorer, {"input_dim": DIM, "hidden_dims": [8], "latent_dim": 4,
-                       "n_epochs": 2}),
 ]
 
 

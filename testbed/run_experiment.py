@@ -52,11 +52,8 @@ def _parse_subset(subset_str: str) -> Dict[str, list]:
 
 
 def _default_model(dim: int = 121) -> torch.nn.Module:
-    return torch.nn.Sequential(
-        torch.nn.Linear(dim, 64),
-        torch.nn.ReLU(),
-        torch.nn.Linear(64, 32),
-    )
+    from testbed.pipeline.models import FCLAutoEncoder
+    return FCLAutoEncoder(input_dim=dim, hidden_dim=64, latent_dim=32)
 
 
 def _make_dummy_tasks(n: int = 500, dim: int = 121, n_tasks: int = 5):

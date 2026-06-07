@@ -1,0 +1,35 @@
+{
+  "exp_name": "dummy__dr=none__sl=all__mm=fifo__af=none__sc=pca",
+  "dataset": "dummy",
+  "drift_detector": "none",
+  "sample_selector": "all",
+  "memory_manager": "fifo",
+  "anti_forgetting": "none",
+  "anomaly_scorer": "pca",
+  "f1": 0.627,
+  "precision": 0.5333,
+  "recall": 0.6154,
+  "fpr": 0.6533,
+  "balanced_accuracy": 0.481,
+  "bwt": 0.0042,
+  "fwt": 0.0531,
+  "label_efficiency": 0.6988,
+  "avg_inference_ms": 0.81,
+  "perf_matrix": [
+    [
+      0.7538461538461538,
+      0.5347593582887701,
+      0.5473684210526316
+    ],
+    [
+      0.7538461538461538,
+      0.5473684210526316,
+      0.5714285714285715
+    ],
+    [
+      0.7575757575757577,
+      0.5520833333333333,
+      0.5714285714285715
+    ]
+  ]
+}

@@ -23,25 +23,31 @@ from testbed.experiments.metrics import (f1_score, precision_score,
 logger = logging.getLogger(__name__)
 
 COMPONENT_GRID = {
-    "drift_detector":  ["none", "ssf", "cade", "ddm"],
-    "sample_selector": ["random", "ssf"],
-    "memory_manager":  ["none", "fixed", "ssf", "cndids"],
-    "anti_forgetting": ["none", "lwf_ssf", "cfe", "cndids", "gpm"],
-    "anomaly_scorer":  ["pca", "deep_svdd", "lof", "cade_mad"],
+    # 3 options × 3 × 3 × 4 × 2 = 216 combinations per dataset
+    # Paper mapping:
+    #   CND-IDS : none / all  / none / cndids  / pca
+    #   SSF     : ssf  / ssf  / ssf  / lwf_ssf / (pca | cade_mad)
+    #   CADE    : cade / rand / none / none     / cade_mad
+    #   SPIDER  : none / rand / fifo / gpm      / pca
+    "drift_detector":  ["none", "ssf", "cade"],
+    "sample_selector": ["all", "random", "ssf"],
+    "memory_manager":  ["none", "fifo", "ssf"],
+    "anti_forgetting": ["none", "cndids", "gpm", "lwf_ssf"],
+    "anomaly_scorer":  ["pca", "cade_mad"],
 }
 
 # 조합 약어 (파일명 단축용)
 _SHORT = {
     # drift_detector
-    "none": "none", "ssf": "ssf", "cade": "cade", "ddm": "ddm",
+    "none": "none", "ssf": "ssf", "cade": "cade",
     # sample_selector
-    "random": "rand",
+    "all": "all", "random": "rand",
     # memory_manager
-    "fixed": "fixed", "cndids": "cnd",
+    "fifo": "fifo",
     # anti_forgetting
-    "lwf_ssf": "lwf", "cfe": "cfe", "gpm": "gpm",
+    "cndids": "cnd", "gpm": "gpm", "lwf_ssf": "lwf",
     # anomaly_scorer
-    "pca": "pca", "deep_svdd": "svdd", "lof": "lof", "cade_mad": "mad",
+    "pca": "pca", "cade_mad": "mad",
 }
 
 
@@ -238,13 +244,10 @@ def run_grid(dataset: str = 'dummy',
 
 
 def _default_model(dim: int) -> torch.nn.Module:
+    from testbed.pipeline.models import FCLAutoEncoder
     hidden = max(64, dim // 2)
     latent = max(32, dim // 4)
-    return torch.nn.Sequential(
-        torch.nn.Linear(dim, hidden),
-        torch.nn.ReLU(),
-        torch.nn.Linear(hidden, latent),
-    )
+    return FCLAutoEncoder(input_dim=dim, hidden_dim=hidden, latent_dim=latent)
 
 
 def _load_real_tasks(dataset: str, n_tasks: int,

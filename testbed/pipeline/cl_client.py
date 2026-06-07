@@ -34,7 +34,7 @@ STAGE_GUIDE: Dict[str, Dict[str, Any]] = {
             "버퍼가 None이면 반드시 False/0.0 반환",
             "memory_manager.update() 이전에 실행되므로 이전 분포를 기준으로 비교 가능",
         ],
-        "구현체": ["NoDriftDetector(none)", "SSFDriftDetector(ssf)", "CADEDriftDetector(cade)", "DDMDriftDetector(ddm)"],
+        "구현체": ["NoDriftDetector(none)", "SSFDriftDetector(ssf)", "CADEDriftDetector(cade)"],
     },
     "2_sample_selector": {
         "역할": (
@@ -54,7 +54,7 @@ STAGE_GUIDE: Dict[str, Dict[str, Any]] = {
             "반환 리스트 비어있으면 CLClient가 range(label_budget)으로 대체",
             "선택된 샘플만 Stage 3(메모리 업데이트)·Stage 5(손실 계산)에 사용됨",
         ],
-        "구현체": ["RandomSelector(random)", "SSFSampleSelector(ssf)"],
+        "구현체": ["AllSampleSelector(all)", "RandomSelector(random)", "SSFSampleSelector(ssf)"],
     },
     "3_memory_manager": {
         "역할": (
@@ -73,7 +73,7 @@ STAGE_GUIDE: Dict[str, Dict[str, Any]] = {
             "update() 완료 후 get_buffer()는 최신 버퍼를 반환",
             "Stage 4(replay batch 조회)는 update() 이후 실행됨",
         ],
-        "구현체": ["NoMemoryManager(none)", "FixedBufferManager(fixed)", "SSFMemoryManager(ssf)", "CNDIDSMemoryManager(cndids)"],
+        "구현체": ["NoMemoryManager(none)", "FIFOMemoryManager(fifo)", "SSFMemoryManager(ssf)"],
     },
     "4_replay_retrieval": {
         "역할": (
@@ -104,7 +104,7 @@ STAGE_GUIDE: Dict[str, Dict[str, Any]] = {
             "on_task_end(model) 훅이 optimizer.step() 이후 반드시 호출됨",
             "project_gradients()는 backward() 이후, step() 이전에 호출됨 (GPM만 해당)",
         ],
-        "구현체": ["ReplayOnlyLoss(none)", "SSFAntiForgetting(lwf_ssf)", "CFEExtractor(cfe)", "CNDIDSAntiForgetting(cndids)", "GPMAntiForgetting(gpm)"],
+        "구현체": ["ReplayOnlyLoss(none)", "CNDIDSAntiForgetting(cndids)", "GPMAntiForgetting(gpm)", "SSFAntiForgetting(lwf_ssf)"],
     },
     "anomaly_scorer": {
         "역할": (
@@ -125,7 +125,7 @@ STAGE_GUIDE: Dict[str, Dict[str, Any]] = {
             "fit_anomaly_scorer()가 정상 데이터의 95th percentile을 임계값으로 자동 설정",
             "인코더 forward는 model.eval() + torch.no_grad() 하에서 실행됨",
         ],
-        "구현체": ["PCAAnomalyScorer(pca)", "CADEAnomalyScorer(cade_mad)", "LOFScorer(lof)", "IsoForestScorer(isoforest)", "DeepSVDDScorer(deep_svdd)"],
+        "구현체": ["PCAAnomalyScorer(pca)", "CADEAnomalyScorer(cade_mad)"],
     },
 }
 
