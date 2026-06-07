@@ -4,7 +4,18 @@ import torch
 
 
 class BaseMemoryManager(ABC):
-    """Abstract base class for memory (replay buffer) managers."""
+    """파이프라인 Stage 3 & 4 — Replay 버퍼 관리자 추상 기반 클래스.
+
+    Stage 3: update()로 선택 샘플을 버퍼에 추가 (drift 여부에 따라 교체 전략 조정 가능).
+    Stage 4: get_replay_batch()로 Stage 5(anti-forgetting)에 과거 경험 제공.
+             get_buffer()로 다음 라운드 Drift Detection의 참조 분포를 제공.
+
+    구현 시 보장사항:
+    - update() 이후 get_replay_batch()는 유효한 데이터를 반환할 수 있음
+    - 버퍼가 비어있으면 (None, None) 반환 (CLClient가 replay_batch=None으로 처리)
+
+    등록 키: 'none' | 'fixed' | 'ssf' | 'cndids'
+    """
 
     @abstractmethod
     def update(self, selected_data: torch.Tensor,
