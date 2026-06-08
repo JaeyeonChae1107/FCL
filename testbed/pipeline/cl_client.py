@@ -177,6 +177,8 @@ class CLClient:
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         self._anomaly_threshold: float = 0.5
         self._round: int = 0
+        self.batch_size: int = config.get('batch_size', 64)
+        self.n_epochs: int = config.get('n_epochs', 1)
 
     # ------------------------------------------------------------------
     def update(self, new_data: torch.Tensor,
@@ -219,35 +221,47 @@ class CLClient:
         # 3. Memory update
         self.memory_manager.update(sel_data, sel_labels, drift_detected)
 
-        # 4. Replay batch
-        replay_batch = None
-        if self.memory_manager.size() > 0:
-            r_data, r_labels = self.memory_manager.get_replay_batch(
-                batch_size=self.label_budget)
-            if r_data is not None:
-                replay_batch = (r_data.to(self.device),
-                                r_labels.to(self.device))
-
-        # 5. Loss computation
+        # 4-5. Mini-batch training over ALL new_data for n_epochs
         self.model.train()
-        self.optimizer.zero_grad()
-        new_batch = (sel_data, sel_labels)
-        loss = self.anti_forgetting.compute_loss(
-            self.model, new_batch, replay_batch)
+        N = len(new_data)
+        total_loss = 0.0
+        n_steps = 0
 
-        # 6. Backward + optional gradient projection
-        loss.backward()
-        if hasattr(self.anti_forgetting, 'project_gradients'):
-            self.anti_forgetting.project_gradients(self.model)
+        for _ in range(self.n_epochs):
+            perm = torch.randperm(N, device=self.device)
+            shuffled_data = new_data[perm]
+            shuffled_labels = new_labels[perm]
 
-        # 7. Optimizer step
-        self.optimizer.step()
+            for start in range(0, N, self.batch_size):
+                end = min(start + self.batch_size, N)
+                batch_data = shuffled_data[start:end]
+                batch_labels = shuffled_labels[start:end]
 
-        # 8. Task-end hook
+                replay_batch = None
+                if self.memory_manager.size() > 0:
+                    r_data, r_labels = self.memory_manager.get_replay_batch(
+                        self.batch_size)
+                    if r_data is not None:
+                        replay_batch = (r_data.to(self.device),
+                                        r_labels.to(self.device))
+
+                self.optimizer.zero_grad()
+                loss = self.anti_forgetting.compute_loss(
+                    self.model, (batch_data, batch_labels), replay_batch)
+                loss.backward()
+
+                if hasattr(self.anti_forgetting, 'project_gradients'):
+                    self.anti_forgetting.project_gradients(self.model)
+
+                self.optimizer.step()
+                total_loss += loss.item()
+                n_steps += 1
+
+        # 6. Task-end hook (once per update call, not per batch)
         self.anti_forgetting.on_task_end(self.model)
 
         return {
-            'loss': loss.item(),
+            'loss': total_loss / max(n_steps, 1),
             'drift': drift_detected,
             'drift_score': drift_score,
             'round': self._round,

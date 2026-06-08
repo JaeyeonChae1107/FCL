@@ -144,6 +144,7 @@ def run_grid(dataset: str = 'dummy',
             "anti_forgetting": {"name": combo_dict["anti_forgetting"]},
             "anomaly_scorer":  {"name": combo_dict["anomaly_scorer"]},
             "label_budget": label_budget,
+            "batch_size": 64,
             "lr": 1e-3,
         }
 
