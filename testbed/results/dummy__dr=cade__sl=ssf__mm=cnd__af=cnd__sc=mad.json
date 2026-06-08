@@ -1,0 +1,30 @@
+{
+  "exp_name": "dummy__dr=cade__sl=ssf__mm=cnd__af=cnd__sc=mad",
+  "dataset": "dummy",
+  "drift_detector": "cade",
+  "sample_selector": "ssf",
+  "memory_manager": "cndids",
+  "anti_forgetting": "cndids",
+  "anomaly_scorer": "cade_mad",
+  "f1": 0.1758,
+  "precision": 0.4444,
+  "recall": 0.0482,
+  "fpr": 0.0602,
+  "perf_matrix": [
+    [
+      0.20370370370370372,
+      0.0,
+      0.047058823529411764
+    ],
+    [
+      0.23728813559322037,
+      0.06521739130434782,
+      0.046511627906976744
+    ],
+    [
+      0.288,
+      0.1523809523809524,
+      0.08695652173913043
+    ]
+  ]
+}

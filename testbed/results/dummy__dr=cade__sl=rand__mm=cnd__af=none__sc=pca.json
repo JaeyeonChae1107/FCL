@@ -1,0 +1,30 @@
+{
+  "exp_name": "dummy__dr=cade__sl=rand__mm=cnd__af=none__sc=pca",
+  "dataset": "dummy",
+  "drift_detector": "cade",
+  "sample_selector": "random",
+  "memory_manager": "cndids",
+  "anti_forgetting": "none",
+  "anomaly_scorer": "pca",
+  "f1": 0.7773,
+  "precision": 0.9405,
+  "recall": 0.9518,
+  "fpr": 0.0602,
+  "perf_matrix": [
+    [
+      0.9789473684210526,
+      0.674698795180723,
+      0.6557377049180327
+    ],
+    [
+      0.7265625,
+      0.9590643274853802,
+      0.6502057613168725
+    ],
+    [
+      0.7137254901960786,
+      0.6720647773279352,
+      0.9461077844311376
+    ]
+  ]
+}

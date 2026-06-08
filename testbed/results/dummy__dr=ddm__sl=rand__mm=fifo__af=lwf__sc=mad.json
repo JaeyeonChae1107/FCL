@@ -1,0 +1,30 @@
+{
+  "exp_name": "dummy__dr=ddm__sl=rand__mm=fifo__af=lwf__sc=mad",
+  "dataset": "dummy",
+  "drift_detector": "ddm",
+  "sample_selector": "random",
+  "memory_manager": "fifo",
+  "anti_forgetting": "lwf_ssf",
+  "anomaly_scorer": "cade_mad",
+  "f1": 0.5318,
+  "precision": 0.8684,
+  "recall": 0.3976,
+  "fpr": 0.0602,
+  "perf_matrix": [
+    [
+      0.624113475177305,
+      0.2689075630252101,
+      0.27586206896551724
+    ],
+    [
+      0.5151515151515151,
+      0.3207547169811321,
+      0.21359223300970878
+    ],
+    [
+      0.593103448275862,
+      0.4566929133858268,
+      0.5454545454545454
+    ]
+  ]
+}

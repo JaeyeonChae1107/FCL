@@ -1,0 +1,30 @@
+{
+  "exp_name": "dummy__dr=ddm__sl=rand__mm=ssf__af=lwf__sc=pca",
+  "dataset": "dummy",
+  "drift_detector": "ddm",
+  "sample_selector": "random",
+  "memory_manager": "ssf",
+  "anti_forgetting": "lwf_ssf",
+  "anomaly_scorer": "pca",
+  "f1": 0.7888,
+  "precision": 0.9432,
+  "recall": 1.0,
+  "fpr": 0.0602,
+  "perf_matrix": [
+    [
+      0.9789473684210526,
+      0.6772908366533864,
+      0.6666666666666666
+    ],
+    [
+      0.7159533073929962,
+      0.9651162790697674,
+      0.6612903225806451
+    ],
+    [
+      0.7209302325581396,
+      0.674698795180723,
+      0.9707602339181286
+    ]
+  ]
+}

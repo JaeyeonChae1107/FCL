@@ -1,0 +1,30 @@
+{
+  "exp_name": "dummy__dr=none__sl=ssf__mm=cnd__af=gpm__sc=pca",
+  "dataset": "dummy",
+  "drift_detector": "none",
+  "sample_selector": "ssf",
+  "memory_manager": "cndids",
+  "anti_forgetting": "gpm",
+  "anomaly_scorer": "pca",
+  "f1": 0.7851,
+  "precision": 0.9425,
+  "recall": 0.988,
+  "fpr": 0.0602,
+  "perf_matrix": [
+    [
+      0.9735449735449735,
+      0.6772908366533864,
+      0.6666666666666666
+    ],
+    [
+      0.7159533073929962,
+      0.9651162790697674,
+      0.6557377049180327
+    ],
+    [
+      0.7131782945736435,
+      0.6772908366533864,
+      0.9647058823529412
+    ]
+  ]
+}

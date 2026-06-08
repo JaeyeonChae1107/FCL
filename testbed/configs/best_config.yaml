@@ -3,11 +3,11 @@ anomaly_scorer:
 anti_forgetting:
   name: lwf_ssf
 drift_detector:
-  name: cade
+  name: none
 label_budget: 50
 lr: 0.001
 memory_manager:
-  name: ssf
+  name: cndids
 n_tasks: 5
 sample_selector:
   name: ssf

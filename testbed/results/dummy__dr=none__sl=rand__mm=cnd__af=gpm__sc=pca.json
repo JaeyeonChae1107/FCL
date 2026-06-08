@@ -1,0 +1,30 @@
+{
+  "exp_name": "dummy__dr=none__sl=rand__mm=cnd__af=gpm__sc=pca",
+  "dataset": "dummy",
+  "drift_detector": "none",
+  "sample_selector": "random",
+  "memory_manager": "cndids",
+  "anti_forgetting": "gpm",
+  "anomaly_scorer": "pca",
+  "f1": 0.7829,
+  "precision": 0.9419,
+  "recall": 0.9759,
+  "fpr": 0.0602,
+  "perf_matrix": [
+    [
+      0.9789473684210526,
+      0.6799999999999999,
+      0.6666666666666666
+    ],
+    [
+      0.7209302325581396,
+      0.9770114942528736,
+      0.6666666666666666
+    ],
+    [
+      0.7181467181467182,
+      0.6719999999999999,
+      0.9585798816568047
+    ]
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "exp_name": "dummy__dr=ddm__sl=rand__mm=fifo__af=gpm__sc=mad",
+  "dataset": "dummy",
+  "drift_detector": "ddm",
+  "sample_selector": "random",
+  "memory_manager": "fifo",
+  "anti_forgetting": "gpm",
+  "anomaly_scorer": "cade_mad",
+  "f1": 0.2744,
+  "precision": 0.6154,
+  "recall": 0.0964,
+  "fpr": 0.0602,
+  "perf_matrix": [
+    [
+      0.09803921568627452,
+      0.0898876404494382,
+      0.02380952380952381
+    ],
+    [
+      0.3622047244094488,
+      0.06521739130434782,
+      0.09195402298850576
+    ],
+    [
+      0.4285714285714286,
+      0.22807017543859653,
+      0.16666666666666669
+    ]
+  ]
+}
