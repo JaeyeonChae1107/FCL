@@ -221,6 +221,11 @@ class CLClient:
         # 3. Memory update
         self.memory_manager.update(sel_data, sel_labels, drift_detected)
 
+        # 3b. Refit stateful drift detectors (e.g. CADE) on current task data
+        #     so next round compares against this task's distribution.
+        if hasattr(self.drift_detector, 'fit'):
+            self.drift_detector.fit(new_data.cpu(), new_labels.cpu())
+
         # 4-5. Mini-batch training over ALL new_data for n_epochs
         self.model.train()
         N = len(new_data)

@@ -69,29 +69,6 @@ class CADEDriftDetector(BaseDriftDetector):
 
         self._fitted = True
 
-    # PORTED FROM: detect.py::detect_drift_samples() (line 87-104)
-    def _anomaly_score(self, z: torch.Tensor) -> float:
-        """Compute the minimum MAD-normalised distance to any known family.
-
-        PORTED FROM: CADE/cade/detect.py (line 89-97):
-          anomaly_k[i] = |dis_k[i] - median(dis[i])| / MAD[i]
-          min_anomaly_score = min(anomaly_k)
-
-        Args:
-            z: Single latent vector. Shape (latent_dim,).
-
-        Returns:
-            Float anomaly score (higher = more anomalous).
-        """
-        if not self._fitted or not self._centroids:
-            return 0.0
-        scores = []
-        for f, centroid in self._centroids.items():
-            dist = torch.norm(z - centroid).item()
-            score = abs(dist - self._medians[f]) / self._mads[f]
-            scores.append(score)
-        return min(scores)
-
     def detect(self, new_data: torch.Tensor,
                memory_buffer: Optional[torch.Tensor]) -> bool:
         """Return True if any new sample exceeds the anomaly threshold.
@@ -124,11 +101,17 @@ class CADEDriftDetector(BaseDriftDetector):
         return float(self._batch_scores(new_data).max().item())
 
     def _batch_scores(self, z_batch: torch.Tensor) -> torch.Tensor:
-        """Compute per-sample anomaly scores for a batch."""
-        scores = torch.zeros(len(z_batch))
-        for i, z in enumerate(z_batch):
-            scores[i] = self._anomaly_score(z)
-        return scores
+        """Compute per-sample anomaly scores for a batch (vectorized)."""
+        if not self._centroids:
+            return torch.zeros(len(z_batch))
+        z = z_batch.float()
+        family_scores = []
+        for f, centroid in self._centroids.items():
+            c = centroid.to(z.device)
+            dist = torch.norm(z - c.unsqueeze(0), dim=1)
+            score = (dist - self._medians[f]).abs() / self._mads[f]
+            family_scores.append(score)
+        return torch.stack(family_scores, dim=1).min(dim=1).values
 
     def reset(self):
         self._centroids = {}

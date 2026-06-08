@@ -55,53 +55,42 @@ class SSFDriftDetector(BaseDriftDetector):
         self.drift_threshold = drift_threshold
         self._last_ks_stat: float = 0.0
         self._last_p_value: float = 1.0
+        self._cache_key: tuple = None
+
+    def _compute(self, new_data: torch.Tensor,
+                memory_buffer: Optional[torch.Tensor]) -> None:
+        """Run KS test once and cache result; skip if same tensors already computed."""
+        key = (id(new_data), id(memory_buffer))
+        if self._cache_key == key:
+            return
+        if memory_buffer is None:
+            self._last_ks_stat = 0.0
+            self._last_p_value = 1.0
+        else:
+            ctrl = self._flatten(memory_buffer)
+            treat = self._flatten(new_data)
+            ks_stat, p_value = _ks_2samp(ctrl, treat)
+            self._last_ks_stat = float(ks_stat)
+            self._last_p_value = float(p_value)
+        self._cache_key = key
 
     # FROM: utils.py::detect_drift() — KS 2-sample test logic
     def detect(self, new_data: torch.Tensor,
                memory_buffer: Optional[torch.Tensor]) -> bool:
-        """Return True if KS p-value < drift_threshold.
-
-        Args:
-            new_data: Incoming 1-D score array or (N,) / (N,1) tensor.
-            memory_buffer: Reference score array from memory, same shape convention.
-
-        Returns:
-            True if drift is detected.
-
-        Raises:
-            ValueError: If memory_buffer is None (reference required).
-        """
-        if memory_buffer is None:
-            return False
-
-        ctrl = self._flatten(memory_buffer)
-        treat = self._flatten(new_data)
-
-        ks_stat, p_value = _ks_2samp(ctrl, treat)
-        self._last_ks_stat = float(ks_stat)
-        self._last_p_value = float(p_value)
-
-        if p_value < self.drift_threshold:
-            return True
-        return False
+        """Return True if KS p-value < drift_threshold."""
+        self._compute(new_data, memory_buffer)
+        return bool(self._last_p_value < self.drift_threshold)
 
     def get_drift_score(self, new_data: torch.Tensor,
                         memory_buffer: Optional[torch.Tensor]) -> float:
-        """Return the KS statistic (0–1, higher = more drift).
-
-        Args:
-            new_data: Incoming score tensor.
-            memory_buffer: Reference score tensor.
-
-        Returns:
-            KS statistic as float.
-        """
-        self.detect(new_data, memory_buffer)
+        """Return the KS statistic (0–1, higher = more drift)."""
+        self._compute(new_data, memory_buffer)
         return self._last_ks_stat
 
     def reset(self):
         self._last_ks_stat = 0.0
         self._last_p_value = 1.0
+        self._cache_key = None
 
     @staticmethod
     def _flatten(t: torch.Tensor):
