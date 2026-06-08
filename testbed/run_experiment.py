@@ -51,9 +51,10 @@ def _parse_subset(subset_str: str) -> Dict[str, list]:
     return result
 
 
-def _default_model(dim: int = 121) -> torch.nn.Module:
-    from testbed.pipeline.models import FCLAutoEncoder
-    return FCLAutoEncoder(input_dim=dim, hidden_dim=64, latent_dim=32)
+def _default_model(dim: int = 121, combo: dict = None) -> torch.nn.Module:
+    from testbed.pipeline.models import select_paper, build_model
+    paper = select_paper(combo or {})
+    return build_model(paper, dim)
 
 
 def _make_dummy_tasks(n: int = 500, dim: int = 121, n_tasks: int = 5):
@@ -89,7 +90,13 @@ def run_single_config(config_path: str, data_dir: str = './data/',
     from testbed.pipeline.cl_client import CLClient
     from testbed.experiments.metrics import f1_score
 
-    model = _default_model(dim)
+    combo = {
+        'drift_detector':  cfg.get('drift_detector', {}).get('name', 'none'),
+        'memory_manager':  cfg.get('memory_manager',  {}).get('name', 'none'),
+        'anti_forgetting': cfg.get('anti_forgetting', {}).get('name', 'none'),
+        'anomaly_scorer':  cfg.get('anomaly_scorer',  {}).get('name', 'pca'),
+    }
+    model = _default_model(dim, combo)
     client = CLClient(model=model, config=cfg, device=device)
 
     perf_matrix = []
@@ -128,6 +135,7 @@ def run_grid_search(args) -> pd.DataFrame:
         dim=args.dim,
         max_samples_per_task=args.max_samples,
         n_epochs=args.n_epochs,
+        use_paper_epochs=args.paper_epochs,
     )
     return df
 
@@ -210,7 +218,9 @@ def main():
     parser.add_argument('--max_samples', type=int, default=None,
                         help='실제 데이터 태스크당 최대 샘플 수 (시간 단축용)')
     parser.add_argument('--n_epochs', type=int, default=5,
-                        help='태스크당 학습 에폭 수 (기본: 5)')
+                        help='태스크당 학습 에폭 수 (기본: 5, --paper_epochs 미사용 시)')
+    parser.add_argument('--paper_epochs', action='store_true',
+                        help='논문 원본 epoch/optimizer 설정 사용 (SSF:200/1, CND-IDS:10/50, CADE:250/50)')
     args = parser.parse_args()
 
     if args.test:

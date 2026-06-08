@@ -10,8 +10,8 @@ from testbed.experiments.metrics import f1_score
 
 
 def _make_model(dim: int = 121):
-    from testbed.pipeline.models import FCLAutoEncoder
-    return FCLAutoEncoder(input_dim=dim, hidden_dim=64, latent_dim=32)
+    from testbed.pipeline.models import SSFModel
+    return SSFModel(input_dim=dim)
 
 
 def _make_tasks(n: int = 500, dim: int = 121, n_tasks: int = 3):

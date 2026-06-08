@@ -15,7 +15,7 @@ from testbed.base import (BaseDriftDetector, BaseSampleSelector,
                            BaseAnomalyScorer)
 
 # ── Model ──────────────────────────────────────────────────────────────────
-from testbed.pipeline.models import FCLAutoEncoder
+from testbed.pipeline.models import SSFModel
 
 # ── Drift detectors ────────────────────────────────────────────────────────
 from testbed.components.ssf import SSFDriftDetector
@@ -61,7 +61,7 @@ def labels():
 
 @pytest.fixture
 def simple_model():
-    return FCLAutoEncoder(input_dim=DIM, hidden_dim=16, latent_dim=8)
+    return SSFModel(input_dim=DIM)
 
 
 # ── Drift Detector tests ───────────────────────────────────────────────────

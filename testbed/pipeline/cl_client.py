@@ -23,7 +23,7 @@ STAGE_GUIDE: Dict[str, Dict[str, Any]] = {
             "메모리 update() 호출 이전에 실행하여 '이전 분포'를 참조 기준으로 사용한다."
         ),
         "입력": {
-            "new_data": "torch.Tensor (N, D) — 현재 라운드의 새 샘플",
+            "new_data": "torch.Tensor (N, D) — 현재 라운드의 새 샘플 또는 latent 벡터",
             "buf_ref":  "torch.Tensor (M, D) or None — 메모리 버퍼 전체 (이전 분포 참조)",
         },
         "출력": {
@@ -33,6 +33,7 @@ STAGE_GUIDE: Dict[str, Dict[str, Any]] = {
         "보장사항": [
             "버퍼가 None이면 반드시 False/0.0 반환",
             "memory_manager.update() 이전에 실행되므로 이전 분포를 기준으로 비교 가능",
+            "needs_encoded_input=True인 경우(CADE) 모델 인코더 출력이 입력으로 전달됨",
         ],
         "구현체": ["NoDriftDetector(none)", "SSFDriftDetector(ssf)", "CADEDriftDetector(cade)"],
     },
@@ -141,8 +142,13 @@ class CLClient:
             "memory_manager":  {"name": "ssf", "max_size": 1000},
             "anti_forgetting": {"name": "lwf_ssf", "lwf_lambda": 0.5},
             "anomaly_scorer":  {"name": "pca"},
-            "label_budget": 50,
-            "lr": 1e-3,
+            "label_budget":    50,
+            "lr":              1e-3,
+            "optimizer":       "sgd",      # or "adam" (default)
+            "pretrain_epochs": 200,        # epochs for first task (default: n_epochs)
+            "task_epochs":     1,          # epochs for subsequent tasks (default: n_epochs)
+            "n_epochs":        5,          # flat fallback if pretrain/task_epochs absent
+            "batch_size":      128,
         }
         client = CLClient(model=my_model, config=config, device='cpu')
     """
@@ -151,9 +157,8 @@ class CLClient:
                  device: str = 'cpu'):
         """
         Args:
-            model: PyTorch model. Expected forward: x → (z, recon) or z.
-            config: Dict with keys for each component slot plus 'label_budget'
-                    and 'lr'.
+            model:  PyTorch model. Expected forward: x → (z, x_hat, logit).
+            config: Dict with keys for each component slot plus training params.
             device: Torch device string.
         """
         self.model = model.to(device)
@@ -161,6 +166,13 @@ class CLClient:
         self.config = config
         self.label_budget: int = config.get('label_budget', 50)
         self.lr: float = config.get('lr', 1e-3)
+        self.batch_size: int = config.get('batch_size', 64)
+
+        # Epoch settings: pretrain_epochs for task 0, task_epochs for tasks 1+
+        _n = config.get('n_epochs', 1)
+        self.pretrain_epochs: int = config.get('pretrain_epochs', _n)
+        self.task_epochs: int     = config.get('task_epochs',     _n)
+        self._task_count: int = 0
 
         # Build components from registry
         self.drift_detector = build(
@@ -174,11 +186,29 @@ class CLClient:
         self.anomaly_scorer = build(
             'anomaly_scorer', **config.get('anomaly_scorer', {'name': 'pca'}))
 
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        # Optimizer — SSF uses SGD; others use Adam
+        opt_name = config.get('optimizer', 'adam').lower()
+        if opt_name == 'sgd':
+            self.optimizer = torch.optim.SGD(
+                self.model.parameters(), lr=self.lr,
+                momentum=config.get('momentum', 0.9),
+                weight_decay=config.get('weight_decay', 0.0),
+            )
+        else:
+            self.optimizer = torch.optim.Adam(
+                self.model.parameters(), lr=self.lr)
+
         self._anomaly_threshold: float = 0.5
         self._round: int = 0
-        self.batch_size: int = config.get('batch_size', 64)
-        self.n_epochs: int = config.get('n_epochs', 1)
+
+    # ------------------------------------------------------------------
+    def _encode(self, data: torch.Tensor) -> torch.Tensor:
+        """Encode data through the model's encoder under eval+no_grad."""
+        self.model.eval()
+        with torch.no_grad():
+            out = self.model(data)
+            z = out[0] if isinstance(out, (tuple, list)) else out
+        return z
 
     # ------------------------------------------------------------------
     def update(self, new_data: torch.Tensor,
@@ -194,57 +224,64 @@ class CLClient:
           Hook    — on_task_end() : 교사 모델 스냅샷 등 태스크 종료 처리
 
         Args:
-            new_data: Incoming data batch. Shape (N, D).
+            new_data:   Incoming data batch. Shape (N, D).
             new_labels: Corresponding labels. Shape (N,).
 
         Returns:
             Dict with keys 'loss', 'drift', 'drift_score', 'round'.
         """
-        new_data = new_data.to(self.device)
+        new_data   = new_data.to(self.device)
         new_labels = new_labels.to(self.device)
         self._round += 1
 
-        # 1. Drift detection
+        # ── Stage 1: Drift detection ───────────────────────────────────
+        # CADE drift detector operates in latent space (needs_encoded_input=True).
+        # SSF and DDM operate on raw features.
         buf_data, _ = self.memory_manager.get_buffer()
         buf_ref = buf_data.to(self.device) if buf_data is not None else None
-        drift_score = self.drift_detector.get_drift_score(new_data, buf_ref)
-        drift_detected = self.drift_detector.detect(new_data, buf_ref)
 
-        # 2. Sample selection
+        if getattr(self.drift_detector, 'needs_encoded_input', False):
+            detect_input = self._encode(new_data)
+            buf_ref_detect = None   # CADE uses internally fitted centroids, not raw buffer
+        else:
+            detect_input   = new_data
+            buf_ref_detect = buf_ref
+
+        drift_score    = self.drift_detector.get_drift_score(detect_input, buf_ref_detect)
+        drift_detected = self.drift_detector.detect(detect_input, buf_ref_detect)
+
+        # ── Stage 2: Sample selection ──────────────────────────────────
         sel_idx = self.sample_selector.select(
             new_data, new_labels, self.label_budget, drift_score)
         if not sel_idx:
             sel_idx = list(range(min(self.label_budget, len(new_data))))
-        sel_data = new_data[sel_idx]
+        sel_data   = new_data[sel_idx]
         sel_labels = new_labels[sel_idx]
 
-        # 3. Memory update
+        # ── Stage 3: Memory update ─────────────────────────────────────
         self.memory_manager.update(sel_data, sel_labels, drift_detected)
 
-        # 3b. Refit stateful drift detectors (e.g. CADE) on current task data
-        #     so next round compares against this task's distribution.
-        if hasattr(self.drift_detector, 'fit'):
-            self.drift_detector.fit(new_data.cpu(), new_labels.cpu())
-
-        # 3c. Propagate actual drift result to anti-forgetting (SSF LwF fix).
-        #     SSFAntiForgetting used replay_batch is None as a proxy — wrong.
+        # ── 3b: Propagate actual drift result to SSF anti-forgetting ───
         if hasattr(self.anti_forgetting, 'set_drift_signal'):
             self.anti_forgetting.set_drift_signal(drift_detected)
 
-        # 4-5. Mini-batch training over ALL new_data for n_epochs
+        # ── Stages 4-5: Mini-batch training for n_epochs ───────────────
+        n_epochs = self.pretrain_epochs if self._task_count == 0 else self.task_epochs
+        self._task_count += 1
+
         self.model.train()
         N = len(new_data)
         total_loss = 0.0
         n_steps = 0
 
-        for _ in range(self.n_epochs):
+        for _ in range(n_epochs):
             perm = torch.randperm(N, device=self.device)
-            shuffled_data = new_data[perm]
+            shuffled_data   = new_data[perm]
             shuffled_labels = new_labels[perm]
 
             for start in range(0, N, self.batch_size):
-                end = min(start + self.batch_size, N)
-                batch_data = shuffled_data[start:end]
+                end         = min(start + self.batch_size, N)
+                batch_data  = shuffled_data[start:end]
                 batch_labels = shuffled_labels[start:end]
 
                 replay_batch = None
@@ -265,11 +302,21 @@ class CLClient:
 
                 self.optimizer.step()
                 total_loss += loss.item()
-                n_steps += 1
+                n_steps    += 1
 
-        # 6. Task-end hook (once per update call, not per batch)
-        # GPM fix: provide training data so SVD basis update actually runs.
-        # Without this, _pending_dataloader stays None and on_task_end() no-ops.
+        # ── 3c: Refit stateful drift detectors on post-training encoder ─
+        # CADE: pass latent vectors so centroids are valid for next round.
+        # SSF/DDM: pass raw features (their fit() operates in feature space).
+        if hasattr(self.drift_detector, 'fit'):
+            if getattr(self.drift_detector, 'needs_encoded_input', False):
+                with torch.no_grad():
+                    _z = self._encode(new_data)
+                self.drift_detector.fit(_z.cpu(), new_labels.cpu())
+            else:
+                self.drift_detector.fit(new_data.cpu(), new_labels.cpu())
+
+        # ── Task-end hook (once per update, not per batch) ─────────────
+        # GPM: provide training data so SVD basis update runs.
         if hasattr(self.anti_forgetting, 'set_pending_dataloader'):
             from torch.utils.data import TensorDataset, DataLoader
             _ds = TensorDataset(new_data.cpu(), new_labels.cpu())
@@ -279,33 +326,26 @@ class CLClient:
         self.anti_forgetting.on_task_end(self.model)
 
         return {
-            'loss': total_loss / max(n_steps, 1),
-            'drift': drift_detected,
+            'loss':        total_loss / max(n_steps, 1),
+            'drift':       drift_detected,
             'drift_score': drift_score,
-            'round': self._round,
+            'round':       self._round,
         }
 
     # ------------------------------------------------------------------
     def fit_anomaly_scorer(self, normal_data: torch.Tensor) -> None:
         """Fit the anomaly scorer on normal (inlier) data and set threshold.
 
-        Trains the scorer on normal samples, then sets the decision threshold
-        to the 95th percentile of normal scores. This ensures the threshold is
-        data-adaptive rather than a fixed constant (which would cause F1=0 for
-        reconstruction-error scorers like PCA and DeepSVDD).
+        Must be called AFTER update() so the encoder reflects the current
+        trained weights. Sets the decision threshold to the 95th percentile
+        of normal-sample anomaly scores.
 
         Args:
-            normal_data: Normal samples. Shape (N, D).
+            normal_data: Normal samples (label=0). Shape (N, D).
         """
         normal_data = normal_data.to(self.device)
-        self.model.eval()
-        with torch.no_grad():
-            out = self.model(normal_data)
-            encoded = out[0] if isinstance(out, (tuple, list)) else out
-        encoded_cpu = encoded.cpu()
+        encoded_cpu = self._encode(normal_data).cpu()
         self.anomaly_scorer.fit(encoded_cpu)
-        # 정상 데이터 점수의 95th percentile을 임계값으로 자동 설정 (B1 버그 수정)
-        # 고정값 0.5는 PCA/DeepSVDD 등 재구성 오차 기반 scorer에서 F1=0을 유발했음
         with torch.no_grad():
             val_scores = self.anomaly_scorer.score(encoded_cpu)
         if len(val_scores) > 0:
@@ -323,38 +363,21 @@ class CLClient:
         Returns:
             Dict with 'scores' (float, shape N) and 'predictions' (long, shape N).
         """
-        data = data.to(self.device)
-        self.model.eval()
-        with torch.no_grad():
-            out = self.model(data)
-            encoded = out[0] if isinstance(out, (tuple, list)) else out
-        encoded = encoded.cpu()
-        scores = self.anomaly_scorer.score(encoded)
-        preds = self.anomaly_scorer.predict(encoded, self._anomaly_threshold)
+        encoded = self._encode(data.to(self.device)).cpu()
+        scores  = self.anomaly_scorer.score(encoded)
+        preds   = self.anomaly_scorer.predict(encoded, self._anomaly_threshold)
         return {'scores': scores, 'predictions': preds}
 
     # ------------------------------------------------------------------
     def get_model_state(self) -> Dict[str, torch.Tensor]:
-        """Return model state dict for FL aggregation.
-
-        Returns:
-            state_dict compatible with nn.Module.load_state_dict().
-        """
+        """Return model state dict for FL aggregation."""
         return {k: v.cpu() for k, v in self.model.state_dict().items()}
 
     def load_model_state(self, state_dict: Dict[str, torch.Tensor]) -> None:
-        """Load a global model received from the FL server.
-
-        Args:
-            state_dict: Model weights dict from the server.
-        """
+        """Load a global model received from the FL server."""
         self.model.load_state_dict(
             {k: v.to(self.device) for k, v in state_dict.items()})
 
     def set_anomaly_threshold(self, threshold: float) -> None:
-        """Update the decision threshold for anomaly classification.
-
-        Args:
-            threshold: New threshold value.
-        """
+        """Update the decision threshold for anomaly classification."""
         self._anomaly_threshold = threshold

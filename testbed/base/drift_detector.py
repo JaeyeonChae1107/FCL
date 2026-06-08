@@ -14,7 +14,14 @@ class BaseDriftDetector(ABC):
     - get_drift_score() 반환값은 0 이상의 float (normalize 권장, 범위 [0, 1])
 
     등록 키: 'none' | 'ssf' | 'cade' | 'ddm'
+
+    Class attribute:
+        needs_encoded_input: If True, CLClient encodes data through the model
+            encoder before passing to detect()/get_drift_score()/fit().
+            Set to True for detectors that operate in latent space (e.g. CADE).
     """
+
+    needs_encoded_input: bool = False
 
     @abstractmethod
     def detect(self, new_data: torch.Tensor,

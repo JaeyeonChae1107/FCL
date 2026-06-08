@@ -22,7 +22,12 @@ class CADEDriftDetector(BaseDriftDetector):
         detector = CADEDriftDetector(threshold=3.5)
         detector.fit(z_train, y_train)          # compute centroids + MAD
         is_drift = detector.detect(z_new, None) # z_new = encoder(x_new)
+
+    CLClient encodes data before passing to this detector because
+    needs_encoded_input = True.
     """
+
+    needs_encoded_input: bool = True
 
     def __init__(self, threshold: float = 3.5):
         """
