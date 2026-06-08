@@ -1,27 +1,27 @@
 [
   {
-    "name": "all_none",
+    "name": "cade_canonical",
     "status": "PASS",
-    "f1": 0.6887
+    "f1": 0.0394
   },
   {
-    "name": "ssf_full",
+    "name": "ssf_canonical",
     "status": "PASS",
-    "f1": 0.6029
+    "f1": 0.501
   },
   {
-    "name": "cndids_full",
+    "name": "cndids_canonical",
     "status": "PASS",
-    "f1": 0.5926
+    "f1": 0.3781
   },
   {
-    "name": "cade_gpm",
+    "name": "spider_canonical",
     "status": "PASS",
-    "f1": 0.08
+    "f1": 0.3791
   },
   {
-    "name": "ssf_cndids_cade_cross",
+    "name": "cross_ssf_cnd_gpm",
     "status": "PASS",
-    "f1": 0.1053
+    "f1": 0.0967
   }
 ]
