@@ -42,20 +42,20 @@ SMOKE_CONFIGS = [
         "anomaly_scorer":  {"name": "pca"},
         "label_budget": 50, "lr": 1e-3,
     },
-    {   # 3. CND-IDS full combination
+    {   # 3. CND-IDS full combination (no drift detector, no memory buffer — uses teacher LwF)
         "name": "cndids_full",
-        "drift_detector":  {"name": "ddm"},
-        "sample_selector": {"name": "random"},
-        "memory_manager":  {"name": "cndids", "mode": "fifo", "capacity": 200},
+        "drift_detector":  {"name": "none"},
+        "sample_selector": {"name": "all"},
+        "memory_manager":  {"name": "none"},
         "anti_forgetting": {"name": "cndids"},
         "anomaly_scorer":  {"name": "pca"},
-        "label_budget": 0, "lr": 1e-3,
+        "label_budget": 50, "lr": 1e-3,
     },
-    {   # 4. CADE drift + GPM forgetting
+    {   # 4. CADE drift + GPM forgetting + FIFO buffer (SPIDER-style)
         "name": "cade_gpm",
         "drift_detector":  {"name": "cade"},
         "sample_selector": {"name": "random"},
-        "memory_manager":  {"name": "fixed", "max_size": 200},
+        "memory_manager":  {"name": "fifo", "max_size": 200},
         "anti_forgetting": {"name": "gpm", "threshold": 0.97},
         "anomaly_scorer":  {"name": "cade_mad"},
         "label_budget": 50, "lr": 1e-3,
@@ -73,11 +73,8 @@ SMOKE_CONFIGS = [
 
 
 def _default_model(dim: int = 121):
-    return torch.nn.Sequential(
-        torch.nn.Linear(dim, 64),
-        torch.nn.ReLU(),
-        torch.nn.Linear(64, 32),
-    )
+    from testbed.pipeline.models import FCLAutoEncoder
+    return FCLAutoEncoder(input_dim=dim, hidden_dim=64, latent_dim=32)
 
 
 def run_smoke_tests():

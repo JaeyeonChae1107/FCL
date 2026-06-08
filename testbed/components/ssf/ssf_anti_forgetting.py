@@ -89,8 +89,11 @@ class SSFAntiForgetting(BaseAntiForgetting):
             logit = z[:, 0]                     # fallback: first latent dim
 
         # Weighted binary cross-entropy (FROM: ssf.py line 280-288)
+        # Only apply differential weighting when both replay and new samples exist.
+        # When n_mem=0 (no replay yet), all samples are "new" — use uniform weight 1.0
+        # to avoid 100× loss inflation in early rounds.
         weights = torch.ones(len(inputs), device=device)
-        if n_mem < len(inputs):
+        if 0 < n_mem < len(inputs):
             weights[n_mem:] = self.new_sample_weight
 
         l_task = F.binary_cross_entropy_with_logits(

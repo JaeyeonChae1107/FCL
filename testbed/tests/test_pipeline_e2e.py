@@ -10,11 +10,8 @@ from testbed.experiments.metrics import f1_score
 
 
 def _make_model(dim: int = 121):
-    return torch.nn.Sequential(
-        torch.nn.Linear(dim, 64),
-        torch.nn.ReLU(),
-        torch.nn.Linear(64, 32),
-    )
+    from testbed.pipeline.models import FCLAutoEncoder
+    return FCLAutoEncoder(input_dim=dim, hidden_dim=64, latent_dim=32)
 
 
 def _make_tasks(n: int = 500, dim: int = 121, n_tasks: int = 3):
@@ -107,7 +104,7 @@ def test_fl_aggregation():
     config = {
         "drift_detector":  {"name": "none"},
         "sample_selector": {"name": "random"},
-        "memory_manager":  {"name": "fixed", "max_size": 50},
+        "memory_manager":  {"name": "fifo", "max_size": 50},
         "anti_forgetting": {"name": "none"},
         "anomaly_scorer":  {"name": "pca"},
         "label_budget": 20, "lr": 1e-3,

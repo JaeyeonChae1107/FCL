@@ -112,24 +112,25 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         return F.triplet_margin_loss(a, p, n_t, margin=self.triplet_margin)
 
     # ------------------------------------------------------------------ L_CL
-    def _lcl_loss(self, model: nn.Module, data: torch.Tensor) -> torch.Tensor:
+    def _lcl_loss(self, z: torch.Tensor, data: torch.Tensor) -> torch.Tensor:
         """Multi-teacher LwF on latent space.
 
         FROM: CND_IDS.py::CND_IDS.LwFloss() (line 54-69)
         L_CL = Σ_i MSE(z_current, old_model_i(x))
+
+        Args:
+            z:    Pre-computed current latent (reuse from compute_loss forward pass).
+            data: Original input — passed to frozen old models for reference z.
         """
         if not self.old_models:
-            return torch.tensor(0.0, device=data.device)
+            return torch.tensor(0.0, device=z.device)
 
-        out = model(data)
-        z = out[0] if isinstance(out, (tuple, list)) else out
-
-        total = torch.tensor(0.0, device=data.device)
+        total = torch.tensor(0.0, device=z.device)
         for old_model in self.old_models:
             old_model.eval()
             with torch.no_grad():
                 o = old_model(data.cpu())
-                z_old = (o[0] if isinstance(o, (tuple, list)) else o).to(data.device)
+                z_old = (o[0] if isinstance(o, (tuple, list)) else o).to(z.device)
             total = total + F.mse_loss(z, z_old)
         return total
 
@@ -160,8 +161,8 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         # L_CS: cluster separation loss
         l_cs = self._cluster_separation_loss(z)
 
-        # L_CL: multi-teacher LwF
-        l_cl = self._lcl_loss(model, data)
+        # L_CL: multi-teacher LwF (reuse z from first forward — no second model call)
+        l_cl = self._lcl_loss(z, data)
 
         total = l_cs + self.lambda_r * l_r + self.lambda_cl * l_cl
 
