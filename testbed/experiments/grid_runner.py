@@ -24,15 +24,15 @@ logger = logging.getLogger(__name__)
 _FCL_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 COMPONENT_GRID = {
-    # 3 options × 3 × 3 × 4 × 2 = 216 combinations per dataset
-    # Paper mapping:
-    #   CND-IDS : none / all  / none / cndids  / pca
-    #   SSF     : ssf  / ssf  / ssf  / lwf_ssf / (pca | cade_mad)
-    #   CADE    : cade / rand / none / none     / cade_mad
-    #   SPIDER  : none / rand / fifo / gpm      / pca
-    "drift_detector":  ["none", "ssf", "cade"],
-    "sample_selector": ["all", "random", "ssf"],
-    "memory_manager":  ["none", "fifo", "ssf"],
+    # 4 × 2 × 4 × 4 × 2 = 256 combinations per dataset
+    # Paper mapping (drift / sample / memory / anti / anomaly):
+    #   CND-IDS : ddm  / random / cndids / cndids  / pca
+    #   SSF     : ssf  / ssf    / ssf    / lwf_ssf / pca
+    #   CADE    : cade / random / none   / none    / cade_mad
+    #   SPIDER  : none / random / fifo   / gpm     / pca
+    "drift_detector":  ["none", "ssf", "cade", "ddm"],
+    "sample_selector": ["random", "ssf"],
+    "memory_manager":  ["none", "fifo", "ssf", "cndids"],
     "anti_forgetting": ["none", "cndids", "gpm", "lwf_ssf"],
     "anomaly_scorer":  ["pca", "cade_mad"],
 }
@@ -40,13 +40,13 @@ COMPONENT_GRID = {
 # 조합 약어 (파일명 단축용)
 _SHORT = {
     # drift_detector
-    "none": "none", "ssf": "ssf", "cade": "cade",
+    "none": "none", "ssf": "ssf", "cade": "cade", "ddm": "ddm",
     # sample_selector
-    "all": "all", "random": "rand",
+    "random": "rand",
     # memory_manager
-    "fifo": "fifo",
+    "fifo": "fifo", "cndids": "cnd",
     # anti_forgetting
-    "cndids": "cnd", "gpm": "gpm", "lwf_ssf": "lwf",
+    "gpm": "gpm", "lwf_ssf": "lwf",
     # anomaly_scorer
     "pca": "pca", "cade_mad": "mad",
 }

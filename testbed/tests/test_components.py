@@ -20,6 +20,7 @@ from testbed.pipeline.models import FCLAutoEncoder
 # ── Drift detectors ────────────────────────────────────────────────────────
 from testbed.components.ssf import SSFDriftDetector
 from testbed.components.cade import CADEDriftDetector
+from testbed.components.cndids import DDMDriftDetector
 from testbed.pipeline.component_registry import NoDriftDetector
 
 # ── Sample selectors ───────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ from testbed.pipeline.component_registry import AllSampleSelector, RandomSelecto
 
 # ── Memory managers ────────────────────────────────────────────────────────
 from testbed.components.ssf import SSFMemoryManager
+from testbed.components.cndids import CNDIDSMemoryManager
 from testbed.pipeline.component_registry import NoMemoryManager, FIFOMemoryManager
 
 # ── Anti-forgetting ────────────────────────────────────────────────────────
@@ -66,6 +68,7 @@ def simple_model():
 DRIFT_DETECTORS = [
     NoDriftDetector,
     SSFDriftDetector,
+    DDMDriftDetector,
 ]
 
 
@@ -129,6 +132,7 @@ MEMORY_MANAGERS = [
     (NoMemoryManager, {}),
     (FIFOMemoryManager, {"max_size": 50}),
     (SSFMemoryManager, {"max_size": 50, "num_labeled_sample": 10}),
+    (CNDIDSMemoryManager, {"capacity": 50}),
 ]
 
 

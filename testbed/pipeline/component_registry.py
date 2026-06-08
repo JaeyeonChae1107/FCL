@@ -1,10 +1,12 @@
 """Component registry — maps string keys to component classes.
 
-Paper → component mapping:
-  CND-IDS : none / all  / none / cndids  / pca
-  SSF     : ssf  / ssf  / ssf  / lwf_ssf / (pca | cade_mad)
-  CADE    : cade / rand / none / none     / cade_mad
-  SPIDER  : none / rand / fifo / gpm     / pca
+Paper → component mapping (슬롯 순서: drift / sample / memory / anti / anomaly):
+  CND-IDS : ddm  / random / cndids / cndids  / pca
+  SSF     : ssf  / ssf    / ssf    / lwf_ssf / pca
+  CADE    : cade / random / none   / none    / cade_mad
+  SPIDER  : none / random / fifo   / gpm     / pca
+
+그리드: 4 × 2 × 4 × 4 × 2 = 256 조합 / 데이터셋
 """
 
 import sys, os
@@ -23,7 +25,8 @@ from testbed.base import (BaseDriftDetector, BaseSampleSelector,
 from testbed.components.ssf import (SSFDriftDetector, SSFSampleSelector,
                                      SSFMemoryManager, SSFAntiForgetting)
 from testbed.components.cade import CADEDriftDetector, CADEAnomalyScorer
-from testbed.components.cndids import CNDIDSAntiForgetting, PCAAnomalyScorer
+from testbed.components.cndids import (CNDIDSAntiForgetting, PCAAnomalyScorer,
+                                        DDMDriftDetector, CNDIDSMemoryManager)
 from testbed.components.gpm import GPMAntiForgetting
 
 
@@ -162,29 +165,30 @@ class ReplayOnlyLoss(BaseAntiForgetting):
 
 REGISTRY = {
     "drift_detector": {
-        "none": NoDriftDetector,
-        "ssf":  SSFDriftDetector,
-        "cade": CADEDriftDetector,
+        "none": NoDriftDetector,       # CADE·SPIDER — 드리프트 감지 없음
+        "ssf":  SSFDriftDetector,      # SSF — KS 검정
+        "cade": CADEDriftDetector,     # CADE — MAD 거리
+        "ddm":  DDMDriftDetector,      # CND-IDS — z-스코어 3상태 감지
     },
     "sample_selector": {
-        "all":    AllSampleSelector,
-        "random": RandomSelector,
-        "ssf":    SSFSampleSelector,
+        "random": RandomSelector,      # CADE·SPIDER·CND-IDS — 무작위 선택
+        "ssf":    SSFSampleSelector,   # SSF — KL-div 마스크 최적화
     },
     "memory_manager": {
-        "none": NoMemoryManager,
-        "fifo": FIFOMemoryManager,
-        "ssf":  SSFMemoryManager,
+        "none":   NoMemoryManager,     # CADE — 버퍼 없음
+        "fifo":   FIFOMemoryManager,   # SPIDER — 링 버퍼
+        "ssf":    SSFMemoryManager,    # SSF — 표류 시 공격적 교체
+        "cndids": CNDIDSMemoryManager, # CND-IDS — 클래스 균형 버퍼
     },
     "anti_forgetting": {
-        "none":    ReplayOnlyLoss,
-        "cndids":  CNDIDSAntiForgetting,
-        "gpm":     GPMAntiForgetting,
-        "lwf_ssf": SSFAntiForgetting,
+        "none":    ReplayOnlyLoss,      # CADE — 재구성 손실만
+        "lwf_ssf": SSFAntiForgetting,   # SSF — InfoNCE + LwF
+        "cndids":  CNDIDSAntiForgetting,# CND-IDS — L_CS + L_R + L_CL
+        "gpm":     GPMAntiForgetting,   # SPIDER — 그래디언트 정사영
     },
     "anomaly_scorer": {
-        "pca":      PCAAnomalyScorer,
-        "cade_mad": CADEAnomalyScorer,
+        "pca":      PCAAnomalyScorer,  # CND-IDS·SSF·SPIDER — 재구성 오차
+        "cade_mad": CADEAnomalyScorer, # CADE·SSF — MAD 정규화 거리
     },
 }
 
