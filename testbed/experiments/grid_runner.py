@@ -19,6 +19,10 @@ from testbed.experiments.metrics import (f1_score, precision_score,
 
 logger = logging.getLogger(__name__)
 
+# grid_runner.py 기준으로 FCL 루트를 절대 경로로 계산
+# testbed/experiments/grid_runner.py → FCL/
+_FCL_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 COMPONENT_GRID = {
     # 3 options × 3 × 3 × 4 × 2 = 216 combinations per dataset
     # Paper mapping:
@@ -245,7 +249,7 @@ def _load_real_tasks(dataset: str, n_tasks: int,
     if dataset not in loaders:
         raise ValueError(f"Unknown dataset: {dataset!r}. Choose 'nslkdd' or 'unswnb15'.")
 
-    ds = loaders[dataset]('.')
+    ds = loaders[dataset](_FCL_ROOT)
     dim = ds['X'].shape[1]
 
     # 메모리/시간 절약: 전체 데이터를 서브샘플

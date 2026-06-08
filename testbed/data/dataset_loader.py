@@ -28,10 +28,11 @@ def load_nslkdd(data_dir: str) -> Dict:
     candidates_train = ['PKDDTrain+.csv', 'KDDTrain+.csv', 'nsl_train.csv']
     candidates_test  = ['PKDDTest+.csv',  'KDDTest+.csv',  'nsl_test.csv']
 
-    # 사용자 지정 경로 → SSF 기본 경로 순서로 탐색
-    search_dirs = [data_dir,
-                   'SSF-Strategic-Selection-and-Forgetting/NSL_pre_data',
-                   './SSF-Strategic-Selection-and-Forgetting/NSL_pre_data']
+    # 사용자 지정 경로 → SSF 기본 경로 순서로 탐색 (data_dir 기준 상대 경로)
+    search_dirs = [
+        data_dir,
+        os.path.join(data_dir, 'SSF-Strategic-Selection-and-Forgetting', 'NSL_pre_data'),
+    ]
 
     train_path = _find_file_multi(search_dirs, candidates_train)
     test_path  = _find_file_multi(search_dirs, candidates_test)
@@ -67,7 +68,7 @@ def load_nslkdd(data_dir: str) -> Dict:
 
     return {
         'X': torch.FloatTensor(X_np),
-        'y': torch.LongTensor(y),
+        'y': torch.LongTensor(y.copy()),
         'scaler': scaler,
     }
 
@@ -87,9 +88,10 @@ def load_unswnb15(data_dir: str) -> Dict:
     candidates_train = ['UNSWTrain.csv', 'UNSW_Train.csv', 'unsw_train.csv']
     candidates_test  = ['UNSWTest.csv',  'UNSW_Test.csv',  'unsw_test.csv']
 
-    search_dirs = [data_dir,
-                   'SSF-Strategic-Selection-and-Forgetting/UNSW_pre_data',
-                   './SSF-Strategic-Selection-and-Forgetting/UNSW_pre_data']
+    search_dirs = [
+        data_dir,
+        os.path.join(data_dir, 'SSF-Strategic-Selection-and-Forgetting', 'UNSW_pre_data'),
+    ]
 
     train_path = _find_file_multi(search_dirs, candidates_train)
     test_path  = _find_file_multi(search_dirs, candidates_test)
@@ -122,7 +124,7 @@ def load_unswnb15(data_dir: str) -> Dict:
 
     return {
         'X': torch.FloatTensor(X_np),
-        'y': torch.LongTensor(y),
+        'y': torch.LongTensor(y.copy()),
         'scaler': scaler,
     }
 

@@ -140,30 +140,38 @@ def print_summary(results_dir: str = './testbed/results') -> None:
         return
 
     df = pd.read_csv(summary_path)
-    n_total = len(df)
-    print(f"\n=== 실험 결과 요약 ===")
-    print(f"총 실험 수: {n_total}개")
+    print(f"\n=== 실험 결과 요약 (총 {len(df)}개) ===")
 
     slot_cols = ['drift_detector', 'sample_selector', 'memory_manager',
                  'anti_forgetting', 'anomaly_scorer']
     slot_cols = [c for c in slot_cols if c in df.columns]
 
-    def _top5(df, sort_col, ascending=False):
-        top = df.nlargest(5, sort_col) if not ascending else df.nsmallest(5, sort_col)
-        print(f"\n[{sort_col} 기준 Top 5]")
-        print(f"{'순위':<5} {' '.join(f'{c[:8]:<10}' for c in slot_cols)}"
-              f" {'F1':<8} {'Prec':<8} {'Recall':<8} {'FPR':<8}")
+    def _top5(sub_df, sort_col, label, ascending=False):
+        if sort_col not in sub_df.columns:
+            return
+        top = sub_df.nlargest(5, sort_col) if not ascending else sub_df.nsmallest(5, sort_col)
+        print(f"\n  [{label} | {sort_col} 기준 Top 5]")
+        hdr = f"  {'순위':<4} {' '.join(f'{c[:7]:<9}' for c in slot_cols)}"
+        hdr += f" {'F1':<7} {'Prec':<7} {'Recall':<7} {'FPR':<6}"
+        print(hdr)
         for rank, (_, row) in enumerate(top.iterrows(), 1):
-            vals = ' '.join(f"{str(row.get(c,'?'))[:8]:<10}" for c in slot_cols)
-            print(f"{rank:<5} {vals}"
-                  f" {row.get('f1', 0):<8.4f} {row.get('precision', 0):<8.4f}"
-                  f" {row.get('recall', 0):<8.4f} {row.get('fpr', 0):<8.4f}")
+            vals = ' '.join(f"{str(row.get(c,'?'))[:7]:<9}" for c in slot_cols)
+            print(f"  {rank:<4} {vals}"
+                  f" {row.get('f1',0):<7.4f} {row.get('precision',0):<7.4f}"
+                  f" {row.get('recall',0):<7.4f} {row.get('fpr',0):<6.4f}")
 
-    _top5(df, 'f1')
-    _top5(df, 'recall')
-    _top5(df, 'fpr', ascending=True)
+    # 데이터셋별로 분리하여 출력
+    datasets = sorted(df['dataset'].unique()) if 'dataset' in df.columns else ['all']
+    for ds in datasets:
+        sub = df[df['dataset'] == ds] if 'dataset' in df.columns else df
+        print(f"\n{'='*60}")
+        print(f"  데이터셋: {ds.upper()}  ({len(sub)}개 실험)")
+        print(f"{'='*60}")
+        _top5(sub, 'f1',     ds)
+        _top5(sub, 'recall', ds)
+        _top5(sub, 'fpr',    ds, ascending=True)
 
-    # Save best config
+    # Save best config (전체 기준 F1 최고)
     best = df.nlargest(1, 'f1').iloc[0]
     best_cfg: Dict[str, Any] = {}
     for c in slot_cols:
@@ -218,7 +226,15 @@ def main():
         run_single_config(args.config, args.data_dir, args.device)
 
     if args.grid:
-        df = run_grid_search(args)
+        if args.dataset == 'both':
+            # 두 데이터셋을 순서대로 실행
+            for ds in ['nslkdd', 'unswnb15']:
+                logger.info(f"=== Running grid: dataset={ds} ===")
+                args.dataset = ds
+                run_grid_search(args)
+            args.dataset = 'both'
+        else:
+            run_grid_search(args)
         print_summary('./testbed/results')
         from testbed.experiments.visualizer import run_all_plots
         run_all_plots('./testbed/results')
