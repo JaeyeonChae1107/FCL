@@ -127,6 +127,7 @@ def run_grid_search(args) -> pd.DataFrame:
         device=args.device,
         dim=args.dim,
         max_samples_per_task=args.max_samples,
+        n_epochs=args.n_epochs,
     )
     return df
 
@@ -208,6 +209,8 @@ def main():
                         help='Feature dimension for dummy data')
     parser.add_argument('--max_samples', type=int, default=None,
                         help='실제 데이터 태스크당 최대 샘플 수 (시간 단축용)')
+    parser.add_argument('--n_epochs', type=int, default=5,
+                        help='태스크당 학습 에폭 수 (기본: 5)')
     args = parser.parse_args()
 
     if args.test:

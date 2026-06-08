@@ -69,7 +69,7 @@ def _make_exp_name(dataset: str, combo: dict) -> str:
     )
 
 
-def _make_dummy_tasks(n: int = 500, dim: int = 121, n_tasks: int = 5):
+def _make_dummy_tasks(n: int = 2000, dim: int = 121, n_tasks: int = 5):
     X = torch.randn(n, dim)
     y = torch.randint(0, 2, (n,))
     size = n // n_tasks
@@ -84,7 +84,8 @@ def run_grid(dataset: str = 'dummy',
              n_tasks: int = 5,
              device: str = 'cpu',
              dim: int = 121,
-             max_samples_per_task: Optional[int] = None):
+             max_samples_per_task: Optional[int] = None,
+             n_epochs: int = 5):
     """Component 조합 그리드 서치 실행.
 
     Args:
@@ -145,6 +146,7 @@ def run_grid(dataset: str = 'dummy',
             "anomaly_scorer":  {"name": combo_dict["anomaly_scorer"]},
             "label_budget": label_budget,
             "batch_size": 64,
+            "n_epochs": n_epochs,
             "lr": 1e-3,
         }
 
@@ -231,8 +233,8 @@ def run_grid(dataset: str = 'dummy',
 
 def _default_model(dim: int) -> torch.nn.Module:
     from testbed.pipeline.models import FCLAutoEncoder
-    hidden = max(64, dim // 2)
-    latent = max(32, dim // 4)
+    hidden = max(128, dim)
+    latent = max(64, dim // 2)
     return FCLAutoEncoder(input_dim=dim, hidden_dim=hidden, latent_dim=latent)
 
 

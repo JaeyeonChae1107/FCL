@@ -15,7 +15,7 @@ from testbed.pipeline.cl_client import CLClient
 from testbed.experiments.metrics import f1_score
 
 
-def make_dummy_tasks(n: int = 300, dim: int = 121, n_tasks: int = 3):
+def make_dummy_tasks(n: int = 1500, dim: int = 121, n_tasks: int = 3):
     X = torch.randn(n, dim)
     y = torch.randint(0, 2, (n,))
     size = n // n_tasks
@@ -31,7 +31,7 @@ SMOKE_CONFIGS = [
         "memory_manager":  {"name": "none"},
         "anti_forgetting": {"name": "none"},
         "anomaly_scorer":  {"name": "cade_mad"},
-        "label_budget": 50, "lr": 1e-3,
+        "label_budget": 50, "lr": 1e-3, "n_epochs": 5, "batch_size": 64,
     },
     {   # 2. SSF canonical combination
         "name": "ssf_canonical",
@@ -40,7 +40,7 @@ SMOKE_CONFIGS = [
         "memory_manager":  {"name": "ssf", "max_size": 200},
         "anti_forgetting": {"name": "lwf_ssf", "lwf_lambda": 0.5},
         "anomaly_scorer":  {"name": "pca"},
-        "label_budget": 50, "lr": 1e-3,
+        "label_budget": 50, "lr": 1e-3, "n_epochs": 5, "batch_size": 64,
     },
     {   # 3. CND-IDS canonical combination
         "name": "cndids_canonical",
@@ -49,7 +49,7 @@ SMOKE_CONFIGS = [
         "memory_manager":  {"name": "cndids", "capacity": 200},
         "anti_forgetting": {"name": "cndids"},
         "anomaly_scorer":  {"name": "pca"},
-        "label_budget": 50, "lr": 1e-3,
+        "label_budget": 50, "lr": 1e-3, "n_epochs": 5, "batch_size": 64,
     },
     {   # 4. SPIDER canonical combination
         "name": "spider_canonical",
@@ -58,7 +58,7 @@ SMOKE_CONFIGS = [
         "memory_manager":  {"name": "fifo", "max_size": 200},
         "anti_forgetting": {"name": "gpm", "threshold": 0.97},
         "anomaly_scorer":  {"name": "pca"},
-        "label_budget": 50, "lr": 1e-3,
+        "label_budget": 50, "lr": 1e-3, "n_epochs": 5, "batch_size": 64,
     },
     {   # 5. Cross combination — SSF drift + CND-IDS memory + GPM anti-forgetting
         "name": "cross_ssf_cnd_gpm",
@@ -67,14 +67,14 @@ SMOKE_CONFIGS = [
         "memory_manager":  {"name": "cndids", "capacity": 200},
         "anti_forgetting": {"name": "gpm"},
         "anomaly_scorer":  {"name": "cade_mad"},
-        "label_budget": 50, "lr": 1e-3,
+        "label_budget": 50, "lr": 1e-3, "n_epochs": 5, "batch_size": 64,
     },
 ]
 
 
 def _default_model(dim: int = 121):
     from testbed.pipeline.models import FCLAutoEncoder
-    return FCLAutoEncoder(input_dim=dim, hidden_dim=64, latent_dim=32)
+    return FCLAutoEncoder(input_dim=dim, hidden_dim=128, latent_dim=64)
 
 
 def run_smoke_tests():
