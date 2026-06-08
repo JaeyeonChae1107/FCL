@@ -154,18 +154,17 @@ def run_grid(dataset: str = 'dummy',
             model = model_fn(actual_dim) if model_fn else _default_model(actual_dim)
             client = CLClient(model=model, config=config, device=device)
 
-            # 이상탐지기를 첫 번째 태스크 정상 데이터로 먼저 학습
-            X0, y0 = tasks[0][0], tasks[0][1]
-            normal_data = X0[y0 == 0]
-            if len(normal_data) == 0:
-                normal_data = X0[:max(1, len(X0)//2)]
-            client.fit_anomaly_scorer(normal_data)
-
             perf_matrix = []
 
             for i, task in enumerate(tasks):
                 X_tr, y_tr = task[0], task[1]
                 client.update(X_tr, y_tr)
+
+                # 학습 후 현재 인코더 기준으로 anomaly scorer 재학습
+                normal_i = X_tr[y_tr == 0]
+                if len(normal_i) == 0:
+                    normal_i = X_tr[:max(1, len(X_tr)//2)]
+                client.fit_anomaly_scorer(normal_i)
 
                 row = []
                 for j, t in enumerate(tasks):

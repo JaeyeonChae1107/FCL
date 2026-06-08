@@ -2,26 +2,26 @@
   {
     "name": "cade_canonical",
     "status": "PASS",
-    "f1": 0.0394
+    "f1": 0.0481
   },
   {
     "name": "ssf_canonical",
     "status": "PASS",
-    "f1": 0.501
+    "f1": 0.7651
   },
   {
     "name": "cndids_canonical",
     "status": "PASS",
-    "f1": 0.3781
+    "f1": 0.6169
   },
   {
     "name": "spider_canonical",
     "status": "PASS",
-    "f1": 0.3791
+    "f1": 0.5675
   },
   {
     "name": "cross_ssf_cnd_gpm",
     "status": "PASS",
-    "f1": 0.0967
+    "f1": 0.0882
   }
 ]

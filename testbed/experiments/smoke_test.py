@@ -88,13 +88,10 @@ def run_smoke_tests():
 
             for X, y in tasks:
                 client.update(X, y)
-
-            # Fit anomaly scorer on first task normal data
-            X0, y0 = tasks[0]
-            normal = X0[y0 == 0]
-            if len(normal) == 0:
-                normal = X0[:5]
-            client.fit_anomaly_scorer(normal)
+                normal_i = X[y == 0]
+                if len(normal_i) == 0:
+                    normal_i = X[:5]
+                client.fit_anomaly_scorer(normal_i)
 
             out = client.infer(tasks[-1][0])
             f1 = f1_score(tasks[-1][1].numpy(), out["predictions"].numpy())
