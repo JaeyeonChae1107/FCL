@@ -226,6 +226,11 @@ class CLClient:
         if hasattr(self.drift_detector, 'fit'):
             self.drift_detector.fit(new_data.cpu(), new_labels.cpu())
 
+        # 3c. Propagate actual drift result to anti-forgetting (SSF LwF fix).
+        #     SSFAntiForgetting used replay_batch is None as a proxy — wrong.
+        if hasattr(self.anti_forgetting, 'set_drift_signal'):
+            self.anti_forgetting.set_drift_signal(drift_detected)
+
         # 4-5. Mini-batch training over ALL new_data for n_epochs
         self.model.train()
         N = len(new_data)
@@ -263,6 +268,14 @@ class CLClient:
                 n_steps += 1
 
         # 6. Task-end hook (once per update call, not per batch)
+        # GPM fix: provide training data so SVD basis update actually runs.
+        # Without this, _pending_dataloader stays None and on_task_end() no-ops.
+        if hasattr(self.anti_forgetting, 'set_pending_dataloader'):
+            from torch.utils.data import TensorDataset, DataLoader
+            _ds = TensorDataset(new_data.cpu(), new_labels.cpu())
+            _dl = DataLoader(_ds, batch_size=self.batch_size, shuffle=False)
+            self.anti_forgetting.set_pending_dataloader(_dl)
+
         self.anti_forgetting.on_task_end(self.model)
 
         return {

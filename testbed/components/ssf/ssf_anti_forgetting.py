@@ -41,6 +41,11 @@ class SSFAntiForgetting(BaseAntiForgetting):
         self.lwf_lambda = lwf_lambda
         self.new_sample_weight = new_sample_weight
         self.teacher: Optional[nn.Module] = None
+        self._drift_signal: bool = False  # set by CLClient before each mini-batch loop
+
+    def set_drift_signal(self, drift_detected: bool) -> None:
+        """Called by CLClient after Stage 1 to propagate actual drift result."""
+        self._drift_signal = drift_detected
 
     def compute_loss(self,
                      model: nn.Module,
@@ -65,7 +70,9 @@ class SSFAntiForgetting(BaseAntiForgetting):
         device = data.device
         model = model.to(device)
 
-        drift_mode = (replay_batch is None)
+        # Use actual drift signal from CLClient (set via set_drift_signal).
+        # Fallback: no teacher yet = effectively drift mode (fast adaptation).
+        drift_mode = self._drift_signal or (self.teacher is None)
 
         # Build combined batch (replay + new)
         if replay_batch is not None and replay_batch[0] is not None:
