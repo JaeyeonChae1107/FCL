@@ -87,7 +87,7 @@ def run_single_config(config_path: str, data_dir: str = './data/',
         tasks = split_into_tasks(ds, n_tasks)
 
     from testbed.pipeline.cl_client import CLClient
-    from testbed.experiments.metrics import f1_score, backward_transfer
+    from testbed.experiments.metrics import f1_score
 
     model = _default_model(dim)
     client = CLClient(model=model, config=cfg, device=device)
@@ -104,11 +104,9 @@ def run_single_config(config_path: str, data_dir: str = './data/',
         perf_matrix.append(row)
         logger.info(f"Task {i+1}/{n_tasks} — current F1: {row[i]:.3f}")
 
-    bwt = backward_transfer(perf_matrix)
     final_f1 = sum(perf_matrix[-1]) / len(perf_matrix[-1])
     print(f"\n=== Results ===")
     print(f"Final F1:  {final_f1:.4f}")
-    print(f"BWT:       {bwt:.4f}")
 
 
 # ── Grid search ────────────────────────────────────────────────────────────
@@ -153,17 +151,17 @@ def print_summary(results_dir: str = './testbed/results') -> None:
     def _top5(df, sort_col, ascending=False):
         top = df.nlargest(5, sort_col) if not ascending else df.nsmallest(5, sort_col)
         print(f"\n[{sort_col} 기준 Top 5]")
-        print(f"{'순위':<5} {'exp_id':<10} {' '.join(f'{c[:8]:<10}' for c in slot_cols)}"
-              f" {'F1':<8} {'BWT':<8} {'FWT':<8}")
+        print(f"{'순위':<5} {' '.join(f'{c[:8]:<10}' for c in slot_cols)}"
+              f" {'F1':<8} {'Prec':<8} {'Recall':<8} {'FPR':<8}")
         for rank, (_, row) in enumerate(top.iterrows(), 1):
             vals = ' '.join(f"{str(row.get(c,'?'))[:8]:<10}" for c in slot_cols)
-            print(f"{rank:<5} {str(row.get('exp_id','?')):<10} {vals}"
-                  f" {row.get('f1', 0):<8.4f} {row.get('bwt', 0):<8.4f}"
-                  f" {row.get('fwt', 0):<8.4f}")
+            print(f"{rank:<5} {vals}"
+                  f" {row.get('f1', 0):<8.4f} {row.get('precision', 0):<8.4f}"
+                  f" {row.get('recall', 0):<8.4f} {row.get('fpr', 0):<8.4f}")
 
     _top5(df, 'f1')
-    _top5(df, 'bwt')
-    _top5(df, 'label_efficiency')
+    _top5(df, 'recall')
+    _top5(df, 'fpr', ascending=True)
 
     # Save best config
     best = df.nlargest(1, 'f1').iloc[0]

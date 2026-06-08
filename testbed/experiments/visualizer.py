@@ -1,9 +1,9 @@
 """Result visualisation utilities.
 
-변경 내역 (B3 버그 수정):
+저장 지표: F1, Precision, Recall, FPR (4개만)
 - 모든 플롯 함수를 DataFrame 직접 수신 방식으로 리팩토링
 - run_all_plots()가 dataset 컬럼으로 데이터셋별 서브디렉토리 분리 생성
-- precision / recall / FPR / balanced_accuracy 히트맵 추가 (컬럼 존재 시)
+- precision / recall / FPR 히트맵 + Recall vs FPR 트레이드오프 산점도 생성
 - plot_guide.md 자동 생성 (각 플롯의 의미·해석 방법 설명)
 - 기존 공개 API (plot_heatmap, plot_bwt_ranking, plot_pareto) 유지 (backward compat.)
 """
@@ -110,20 +110,20 @@ def _precision_recall_heatmap_from_df(df: pd.DataFrame, x_col: str, y_col: str,
     print(f"Saved precision-recall heatmap → {out_path}")
 
 
-def _bwt_ranking_from_df(df: pd.DataFrame, top_n: int, out_path: str,
-                          title_suffix: str = '') -> None:
-    """BWT 상위 N개 조합 수평 막대 그래프 생성·저장."""
+def _recall_ranking_from_df(df: pd.DataFrame, top_n: int, out_path: str,
+                             title_suffix: str = '') -> None:
+    """Recall(Detection Rate) 상위 N개 조합 수평 막대 그래프 생성·저장."""
     try:
         import matplotlib.pyplot as plt
     except ImportError:
-        print("matplotlib not installed — skipping BWT ranking")
+        print("matplotlib not installed — skipping Recall ranking")
         return
 
-    if 'bwt' not in df.columns:
-        print("'bwt' column missing — skipping ranking")
+    if 'recall' not in df.columns:
+        print("'recall' column missing — skipping ranking")
         return
 
-    top = df.nlargest(top_n, 'bwt').copy()
+    top = df.nlargest(top_n, 'recall').copy()
     slot_cols = ['drift_detector', 'sample_selector', 'memory_manager',
                  'anti_forgetting', 'anomaly_scorer']
     existing = [c for c in slot_cols if c in top.columns]
@@ -131,65 +131,73 @@ def _bwt_ranking_from_df(df: pd.DataFrame, top_n: int, out_path: str,
         lambda r: '/'.join(r.astype(str)), axis=1)
 
     fig, ax = plt.subplots(figsize=(10, max(4, top_n * 0.5)))
-    colors = ['#2196F3' if v >= 0 else '#F44336' for v in top['bwt']]
-    ax.barh(top['label'], top['bwt'], color=colors)
-    ax.axvline(0, color='black', linewidth=0.8)
-    ax.set_xlabel('BWT — 높을수록 이전 태스크 성능 보존 (0=변화 없음, 음수=망각)')
-    title = f'Top {top_n} combinations by BWT (Backward Transfer)'
+    colors = ['#2196F3' if v >= 0.7 else '#FF9800' for v in top['recall']]
+    ax.barh(top['label'], top['recall'], color=colors)
+    ax.axvline(0.7, color='gray', linewidth=0.8, linestyle='--')
+    ax.set_xlim(0, 1.05)
+    ax.set_xlabel('Recall (Detection Rate) — 높을수록 공격 탐지율이 높음')
+    title = f'Top {top_n} combinations by Recall (Detection Rate)'
     if title_suffix:
         title = f'[{title_suffix}] {title}'
     ax.set_title(title, fontweight='bold')
-    ax.text(0.01, 0.02, '파란색: BWT≥0 (보존 또는 향상)  /  빨간색: BWT<0 (망각)',
+    ax.text(0.01, 0.02, '파란색: Recall≥0.7 (권장)  /  주황색: Recall<0.7 (낮은 탐지율)',
             transform=ax.transAxes, fontsize=8, color='gray')
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
-    print(f"Saved BWT ranking → {out_path}")
+    print(f"Saved Recall ranking → {out_path}")
 
 
-def _pareto_from_df(df: pd.DataFrame, out_path: str,
-                    title_suffix: str = '') -> None:
-    """Label Efficiency vs F1 Pareto front 산점도 생성·저장."""
+def _recall_fpr_tradeoff_from_df(df: pd.DataFrame, out_path: str,
+                                  title_suffix: str = '') -> None:
+    """Recall vs FPR 트레이드오프 산점도 (Pareto 경계선 포함) 생성·저장."""
     try:
         import matplotlib.pyplot as plt
     except ImportError:
-        print("matplotlib not installed — skipping Pareto plot")
+        print("matplotlib not installed — skipping tradeoff plot")
         return
 
-    if 'f1' not in df.columns or 'label_efficiency' not in df.columns:
-        print("Required columns missing — skipping Pareto plot")
+    if 'recall' not in df.columns or 'fpr' not in df.columns:
+        print("Required columns (recall, fpr) missing — skipping tradeoff plot")
         return
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.scatter(df['label_efficiency'], df['f1'],
-               alpha=0.4, s=30, c='steelblue', label='모든 조합')
+    sc = ax.scatter(df['fpr'], df['recall'],
+                    alpha=0.5, s=40, c=df.get('f1', 0.5),
+                    cmap='YlGnBu', vmin=0, vmax=1, label='모든 조합')
+    plt.colorbar(sc, ax=ax, label='F1 Score')
 
-    pts = df[['label_efficiency', 'f1']].dropna().values
+    # Pareto front: 낮은 FPR + 높은 Recall이 이상적 → 좌상단 점들
+    pts = df[['fpr', 'recall']].dropna().values
     if len(pts) > 1:
-        pareto_mask = _pareto_front(pts)
+        # 최소 FPR + 최대 Recall: x를 -FPR로 변환하여 두 축 모두 최대화
+        pts_inv = np.column_stack([-pts[:, 0], pts[:, 1]])
+        pareto_mask = _pareto_front(pts_inv)
         pareto = pts[pareto_mask]
         pareto_sorted = pareto[pareto[:, 0].argsort()]
         ax.plot(pareto_sorted[:, 0], pareto_sorted[:, 1],
                 'r-o', linewidth=2, markersize=5, label='Pareto 최적 경계선')
 
-    ax.set_xlabel('Label Efficiency — 높을수록 레이블 수 적음 (비용 절감)', fontsize=10)
-    ax.set_ylabel('F1 Score (공격 탐지 성능)', fontsize=10)
-    title = 'Pareto Front — Label Efficiency vs F1'
+    ax.set_xlabel('FPR (False Positive Rate) — 낮을수록 오탐 적음', fontsize=10)
+    ax.set_ylabel('Recall (Detection Rate) — 높을수록 공격 탐지율 높음', fontsize=10)
+    title = 'Recall vs FPR Tradeoff (좌상단 = 이상적)'
     if title_suffix:
         title = f'[{title_suffix}] {title}'
     ax.set_title(title, fontweight='bold')
     ax.legend()
     ax.text(0.01, 0.02,
-            'Pareto 선 위의 점: 같은 레이블 비용으로 더 높은 F1 또는 더 적은 비용으로 같은 F1',
+            'Pareto 선 위: 같은 탐지율로 오탐 적음, 또는 같은 오탐률로 탐지율 높음',
             transform=ax.transAxes, fontsize=8, color='gray')
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(-0.02, 1.02)
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
-    print(f"Saved Pareto plot → {out_path}")
+    print(f"Saved Recall-FPR tradeoff → {out_path}")
 
 
 def _compare_datasets_plot(df_all: pd.DataFrame, out_dir: str) -> None:
@@ -237,11 +245,11 @@ def _generate_plot_guide(plots_dir: str, datasets: list) -> None:
 
 ```
 results/plots/
-├── nslkdd/          # NSL-KDD 데이터셋 단독 결과
-├── unswnb15/        # UNSW-NB15 데이터셋 단독 결과
-├── all/             # 두 데이터셋 합산 (비교 기준선)
-├── compare_datasets_f1.png   # 두 데이터셋 나란히 비교
-└── plot_guide.md             # 이 파일
+├── nslkdd/                    # NSL-KDD 데이터셋 단독 결과
+├── unswnb15/                  # UNSW-NB15 데이터셋 단독 결과
+├── all/                       # 두 데이터셋 합산 (비교 기준선)
+├── compare_datasets_f1.png    # 두 데이터셋 나란히 비교
+└── plot_guide.md              # 이 파일
 ```
 
 ---
@@ -252,8 +260,8 @@ results/plots/
 
 | 항목 | 내용 |
 |------|------|
-| **X축** | Anti-Forgetting 전략 (`none` / `lwf_ssf` / `cfe` / `cndids` / `gpm`) |
-| **Y축** | Drift Detector (`none` / `ssf` / `cade` / `ddm`) |
+| **X축** | Anti-Forgetting 전략 (`none` / `lwf_ssf` / `cndids` / `gpm`) |
+| **Y축** | Drift Detector (`none` / `ssf` / `cade`) |
 | **색상** | 평균 F1 점수 (진한 파란색 = 높은 F1 = 좋음) |
 | **수치** | 각 셀 = 해당 조합의 모든 나머지 컴포넌트 평균 F1 |
 
@@ -262,32 +270,12 @@ results/plots/
 - 특정 열 전체가 진하다 → 해당 Anti-Forgetting 전략이 탐지 성능에 유리
 - 하나의 셀만 유독 진하다 → 해당 조합 쌍에 시너지 효과 존재
 
-**IDS 문맥**: F1은 공격 탐지율(Recall)과 오탐율의 역수(Precision)의 조화평균.
+**IDS 문맥**: F1은 공격 탐지율(Recall)과 알람 정확도(Precision)의 조화평균.
 NSL-KDD/UNSW-NB15처럼 클래스 불균형이 심한 데이터에서 단순 accuracy보다 신뢰할 수 있는 지표.
 
 ---
 
-### 2. `heatmap_af_x_mm_bwt.png` — BWT 히트맵 (망각방지 전략 × 메모리 관리)
-
-| 항목 | 내용 |
-|------|------|
-| **X축** | Memory Manager (`none` / `fixed` / `ssf` / `cndids`) |
-| **Y축** | Anti-Forgetting 전략 |
-| **색상** | 평균 BWT (진한 파란색 = 높은 BWT = 망각 적음) |
-
-**해석 방법**:
-- BWT = 마지막 태스크 학습 후 **이전 태스크들의 F1 변화량 평균**
-  - BWT < 0 : 이전 공격 탐지 능력 저하 (catastrophic forgetting) → 빨간색 계열
-  - BWT ≈ 0 : 이전 성능 유지 (이상적)
-  - BWT > 0 : 새 학습이 이전 태스크도 개선 (backward plasticity) → 진한 파란색
-- 특정 행(Anti-Forgetting)이 전반적으로 진하다 → 해당 전략이 망각 방지에 효과적
-
-**IDS 문맥**: 새로운 공격 유형(e.g. 랜섬웨어)을 학습한 후 기존 공격(e.g. DDoS) 탐지 능력이
-유지되는지를 측정한다. BWT가 크게 음수이면 모델 재학습마다 이전 공격에 무방비가 된다.
-
----
-
-### 3. `heatmap_precision_recall.png` — Precision & Recall 2-패널 히트맵
+### 2. `heatmap_precision_recall.png` — Precision & Recall 2-패널 히트맵
 
 | 항목 | 내용 |
 |------|------|
@@ -309,38 +297,56 @@ NSL-KDD/UNSW-NB15처럼 클래스 불균형이 심한 데이터에서 단순 acc
 
 ---
 
-### 4. `bwt_ranking.png` — BWT 상위 10개 조합 막대 그래프
+### 3. `heatmap_drift_x_af_fpr.png` — FPR 히트맵 (드리프트 탐지기 × 망각방지 전략)
 
 | 항목 | 내용 |
 |------|------|
-| **X축** | BWT 값 (오른쪽 길수록 좋음) |
-| **Y축** | 조합 라벨 (`drift/selector/memory/forgetting/scorer` 순) |
-| **파란색** | BWT ≥ 0 (망각 없음 또는 개선) |
-| **빨간색** | BWT < 0 (이전 성능 저하, 망각 발생) |
+| **X축** | Anti-Forgetting 전략 |
+| **Y축** | Drift Detector |
+| **색상** | 평균 FPR (밝을수록 낮은 FPR = 좋음) |
 
 **해석 방법**:
-- 상단에 위치한 조합이 이전 태스크 성능 보존에 가장 우수
-- 대부분 빨간색이면 전반적으로 망각 문제가 심각함을 의미
-- 검은 수직선(BWT=0)이 망각/보존의 기준점
+- FPR = FP / (FP + TN): 정상 트래픽 중 공격으로 잘못 예측한 비율
+- 셀 값이 낮을수록 오탐이 적은 조합
+- Recall 히트맵과 함께 보면 탐지율-오탐률 트레이드오프 파악 가능
+
+**IDS 문맥**: 높은 FPR은 SOC(보안 운영 센터) 분석가의 알람 피로를 유발하여
+실제 공격 경보가 묻힐 위험이 있다.
 
 ---
 
-### 5. `pareto.png` — Label Efficiency vs F1 Pareto Front
+### 4. `recall_ranking.png` — Recall 상위 10개 조합 막대 그래프
 
 | 항목 | 내용 |
 |------|------|
-| **X축** | Label Efficiency = 1 - (레이블 수/전체 샘플 수). 높을수록 레이블 절약 |
-| **Y축** | F1 Score |
-| **회색 점** | 모든 384개 조합의 (efficiency, F1) 좌표 |
+| **X축** | Recall (Detection Rate) 값 (오른쪽 길수록 좋음) |
+| **Y축** | 조합 라벨 (`drift/selector/memory/forgetting/scorer` 순) |
+| **파란색** | Recall ≥ 0.7 (권장 탐지율 이상) |
+| **주황색** | Recall < 0.7 (낮은 탐지율 경고) |
+
+**해석 방법**:
+- 상단에 위치한 조합이 공격 탐지율이 가장 높은 최선의 조합
+- 회색 점선(0.7 기준선)을 넘는 조합이 실용적 배포 후보
+- FPR 히트맵과 함께 봐야 오탐 여부도 확인 가능
+
+---
+
+### 5. `recall_fpr_tradeoff.png` — Recall vs FPR 트레이드오프
+
+| 항목 | 내용 |
+|------|------|
+| **X축** | FPR (낮을수록 좋음, 좌측) |
+| **Y축** | Recall (높을수록 좋음, 상단) |
+| **점 색상** | F1 점수 (진할수록 높음) |
 | **빨간선** | Pareto 최적 경계선 (비지배 해집합) |
 
 **해석 방법**:
-- Pareto 선 위/오른쪽 점: 같은 F1이면 더 적은 레이블 사용, 또는 같은 비용으로 더 높은 F1
-- 실용적 배포 후보는 Pareto 선상의 점들
-- 선이 오른쪽 위로 뻗어있을수록 레이블 효율과 탐지 성능이 모두 우수한 조합 존재
+- 좌상단에 위치한 점 = 오탐 적으면서 탐지율도 높은 이상적 조합
+- Pareto 선상의 점들이 실용적 배포 후보
+- 선이 좌상단 모서리에 가까울수록 전체 조합의 품질이 우수함
 
-**IDS 문맥**: 실제 환경에서 레이블링은 보안 전문가의 수작업 분석을 요구한다.
-레이블 예산이 제한된 상황에서 최적의 탐지 성능을 달성하는 조합 선택에 활용한다.
+**IDS 문맥**: 보안 정책에 따라 Recall 우선(공격 놓치지 않기) 또는 FPR 우선(오탐 최소화)
+중 하나를 선택할 수 있으며, 이 플롯이 그 트레이드오프를 한눈에 보여준다.
 
 ---
 
@@ -365,16 +371,8 @@ NSL-KDD/UNSW-NB15처럼 클래스 불균형이 심한 데이터에서 단순 acc
 |------|------|--------|---------|
 | **F1** | 2·P·R/(P+R) | 1.0 | 탐지 성능 균형 요약 지표 |
 | **Precision** | TP/(TP+FP) | 1.0 | 알람 정확도, 오탐(FP) 비용 |
-| **Recall (DR)** | TP/(TP+FN) | 1.0 | 공격 탐지율, 미탐(FN) 비용 |
+| **Recall** | TP/(TP+FN) | 1.0 | 공격 탐지율, 미탐(FN) 비용 |
 | **FPR** | FP/(FP+TN) | 0.0 | 정상 트래픽 오탐률 |
-| **Balanced Acc** | (TPR+TNR)/2 | 1.0 | 클래스 불균형 보정 정확도 |
-| **BWT** | Σ(R[T][j]−R[j][j])/(T−1) | 0.0 | 연속 학습 망각 정도 |
-| **FWT** | Σ(R[i−1][i]−R_rand)/(T−1) | 양수 | 사전 지식 전이 능력 |
-| **Label Efficiency** | 1−labeled/total | 1.0 | 레이블링 비용 절감률 |
-| **Avg Inference ms** | mean(t)×1000 | 최소 | 실시간 탐지 지연 |
-
-- R[i][j] = i번째 태스크까지 훈련 후 j번째 태스크의 F1
-- Balanced Acc = (TPR + TNR) / 2, 클래스 불균형이 심할 때 단순 accuracy 대체
 """
     guide_path = os.path.join(plots_dir, 'plot_guide.md')
     os.makedirs(plots_dir, exist_ok=True)
@@ -435,26 +433,26 @@ def plot_heatmap(results_dir: str, x_axis: str, y_axis: str,
 
 
 def plot_bwt_ranking(results_dir: str, top_n: int = 10) -> None:
-    """Save bar chart of top_n combinations by BWT (legacy API).
+    """Save bar chart of top_n combinations by Recall (legacy name kept for compat).
 
     Args:
         results_dir: Directory containing summary.csv.
         top_n: Number of top combinations to show (default 10).
     """
     df = _load_results(results_dir)
-    out = os.path.join(results_dir, 'plots', 'bwt_ranking.png')
-    _bwt_ranking_from_df(df, top_n, out, title_suffix='ALL')
+    out = os.path.join(results_dir, 'plots', 'recall_ranking.png')
+    _recall_ranking_from_df(df, top_n, out, title_suffix='ALL')
 
 
 def plot_pareto(results_dir: str) -> None:
-    """Save label_efficiency vs f1 scatter with Pareto front (legacy API).
+    """Save Recall vs FPR tradeoff scatter with Pareto front (legacy name kept).
 
     Args:
         results_dir: Directory containing summary.csv.
     """
     df = _load_results(results_dir)
-    out = os.path.join(results_dir, 'plots', 'pareto.png')
-    _pareto_from_df(df, out, title_suffix='ALL')
+    out = os.path.join(results_dir, 'plots', 'recall_fpr_tradeoff.png')
+    _recall_fpr_tradeoff_from_df(df, out, title_suffix='ALL')
 
 
 # ---------------------------------------------------------------------------
@@ -497,14 +495,7 @@ def run_all_plots(results_dir: str = './testbed/results') -> None:
             title_suffix=ds_name,
         )
 
-        # 2. BWT 히트맵: anti_forgetting × memory_manager
-        _heatmap_from_df(
-            df, 'memory_manager', 'anti_forgetting', 'bwt',
-            os.path.join(out_dir, 'heatmap_af_x_mm_bwt.png'),
-            title_suffix=ds_name,
-        )
-
-        # 3. Precision & Recall 2-패널 히트맵 (컬럼 존재 시)
+        # 2. Precision & Recall 2-패널 히트맵 (컬럼 존재 시)
         if 'precision' in df.columns and 'recall' in df.columns:
             _precision_recall_heatmap_from_df(
                 df, 'anti_forgetting', 'drift_detector',
@@ -512,26 +503,25 @@ def run_all_plots(results_dir: str = './testbed/results') -> None:
                 title_suffix=ds_name,
             )
 
-        # 4. 개별 신규 지표 히트맵 (컬럼 존재 시)
-        for metric in ['fpr', 'balanced_accuracy']:
-            if metric in df.columns and df[metric].notna().any():
-                _heatmap_from_df(
-                    df, 'anti_forgetting', 'drift_detector', metric,
-                    os.path.join(out_dir, f'heatmap_drift_x_af_{metric}.png'),
-                    title_suffix=ds_name,
-                )
+        # 3. FPR 히트맵 (컬럼 존재 시)
+        if 'fpr' in df.columns and df['fpr'].notna().any():
+            _heatmap_from_df(
+                df, 'anti_forgetting', 'drift_detector', 'fpr',
+                os.path.join(out_dir, 'heatmap_drift_x_af_fpr.png'),
+                title_suffix=ds_name,
+            )
 
-        # 5. BWT 랭킹
-        _bwt_ranking_from_df(
+        # 4. Recall 상위 10개 조합 랭킹
+        _recall_ranking_from_df(
             df, 10,
-            os.path.join(out_dir, 'bwt_ranking.png'),
+            os.path.join(out_dir, 'recall_ranking.png'),
             title_suffix=ds_name,
         )
 
-        # 6. Pareto front
-        _pareto_from_df(
+        # 5. Recall vs FPR 트레이드오프 산점도
+        _recall_fpr_tradeoff_from_df(
             df,
-            os.path.join(out_dir, 'pareto.png'),
+            os.path.join(out_dir, 'recall_fpr_tradeoff.png'),
             title_suffix=ds_name,
         )
 

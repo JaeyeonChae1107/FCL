@@ -15,10 +15,7 @@ import pandas as pd
 
 from testbed.pipeline.cl_client import CLClient
 from testbed.experiments.metrics import (f1_score, precision_score,
-                                          detection_rate, false_alarm_rate,
-                                          balanced_accuracy,
-                                          backward_transfer, forward_transfer,
-                                          label_efficiency, avg_inference_time_ms)
+                                          detection_rate, false_alarm_rate)
 
 logger = logging.getLogger(__name__)
 
@@ -158,12 +155,10 @@ def run_grid(dataset: str = 'dummy',
             client.fit_anomaly_scorer(normal_data)
 
             perf_matrix = []
-            total_labeled = 0
 
             for i, task in enumerate(tasks):
                 X_tr, y_tr = task[0], task[1]
                 client.update(X_tr, y_tr)
-                total_labeled += min(label_budget, len(X_tr))
 
                 row = []
                 for j, t in enumerate(tasks):
@@ -173,14 +168,9 @@ def run_grid(dataset: str = 'dummy',
                     row.append(f1_score(y_te.numpy(), out['predictions'].numpy()))
                 perf_matrix.append(row)
 
-            total_samples = sum(len(t[0]) for t in tasks)
-            bwt  = backward_transfer(perf_matrix)
-            fwt  = forward_transfer(perf_matrix)
             final_f1 = float(np.mean(perf_matrix[-1]))
-            leff = label_efficiency(total_samples, total_labeled)
 
-            # 마지막 태스크 기준 precision / recall / FPR / balanced_accuracy (B2 버그 수정)
-            # perf_matrix는 F1만 저장하므로 별도 추론 pass로 계산
+            # 마지막 태스크 기준 precision / recall / FPR
             _last = tasks[-1]
             X_last_te = _last[2] if len(_last) == 4 else _last[0]
             y_last_te = _last[3] if len(_last) == 4 else _last[1]
@@ -190,24 +180,15 @@ def run_grid(dataset: str = 'dummy',
             final_precision = precision_score(_y_true, _y_pred)
             final_recall    = detection_rate(_y_true, _y_pred)
             final_fpr       = false_alarm_rate(_y_true, _y_pred)
-            final_bal_acc   = balanced_accuracy(_y_true, _y_pred)
-
-            X_sample = tasks[0][0][:50].to(device)
-            inf_ms = avg_inference_time_ms(client.infer, X_sample, n_runs=5)
 
             record = {
                 'exp_name': exp_name,
                 'dataset': dataset,
                 **combo_dict,
-                'f1':                round(final_f1, 4),
-                'precision':         round(final_precision, 4),
-                'recall':            round(final_recall, 4),
-                'fpr':               round(final_fpr, 4),
-                'balanced_accuracy': round(final_bal_acc, 4),
-                'bwt':               round(bwt, 4),
-                'fwt':               round(fwt, 4),
-                'label_efficiency':  round(leff, 4),
-                'avg_inference_ms':  round(inf_ms, 2),
+                'f1':        round(final_f1, 4),
+                'precision': round(final_precision, 4),
+                'recall':    round(final_recall, 4),
+                'fpr':       round(final_fpr, 4),
                 'perf_matrix': perf_matrix,
             }
             records.append(record)
@@ -219,7 +200,7 @@ def run_grid(dataset: str = 'dummy',
             logger.info(
                 f"[OK] {exp_name} → "
                 f"F1={final_f1:.3f}  Prec={final_precision:.3f}  "
-                f"Rec={final_recall:.3f}  FPR={final_fpr:.3f}  BWT={bwt:.3f}"
+                f"Rec={final_recall:.3f}  FPR={final_fpr:.3f}"
             )
 
         except Exception as e:
@@ -228,8 +209,8 @@ def run_grid(dataset: str = 'dummy',
             with open(errors_path, 'a') as f:
                 f.write(err_msg)
 
-    # 기존 JSON 파일 재로드 시 신규 지표 컬럼이 없을 수 있으므로 NaN으로 채움
-    _new_cols = ['precision', 'recall', 'fpr', 'balanced_accuracy']
+    # 기존 JSON 파일 재로드 시 지표 컬럼이 없을 수 있으므로 NaN으로 채움
+    _new_cols = ['precision', 'recall', 'fpr']
     for r in records:
         for k in _new_cols:
             r.setdefault(k, float('nan'))
