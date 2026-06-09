@@ -32,7 +32,7 @@ SMOKE_CONFIGS = [
         "drift_detector":  {"name": "cade"},
         "sample_selector": {"name": "random"},
         "memory_manager":  {"name": "none"},
-        "anti_forgetting": {"name": "none"},
+        "anti_forgetting": {"name": "cade"},
         "anomaly_scorer":  {"name": "cade_mad"},
         "label_budget": 50, "optimizer": "adam", "lr": 1e-3,
         "pretrain_epochs": 250, "task_epochs": 50, "batch_size": 64,
@@ -47,7 +47,7 @@ SMOKE_CONFIGS = [
         "label_budget": 50, "optimizer": "sgd", "lr": 1e-3,
         "pretrain_epochs": 200, "task_epochs": 1, "batch_size": 128,
     },
-    {   # 3. CND-IDS canonical — CNDIDSModel, Adam, pretrain=10 / task=50
+    {   # 3. CND-IDS canonical — CNDIDSModel, Adam, pretrain=10 / task=20
         "name": "cndids_canonical",
         "drift_detector":  {"name": "ddm"},
         "sample_selector": {"name": "random"},
@@ -55,7 +55,7 @@ SMOKE_CONFIGS = [
         "anti_forgetting": {"name": "cndids"},
         "anomaly_scorer":  {"name": "pca"},
         "label_budget": 50, "optimizer": "adam", "lr": 1e-3,
-        "pretrain_epochs": 10, "task_epochs": 50, "batch_size": 64,
+        "pretrain_epochs": 10, "task_epochs": 20, "batch_size": 64,
     },
     {   # 4. SPIDER canonical — SSFModel, Adam, pretrain=5 / task=5 (no paper default)
         "name": "spider_canonical",

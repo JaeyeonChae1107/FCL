@@ -24,7 +24,8 @@ from testbed.base import (BaseDriftDetector, BaseSampleSelector,
 # ── Component imports ──────────────────────────────────────────────────────
 from testbed.components.ssf import (SSFDriftDetector, SSFSampleSelector,
                                      SSFMemoryManager, SSFAntiForgetting)
-from testbed.components.cade import CADEDriftDetector, CADEAnomalyScorer
+from testbed.components.cade import (CADEDriftDetector, CADEAnomalyScorer,
+                                     CADEAntiForgetting)
 from testbed.components.cndids import (CNDIDSAntiForgetting, PCAAnomalyScorer,
                                         DDMDriftDetector, CNDIDSMemoryManager)
 from testbed.components.gpm import GPMAntiForgetting
@@ -181,7 +182,8 @@ REGISTRY = {
         "cndids": CNDIDSMemoryManager, # CND-IDS — 클래스 균형 버퍼
     },
     "anti_forgetting": {
-        "none":    ReplayOnlyLoss,      # CADE — 재구성 손실만
+        "none":    ReplayOnlyLoss,       # baseline — 재구성 손실만
+        "cade":    CADEAntiForgetting,   # CADE — contrastive + MSE (margin=10.0)
         "lwf_ssf": SSFAntiForgetting,   # SSF — InfoNCE + LwF
         "cndids":  CNDIDSAntiForgetting,# CND-IDS — L_CS + L_R + L_CL
         "gpm":     GPMAntiForgetting,   # SPIDER — 그래디언트 정사영

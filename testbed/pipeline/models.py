@@ -47,20 +47,23 @@ class SSFModel(nn.Module):
     Architecture:
       Encoder:    input → nearest_pow2//2 (ReLU) → nearest_pow2//4   (no act on latent)
       Decoder:    ReLU(latent) → nearest_pow2//2 (ReLU) → input
-      Classifier: ReLU(latent) → 1                                     (logit, no sigmoid)
+      Classifier: ReLU(x_hat) → 1                                      (logit, no sigmoid)
+
+    Classifier applies to the DECODER OUTPUT (x_hat, dim=input_dim), matching the
+    original SSF code where `classify = self.classifier(decode)`.
 
     Dimensions for common datasets:
       NSL-KDD  (dim=121): nearest_pow2=128, hidden=64,  latent=32
       UNSW-NB15(dim=196): nearest_pow2=256, hidden=128, latent=64
 
-    Note: Original SSF uses Sigmoid on the classifier for BCELoss. This model
-    omits Sigmoid to produce raw logits — BCEWithLogitsLoss is numerically
-    equivalent and more stable.
+    Note: Original SSF applies Sigmoid (BCELoss). Here we omit Sigmoid for numerical
+    stability — BCEWithLogitsLoss is equivalent.
     """
 
     def __init__(self, input_dim: int):
         super().__init__()
         n = _nearest_power_of_2(input_dim)
+        self.input_dim  = input_dim
         self.hidden_dim = n // 2
         self.latent_dim = n // 4
 
@@ -78,16 +81,17 @@ class SSFModel(nn.Module):
             nn.ReLU(),
             nn.Linear(self.hidden_dim, input_dim),
         )
-        # FROM: utils.py lines 49-53 — classifier (starts with ReLU on latent)
+        # FROM: utils.py lines 49-53 — classifier on decoder output (ReLU → Linear(input_dim, 1))
+        # Original: nn.Linear(input_dim, 1), nn.Sigmoid()  — applied to `decode` in forward()
         self.classifier = nn.Sequential(
             nn.ReLU(),
-            nn.Linear(self.latent_dim, 1),
+            nn.Linear(input_dim, 1),
         )
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         z     = self.encoder(x)
         x_hat = self.decoder(z)
-        logit = self.classifier(z).squeeze(-1)   # (N,)
+        logit = self.classifier(x_hat).squeeze(-1)   # (N,)  — applied to x_hat, per SSF
         return z, x_hat, logit
 
 
@@ -96,49 +100,42 @@ class SSFModel(nn.Module):
 # ---------------------------------------------------------------------------
 
 class CNDIDSModel(nn.Module):
-    """CND-IDS deep autoencoder with binary classifier head.
+    """CND-IDS autoencoder with binary classifier head.
 
-    FROM: CND-IDS/FeatureExtractors/AE_Exactor.py
+    FROM: CND-IDS/CND_IDS.py  (the actual CL model, NOT AE_Extractor)
 
     Architecture:
-      Encoder: input → 256 → 128 → 128 → 96 → latent  (all ReLU, no act on latent)
-      Decoder: latent → 96 → 128 → 128 → 256 → input  (ReLU hidden, Sigmoid output)
-      Classifier: latent → 1                             (logit, no sigmoid)
+      Encoder: input → 128 (ReLU) → 256 (ReLU) → 128 (ReLU) → latent  (no act on latent)
+      Decoder: latent → 128 (ReLU) → 256 (ReLU) → 128 (ReLU) → input   (no Sigmoid)
+      Classifier: latent → 1                                              (logit, no sigmoid)
 
-    Default latent_dim=96 matches the last intermediate size in AE_Exactor.py.
-
-    Note: Original AE_Extractor.forward() returns encoder(x).detach() — gradient
-    is detached. This model keeps gradient flow for backpropagation.
+    Default latent_dim=30 matches CND_IDS.py nLatent=30.
+    Paper training: Adam lr=0.001, bs=64, pretrain=10 epochs, task=20 epochs.
     """
 
-    def __init__(self, input_dim: int, latent_dim: int = 96):
+    def __init__(self, input_dim: int, latent_dim: int = 30):
         super().__init__()
         self.latent_dim = latent_dim
 
-        # FROM: AE_Exactor.py — encoder
+        # FROM: CND_IDS.py — encoder (input → 128 → 256 → 128 → latent)
         self.encoder = nn.Sequential(
-            nn.Linear(input_dim, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Linear(128, 96),
-            nn.ReLU(),
-            nn.Linear(96, latent_dim),
-        )
-        # FROM: AE_Exactor.py — decoder (Sigmoid on output)
-        self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, 96),
-            nn.ReLU(),
-            nn.Linear(96, 128),
-            nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(input_dim, 128),
             nn.ReLU(),
             nn.Linear(128, 256),
             nn.ReLU(),
-            nn.Linear(256, input_dim),
-            nn.Sigmoid(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, latent_dim),
+        )
+        # FROM: CND_IDS.py — decoder (symmetric, no Sigmoid on output)
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, input_dim),
         )
         # Classifier head added for pipeline compatibility
         self.classifier = nn.Linear(latent_dim, 1)
@@ -222,7 +219,7 @@ def select_paper(combo_dict: dict) -> str:
 
     if anti == 'cndids' or mem == 'cndids':
         return 'cndids'
-    if drift == 'cade' or scorer == 'cade_mad':
+    if anti == 'cade' or drift == 'cade' or scorer == 'cade_mad':
         return 'cade'
     return 'ssf'
 

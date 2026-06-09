@@ -61,7 +61,7 @@ class ContrastiveAE(nn.Module):
     @staticmethod
     def contrastive_loss(z_i: torch.Tensor, z_j: torch.Tensor,
                          is_same: torch.Tensor,
-                         margin: float = 1.0) -> torch.Tensor:
+                         margin: float = 10.0) -> torch.Tensor:
         """Contrastive loss between paired embeddings.
 
         PORTED FROM: CADE/cade/autoencoder.py::ContrastiveAE.train() (line 220-226)
@@ -96,7 +96,7 @@ class ContrastiveAE(nn.Module):
 
     def combined_loss(self, x: torch.Tensor, y: torch.Tensor,
                       lambda_1: float = 0.1,
-                      margin: float = 1.0) -> torch.Tensor:
+                      margin: float = 10.0) -> torch.Tensor:
         """Full CADE training loss for a batch.
 
         PORTED FROM: CADE/cade/autoencoder.py::ContrastiveAE.train() (line 228-233)

@@ -36,6 +36,7 @@ from testbed.pipeline.component_registry import NoMemoryManager, FIFOMemoryManag
 from testbed.components.ssf import SSFAntiForgetting
 from testbed.components.cndids import CNDIDSAntiForgetting
 from testbed.components.gpm import GPMAntiForgetting
+from testbed.components.cade import CADEAntiForgetting
 from testbed.pipeline.component_registry import ReplayOnlyLoss
 
 # ── Anomaly scorers ────────────────────────────────────────────────────────
@@ -171,6 +172,7 @@ ANTI_FORGETTING = [
     (SSFAntiForgetting, {"lwf_lambda": 0.5}),
     (CNDIDSAntiForgetting, {}),
     (GPMAntiForgetting, {"threshold": 0.97}),
+    (CADEAntiForgetting, {}),
 ]
 
 

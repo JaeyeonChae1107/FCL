@@ -191,7 +191,7 @@ class CLClient:
         if opt_name == 'sgd':
             self.optimizer = torch.optim.SGD(
                 self.model.parameters(), lr=self.lr,
-                momentum=config.get('momentum', 0.9),
+                momentum=config.get('momentum', 0.0),
                 weight_decay=config.get('weight_decay', 0.0),
             )
         else:

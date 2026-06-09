@@ -23,16 +23,16 @@ logger = logging.getLogger(__name__)
 _FCL_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 COMPONENT_GRID = {
-    # 4 × 2 × 4 × 4 × 2 = 256 combinations per dataset
+    # 4 × 2 × 4 × 5 × 2 = 320 combinations per dataset
     # Paper mapping (drift / sample / memory / anti / anomaly):
     #   CND-IDS : ddm  / random / cndids / cndids  / pca
     #   SSF     : ssf  / ssf    / ssf    / lwf_ssf / pca
-    #   CADE    : cade / random / none   / none    / cade_mad
+    #   CADE    : cade / random / none   / cade    / cade_mad
     #   SPIDER  : none / random / fifo   / gpm     / pca
     "drift_detector":  ["none", "ssf", "cade", "ddm"],
     "sample_selector": ["random", "ssf"],
     "memory_manager":  ["none", "fifo", "ssf", "cndids"],
-    "anti_forgetting": ["none", "cndids", "gpm", "lwf_ssf"],
+    "anti_forgetting": ["none", "cade", "cndids", "gpm", "lwf_ssf"],
     "anomaly_scorer":  ["pca", "cade_mad"],
 }
 
@@ -54,7 +54,7 @@ PAPER_EPOCH_CONFIGS: Dict[str, Dict[str, Any]] = {
     },
     'cndids': {
         'pretrain_epochs': 10,    # AE_Exactor train_epochs=10
-        'task_epochs':     50,    # fitCL() epoch=50
+        'task_epochs':     20,    # CND_IDS.fit() train_epochs=20
         'batch_size':      64,
         'optimizer':       'adam',
         'lr':              0.001,
@@ -89,6 +89,7 @@ _SHORT = {
     "fifo": "fifo", "cndids": "cnd",
     "gpm": "gpm", "lwf_ssf": "lwf",
     "pca": "pca", "cade_mad": "mad",
+    "cade": "cade",
 }
 
 
