@@ -1,0 +1,35 @@
+{
+  "exp_name": "dummy__dr=cade__sl=all__mm=none__af=none__sc=pca",
+  "dataset": "dummy",
+  "drift_detector": "cade",
+  "sample_selector": "all",
+  "memory_manager": "none",
+  "anti_forgetting": "none",
+  "anomaly_scorer": "pca",
+  "f1": 0.6509,
+  "precision": 0.5962,
+  "recall": 0.6813,
+  "fpr": 0.56,
+  "balanced_accuracy": 0.5607,
+  "bwt": -0.0014,
+  "fwt": 0.083,
+  "label_efficiency": 0.6988,
+  "avg_inference_ms": 0.85,
+  "perf_matrix": [
+    [
+      0.7575757575757577,
+      0.5434782608695652,
+      0.5968586387434556
+    ],
+    [
+      0.7575757575757577,
+      0.5621621621621622,
+      0.6224489795918368
+    ],
+    [
+      0.7424242424242423,
+      0.574468085106383,
+      0.635897435897436
+    ]
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "exp_name": "unswnb15__dr=ddm__sl=rand__mm=ssf__af=lwf__sc=svdd",
+  "dataset": "unswnb15",
+  "drift_detector": "ddm",
+  "sample_selector": "random",
+  "memory_manager": "ssf",
+  "anti_forgetting": "lwf_ssf",
+  "anomaly_scorer": "deep_svdd",
+  "f1": 0.0,
+  "bwt": 0.0,
+  "fwt": -0.5,
+  "label_efficiency": 0.9875,
+  "avg_inference_ms": 0.64,
+  "perf_matrix": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ]
+}

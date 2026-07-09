@@ -1,0 +1,51 @@
+{
+  "exp_name": "nslkdd__dr=ddm__sl=ssf__mm=fixed__af=cnd__sc=pca",
+  "dataset": "nslkdd",
+  "drift_detector": "ddm",
+  "sample_selector": "ssf",
+  "memory_manager": "fixed",
+  "anti_forgetting": "cndids",
+  "anomaly_scorer": "pca",
+  "f1": 0.0,
+  "bwt": 0.0,
+  "fwt": -0.5,
+  "label_efficiency": 0.9875,
+  "avg_inference_ms": 0.34,
+  "perf_matrix": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ]
+}

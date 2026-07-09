@@ -1,0 +1,35 @@
+{
+  "exp_name": "dummy__dr=ssf__sl=rand__mm=none__af=gpm__sc=mad",
+  "dataset": "dummy",
+  "drift_detector": "ssf",
+  "sample_selector": "random",
+  "memory_manager": "none",
+  "anti_forgetting": "gpm",
+  "anomaly_scorer": "cade_mad",
+  "f1": 0.0317,
+  "precision": 0.0,
+  "recall": 0.0,
+  "fpr": 0.0133,
+  "balanced_accuracy": 0.4933,
+  "bwt": 0.012,
+  "fwt": -0.4767,
+  "label_efficiency": 0.6988,
+  "avg_inference_ms": 0.3,
+  "perf_matrix": [
+    [
+      0.024096385542168672,
+      0.046511627906976744,
+      0.0
+    ],
+    [
+      0.047619047619047616,
+      0.047058823529411764,
+      0.0
+    ],
+    [
+      0.047619047619047616,
+      0.047619047619047616,
+      0.0
+    ]
+  ]
+}
