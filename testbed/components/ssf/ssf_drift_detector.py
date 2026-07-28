@@ -1,101 +1,43 @@
-"""SSF Drift Detector — Kolmogorov-Smirnov two-sample test.
+"""SSF DriftDetector — K-S 검정 기반 drift 탐지 (PRD 4절/12.2절).
 
-FROM: SSF-Strategic-Selection-and-Forgetting/utils.py::detect_drift()
+SSF 원 논문 근거: SSF-Strategic-Selection-and-Forgetting/utils.py의
+detect_drift()가 scipy.stats.ks_2samp(control, window)를 사용하고,
+p_value < drift_threshold(기본 0.05)면 drift로 판정한다(ssf.py:49, utils.py:646-658).
+UNSW 실험에서는 classifier logit 분포를 직접 비교한다(ssf.py:217-225) — 이
+테스트베드의 표현 의존성 계약(12.1절)에서 SSFDriftDetector는 공유 표현 소비자
+(uses_shared_representation=True)이므로, CLClient가 넘기는 현재 모델의 logit을
+그대로 사용한다.
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
-
 from typing import Optional
+
 import torch
-import numpy as np
+from scipy.stats import ks_2samp
+
 from testbed.base.drift_detector import BaseDriftDetector
 
 
-def _ks_2samp(a: np.ndarray, b: np.ndarray):
-    """Pure-numpy Kolmogorov-Smirnov two-sample test.
-
-    MODIFIED: Replaces scipy.stats.ks_2samp to avoid binary-incompatibility
-    between scipy and numpy >= 2.x.  Returns (ks_statistic, p_value).
-    p_value is approximated via the Kolmogorov distribution.
-    """
-    a = np.sort(a.flatten())
-    b = np.sort(b.flatten())
-    n1, n2 = len(a), len(b)
-    if n1 == 0 or n2 == 0:
-        return 0.0, 1.0
-
-    combined = np.concatenate([a, b])
-    cdf_a = np.searchsorted(a, combined, side='right') / n1
-    cdf_b = np.searchsorted(b, combined, side='right') / n2
-    stat = float(np.max(np.abs(cdf_a - cdf_b)))
-
-    # Kolmogorov distribution approximation for p-value
-    en = np.sqrt(n1 * n2 / (n1 + n2))
-    z = (en + 0.12 + 0.11 / en) * stat
-    # P(K > z) ≈ 2 * sum_{k=1}^{inf} (-1)^{k+1} exp(-2 k^2 z^2)
-    p = 0.0
-    for k in range(1, 101):
-        p += (-1) ** (k + 1) * np.exp(-2 * k * k * z * z)
-    p_value = max(0.0, min(1.0, 2.0 * p))
-    return stat, p_value
-
-
 class SSFDriftDetector(BaseDriftDetector):
-    """Detects distribution drift via the Kolmogorov-Smirnov 2-sample test.
-
-    FROM: SSF-Strategic-Selection-and-Forgetting/utils.py::detect_drift() (line 646-658)
-    """
+    uses_shared_representation = True
 
     def __init__(self, drift_threshold: float = 0.05):
-        """
-        Args:
-            drift_threshold: KS p-value below which drift is declared (default 0.05).
-        """
         self.drift_threshold = drift_threshold
-        self._last_ks_stat: float = 0.0
-        self._last_p_value: float = 1.0
-        self._cache_key: tuple = None
 
-    def _compute(self, new_data: torch.Tensor,
-                memory_buffer: Optional[torch.Tensor]) -> None:
-        """Run KS test once and cache result; skip if same tensors already computed."""
-        key = (id(new_data), id(memory_buffer))
-        if self._cache_key == key:
-            return
-        if memory_buffer is None:
-            self._last_ks_stat = 0.0
-            self._last_p_value = 1.0
-        else:
-            ctrl = self._flatten(memory_buffer)
-            treat = self._flatten(new_data)
-            ks_stat, p_value = _ks_2samp(ctrl, treat)
-            self._last_ks_stat = float(ks_stat)
-            self._last_p_value = float(p_value)
-        self._cache_key = key
+    def detect(self, new_data: torch.Tensor, buf_ref: Optional[torch.Tensor]) -> bool:
+        if buf_ref is None or len(buf_ref) == 0 or len(new_data) == 0:
+            return False
+        _, p_value = self._ks(new_data, buf_ref)
+        return bool(p_value < self.drift_threshold)
 
-    # FROM: utils.py::detect_drift() — KS 2-sample test logic
-    def detect(self, new_data: torch.Tensor,
-               memory_buffer: Optional[torch.Tensor]) -> bool:
-        """Return True if KS p-value < drift_threshold."""
-        self._compute(new_data, memory_buffer)
-        return bool(self._last_p_value < self.drift_threshold)
-
-    def get_drift_score(self, new_data: torch.Tensor,
-                        memory_buffer: Optional[torch.Tensor]) -> float:
-        """Return the KS statistic (0–1, higher = more drift)."""
-        self._compute(new_data, memory_buffer)
-        return self._last_ks_stat
-
-    def reset(self):
-        self._last_ks_stat = 0.0
-        self._last_p_value = 1.0
-        self._cache_key = None
+    def get_drift_score(self, new_data: torch.Tensor, buf_ref: Optional[torch.Tensor]) -> float:
+        if buf_ref is None or len(buf_ref) == 0 or len(new_data) == 0:
+            return 0.0
+        stat, _ = self._ks(new_data, buf_ref)
+        return float(stat)
 
     @staticmethod
-    def _flatten(t: torch.Tensor):
-        if hasattr(t, 'cpu'):
-            t = t.cpu()
-        if hasattr(t, 'numpy'):
-            t = t.numpy()
-        return t.flatten()
+    def _ks(new_data: torch.Tensor, buf_ref: torch.Tensor):
+        a = new_data.detach().cpu().reshape(-1).numpy()
+        b = buf_ref.detach().cpu().reshape(-1).numpy()
+        result = ks_2samp(a, b)
+        return result.statistic, result.pvalue

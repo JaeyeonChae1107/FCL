@@ -1,347 +1,248 @@
-"""CLClient — pluggable continual-learning client.
+"""CLClient — PRD 13절의 8단계 실행 흐름을 그대로 구현한다.
 
-Orchestrates: Drift Detector → Sample Selector → Memory Manager
-              → Anti-Forgetting → Anomaly Scorer
+이 순서는 SSF/SPIDER 등 각 논문의 알고리즘이 실제로 동작하는 순서에서 그대로
+도출된 것이며, 임의로 바꾸지 않는다:
+
+  1. 새 데이터 도착
+  2. Drift 감지 (buf_ref = 이전 experience까지의 버퍼)
+  3. 샘플 선택과 라벨 예산 확정 (label_budget_int → select → slice →
+     drift_detector.fit(selected_data, selected_labels))
+  4. 모델 학습 (epochs_per_experience, replay_batch는 "이전" 버퍼에서,
+     selected_data만 사용 — experience 전체가 아니다)
+  5. 메모리 갱신 (학습 이후, selected_data 그대로)
+  6. Anomaly Scorer 재보정 (refit_on_update, s_ref 계산·캐싱)
+  7. 평가 (experience 0..T-1 전부의 test split, Track별 threshold 결정방식)
+  8. 다음 라운드 준비 (anti_forgetting.on_task_end)
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
+from typing import Any, Dict, List, Optional, Tuple
 
-from typing import Optional, Dict, Any
 import torch
-import torch.nn as nn
+
+from testbed.base.models import BaseCLModel
 from testbed.pipeline.component_registry import build
 
 
-# ---------------------------------------------------------------------------
-# 파이프라인 단계 가이드 (각 단계의 역할·입출력 계약)
-# ---------------------------------------------------------------------------
-STAGE_GUIDE: Dict[str, Dict[str, Any]] = {
-    "1_drift_detector": {
-        "역할": (
-            "메모리 버퍼(과거 정상 데이터)와 새 배치 간의 분포 변화(concept drift)를 감지한다. "
-            "메모리 update() 호출 이전에 실행하여 '이전 분포'를 참조 기준으로 사용한다."
-        ),
-        "입력": {
-            "new_data": "torch.Tensor (N, D) — 현재 라운드의 새 샘플",
-            "buf_ref":  "torch.Tensor (M, D) or None — 메모리 버퍼 전체 (이전 분포 참조)",
-        },
-        "출력": {
-            "drift_score":    "float — 표류 강도 (0=표류 없음, 높을수록 강한 표류)",
-            "drift_detected": "bool  — 표류 여부 (threshold 적용 후)",
-        },
-        "보장사항": [
-            "버퍼가 None이면 반드시 False/0.0 반환",
-            "memory_manager.update() 이전에 실행되므로 이전 분포를 기준으로 비교 가능",
-        ],
-        "구현체": ["NoDriftDetector(none)", "SSFDriftDetector(ssf)", "CADEDriftDetector(cade)"],
-    },
-    "2_sample_selector": {
-        "역할": (
-            "label_budget 내에서 학습에 가장 유익한 샘플 인덱스를 선택한다 (능동 학습). "
-            "drift_score를 활용해 표류 시 더 공격적인 전략을 적용할 수 있다."
-        ),
-        "입력": {
-            "new_data":     "torch.Tensor (N, D)",
-            "new_labels":   "torch.Tensor (N,) — 정수 레이블 (0=정상, 1=공격)",
-            "label_budget": "int — 이번 라운드 최대 레이블 수",
-            "drift_score":  "float — Stage 1에서 반환된 표류 강도",
-        },
-        "출력": {
-            "sel_idx": "List[int] — new_data 인덱스, 길이 ≤ label_budget",
-        },
-        "보장사항": [
-            "반환 리스트 비어있으면 CLClient가 range(label_budget)으로 대체",
-            "선택된 샘플만 Stage 3(메모리 업데이트)·Stage 5(손실 계산)에 사용됨",
-        ],
-        "구현체": ["AllSampleSelector(all)", "RandomSelector(random)", "SSFSampleSelector(ssf)"],
-    },
-    "3_memory_manager": {
-        "역할": (
-            "선택된 샘플을 replay 버퍼에 추가/교체하여 이전 태스크 경험을 유지한다. "
-            "drift 발생 시 오래된 샘플을 더 공격적으로 교체할 수 있다."
-        ),
-        "입력": {
-            "selected_data":   "torch.Tensor (K, D) — Stage 2에서 선택된 샘플",
-            "selected_labels": "torch.Tensor (K,)",
-            "drift_detected":  "bool — Stage 1의 출력",
-        },
-        "출력": {
-            "버퍼(side-effect)": "내부 버퍼 갱신. get_buffer()/get_replay_batch()로 접근",
-        },
-        "보장사항": [
-            "update() 완료 후 get_buffer()는 최신 버퍼를 반환",
-            "Stage 4(replay batch 조회)는 update() 이후 실행됨",
-        ],
-        "구현체": ["NoMemoryManager(none)", "FIFOMemoryManager(fifo)", "SSFMemoryManager(ssf)"],
-    },
-    "4_replay_retrieval": {
-        "역할": (
-            "[CLClient 내부 단계 — 별도 플러그인 없음] "
-            "메모리 버퍼에서 replay mini-batch를 샘플링하여 Stage 5(anti-forgetting)에 전달한다."
-        ),
-        "입력": {"batch_size": "int — label_budget과 동일"},
-        "출력": {"replay_batch": "Tuple(data, labels) or None (버퍼 비어있을 경우)"},
-        "보장사항": [
-            "버퍼가 비어있으면 replay_batch=None이 Stage 5로 전달됨",
-            "SSFAntiForgetting은 replay_batch=None을 drift 모드로 간주 (LwF 생략)",
-        ],
-        "구현체": ["CLClient.update() 내부 로직"],
-    },
-    "5_anti_forgetting": {
-        "역할": (
-            "new_batch와 replay_batch를 결합하여 catastrophic forgetting을 방지하는 "
-            "스칼라 손실을 계산한다. loss.backward() 이후 선택적으로 "
-            "project_gradients()를 통해 gradient를 이전 태스크 직교 방향으로 제한한다."
-        ),
-        "입력": {
-            "model":        "nn.Module — 훈련 중인 현재 모델",
-            "new_batch":    "Tuple(sel_data, sel_labels) — 현재 라운드 선택 샘플",
-            "replay_batch": "Tuple(r_data, r_labels) or None — 버퍼 샘플",
-        },
-        "출력": {"loss": "torch.Tensor (scalar, requires_grad=True)"},
-        "보장사항": [
-            "on_task_end(model) 훅이 optimizer.step() 이후 반드시 호출됨",
-            "project_gradients()는 backward() 이후, step() 이전에 호출됨 (GPM만 해당)",
-        ],
-        "구현체": ["ReplayOnlyLoss(none)", "CNDIDSAntiForgetting(cndids)", "GPMAntiForgetting(gpm)", "SSFAntiForgetting(lwf_ssf)"],
-    },
-    "anomaly_scorer": {
-        "역할": (
-            "[update() 파이프라인 외부 단계] "
-            "인코더 출력(latent representation)에서 이상 점수를 계산하고 "
-            "임계값으로 이진 분류한다. fit()은 정상 데이터로만 호출된다."
-        ),
-        "입력": {
-            "fit":     "normal_data: torch.Tensor (N, D) — 정상(label=0) 인코더 출력",
-            "score":   "data: torch.Tensor (N, D) — 추론 대상",
-            "predict": "data + threshold: float (자동 설정됨)",
-        },
-        "출력": {
-            "score":   "torch.Tensor (N,) float — 높을수록 이상",
-            "predict": "torch.Tensor (N,) long  — 0=정상, 1=이상",
-        },
-        "보장사항": [
-            "fit_anomaly_scorer()가 정상 데이터의 95th percentile을 임계값으로 자동 설정",
-            "인코더 forward는 model.eval() + torch.no_grad() 하에서 실행됨",
-        ],
-        "구현체": ["PCAAnomalyScorer(pca)", "CADEAnomalyScorer(cade_mad)"],
-    },
-}
-
-
 class CLClient:
-    """Federated / continual learning client with swappable components.
-
-    Config example::
-
-        config = {
-            "drift_detector":  {"name": "ssf", "drift_threshold": 0.05},
-            "sample_selector": {"name": "ssf", "mask_threshold": 0.5},
-            "memory_manager":  {"name": "ssf", "max_size": 1000},
-            "anti_forgetting": {"name": "lwf_ssf", "lwf_lambda": 0.5},
-            "anomaly_scorer":  {"name": "pca"},
-            "label_budget": 50,
-            "lr": 1e-3,
-        }
-        client = CLClient(model=my_model, config=config, device='cpu')
-    """
-
-    def __init__(self, model: nn.Module, config: Dict[str, Any],
-                 device: str = 'cpu'):
+    def __init__(self, model: BaseCLModel, combo: Dict[str, Any],
+                 global_hparams: Dict[str, Any],
+                 component_hparams: Optional[Dict[str, Dict[str, Any]]] = None,
+                 device: str = "cpu"):
         """
         Args:
-            model: PyTorch model. Expected forward: x → (z, recon) or z.
-            config: Dict with keys for each component slot plus 'label_budget'
-                    and 'lr'.
-            device: Torch device string.
+            model: BaseCLModel(FCLAutoEncoder) 인스턴스.
+            combo: {'track': 'A'|'B', 'drift_detector':, 'sample_selector':,
+                    'memory_manager':, 'anti_forgetting':, 'anomaly_scorer':}
+                   (common.compatibility.enumerate_valid_combos()가 만든 형식).
+            global_hparams: configs/global_hparams.yaml 로드 결과.
+            component_hparams: {'cade': {...}, 'gpm': {...}, 'cndids': {...},
+                                 'ssf': {...}} — configs/component_hparams/*.yaml.
+            device: torch device 문자열.
         """
-        self.model = model.to(device)
         self.device = torch.device(device)
-        self.config = config
-        self.label_budget: int = config.get('label_budget', 50)
-        self.lr: float = config.get('lr', 1e-3)
+        self.model = model.to(self.device)
+        self.combo = combo
+        self.track = combo["track"]
+        component_hparams = component_hparams or {}
 
-        # Build components from registry
+        input_dim = global_hparams.get("_input_dim")  # dataset_loader가 채워 넣음
+        hidden_dim = global_hparams["hidden_dim"]
+        latent_dim = global_hparams["latent_dim"]
+
+        # 모든 component_hparams/*.yaml을 하나로 병합한다. build()가 각 클래스의
+        # 실제 생성자 시그니처로 필터링하므로(component_registry.py), 서로 다른
+        # 컴포넌트의 하이퍼파라미터가 섞여 있어도 안전하다 — 파라미터 이름이
+        # 컴포넌트 간에 겹치지 않기 때문. 단, input_dim/hidden_dim/latent_dim은
+        # global_hparams(10.1절, 모든 조합에 동일 적용)가 항상 우선하도록
+        # 마지막에 덮어쓴다(cndids.yaml의 latent_dim=30은 참고용 기록일 뿐).
+        merged_component_kwargs: Dict[str, Any] = {}
+        for hp in component_hparams.values():
+            merged_component_kwargs.update(hp)
+        merged_component_kwargs.update(
+            input_dim=input_dim, hidden_dim=hidden_dim, latent_dim=latent_dim)
+
         self.drift_detector = build(
-            'drift_detector', **config.get('drift_detector', {'name': 'none'}))
+            "drift_detector", combo["drift_detector"], **merged_component_kwargs)
+        # CADEDriftDetector 전용 훅 — 유일하게 자기 소유의 nn.Module(사설
+        # ContrastiveAutoEncoder)을 갖는 컴포넌트라, self.model처럼 명시적으로
+        # 디바이스를 옮겨줘야 한다(components/cade/cade_drift_detector.py 참고).
+        if hasattr(self.drift_detector, "to"):
+            self.drift_detector.to(self.device)
         self.sample_selector = build(
-            'sample_selector', **config.get('sample_selector', {'name': 'random'}))
-        self.memory_manager = build(
-            'memory_manager', **config.get('memory_manager', {'name': 'none'}))
+            "sample_selector", combo["sample_selector"], **merged_component_kwargs)
+        self.memory_manager = build("memory_manager", combo["memory_manager"])
         self.anti_forgetting = build(
-            'anti_forgetting', **config.get('anti_forgetting', {'name': 'none'}))
+            "anti_forgetting", combo["anti_forgetting"], **merged_component_kwargs)
         self.anomaly_scorer = build(
-            'anomaly_scorer', **config.get('anomaly_scorer', {'name': 'pca'}))
+            "anomaly_scorer", combo["anomaly_scorer"], **merged_component_kwargs)
+        # NoAnomalyScorer 전용 훅 — 표준 계약(z 소비) 밖에서 model 참조가
+        # 필요한 유일한 컴포넌트 (pipeline/common_baselines.py 참고).
+        if hasattr(self.anomaly_scorer, "set_model"):
+            self.anomaly_scorer.set_model(self.model)
 
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        self._anomaly_threshold: float = 0.5
-        self._round: int = 0
-        self.batch_size: int = config.get('batch_size', 64)
-        self.n_epochs: int = config.get('n_epochs', 1)
+        optimizer_name = global_hparams.get("optimizer", "adam")
+        lr = global_hparams["learning_rate"]
+        if optimizer_name == "adam":
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        else:
+            self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr)
 
-    # ------------------------------------------------------------------
-    def update(self, new_data: torch.Tensor,
-               new_labels: torch.Tensor) -> Dict[str, Any]:
-        """Run one continual-learning round.
+        self.batch_size = global_hparams["batch_size"]
+        self.epochs_per_experience = global_hparams["epochs_per_experience"]
 
-        Pipeline stages (STAGE_GUIDE 참조):
-          Stage 1 — DriftDetector : 이전 메모리 버퍼 대비 분포 변화 감지
-          Stage 2 — SampleSelector: label_budget 내 최적 샘플 인덱스 선택
-          Stage 3 — MemoryManager : 선택 샘플을 replay 버퍼에 추가
-          Stage 4 — [내부]        : 버퍼에서 replay mini-batch 샘플링
-          Stage 5 — AntiForgetting: new_batch + replay_batch로 손실 계산 및 역전파
-          Hook    — on_task_end() : 교사 모델 스냅샷 등 태스크 종료 처리
+        self._normal_reference_raw: Optional[torch.Tensor] = None
+        self._round = 0
+
+    def set_normal_reference(self, normal_data: torch.Tensor) -> None:
+        """12.6절 — experience 0의 train split에서 뽑은 정상(label=0) 참조
+        데이터(고정 크기, 실험 내내 불변). dataset_loader가 준비해 1회 주입한다."""
+        self._normal_reference_raw = normal_data
+
+    @staticmethod
+    def _label_budget_int(n: int, labeling_budget: Dict[str, Any]) -> int:
+        if labeling_budget["mode"] == "fixed_count":
+            return int(labeling_budget["value"])
+        return round(labeling_budget["value"] * n)
+
+    def run_experience(self, exp_idx: int,
+                        train_data: torch.Tensor, train_labels: torch.Tensor,
+                        all_test_splits: List[Tuple[torch.Tensor, torch.Tensor]],
+                        labeling_budget: Dict[str, Any]) -> Dict[str, Any]:
+        """experience exp_idx에 대해 13절 8단계를 순서대로 수행한다.
 
         Args:
-            new_data: Incoming data batch. Shape (N, D).
-            new_labels: Corresponding labels. Shape (N,).
+            exp_idx: 현재 experience 인덱스 (0-based).
+            train_data, train_labels: experience exp_idx의 train split (X_i, y_i).
+            all_test_splits: experience 0..T-1 전부의 (test_X, test_y) 리스트
+                              (길이 T, 데이터 로딩 시 고정된 그대로 — 9.2절).
+            labeling_budget: {'mode': 'fixed_count'|'fixed_ratio', 'value': ...}
 
         Returns:
-            Dict with keys 'loss', 'drift', 'drift_score', 'round'.
+            {'round', 'drift_detected', 'drift_score', 'avg_train_loss',
+             'threshold', 'eval_scores' (T개 Tensor), 'eval_labels' (T개 Tensor)}
         """
-        new_data = new_data.to(self.device)
-        new_labels = new_labels.to(self.device)
         self._round += 1
+        new_data = train_data.to(self.device)
+        new_labels = train_labels.to(self.device)
 
-        # 1. Drift detection
+        # ---- Step 2: Drift 감지 (buf_ref = 이전 experience까지의 버퍼) ----
         buf_data, _ = self.memory_manager.get_buffer()
-        buf_ref = buf_data.to(self.device) if buf_data is not None else None
-        drift_score = self.drift_detector.get_drift_score(new_data, buf_ref)
-        drift_detected = self.drift_detector.detect(new_data, buf_ref)
+        if self.drift_detector.uses_shared_representation:
+            self.model.eval()
+            with torch.no_grad():
+                _, _, new_logit = self.model(new_data)
+                buf_logit = None
+                if buf_data is not None:
+                    _, _, buf_logit = self.model(buf_data.to(self.device))
+            drift_score = self.drift_detector.get_drift_score(new_logit, buf_logit)
+            drift_detected = self.drift_detector.detect(new_logit, buf_logit)
+        else:
+            buf_raw = buf_data.to(self.device) if buf_data is not None else None
+            drift_score = self.drift_detector.get_drift_score(new_data, buf_raw)
+            drift_detected = self.drift_detector.detect(new_data, buf_raw)
 
-        # 2. Sample selection
+        # ---- Step 3: 샘플 선택과 라벨 예산 확정 ----
+        label_budget_int = self._label_budget_int(len(new_data), labeling_budget)
         sel_idx = self.sample_selector.select(
-            new_data, new_labels, self.label_budget, drift_score)
-        if not sel_idx:
-            sel_idx = list(range(min(self.label_budget, len(new_data))))
-        sel_data = new_data[sel_idx]
-        sel_labels = new_labels[sel_idx]
+            new_data, new_labels, label_budget_int, drift_score)
+        if len(sel_idx) == 0:
+            sel_idx = list(range(min(label_budget_int, len(new_data))))
+        selected_data = new_data[sel_idx]
+        selected_labels = new_labels[sel_idx]
 
-        # 3. Memory update
-        self.memory_manager.update(sel_data, sel_labels, drift_detected)
+        if self.drift_detector.uses_shared_representation:
+            self.model.eval()
+            with torch.no_grad():
+                _, _, sel_logit = self.model(selected_data)
+            self.drift_detector.fit(sel_logit, selected_labels)
+        else:
+            self.drift_detector.fit(selected_data, selected_labels)
 
-        # 3b. Refit stateful drift detectors (e.g. CADE) on current task data
-        #     so next round compares against this task's distribution.
-        if hasattr(self.drift_detector, 'fit'):
-            self.drift_detector.fit(new_data.cpu(), new_labels.cpu())
+        # CND-IDS 전용 훅 — CND_IDS.py:fit() 진입부와 동일하게, 미니배치 학습이
+        # 시작되기 전 experience(라운드)당 한 번만 clustering을 수행한다
+        # (components/cndids/cndids_anti_forgetting.py 참고).
+        if hasattr(self.anti_forgetting, "on_experience_start"):
+            self.anti_forgetting.on_experience_start(
+                selected_data, self._normal_reference_raw.to(self.device))
 
-        # 4-5. Mini-batch training over ALL new_data for n_epochs
+        # ---- Step 4: 모델 학습 (selected_data만, replay_batch는 "이전" 버퍼) ----
         self.model.train()
-        N = len(new_data)
         total_loss = 0.0
         n_steps = 0
-
-        for _ in range(self.n_epochs):
-            perm = torch.randperm(N, device=self.device)
-            shuffled_data = new_data[perm]
-            shuffled_labels = new_labels[perm]
-
-            for start in range(0, N, self.batch_size):
-                end = min(start + self.batch_size, N)
+        n_sel = len(selected_data)
+        for _ in range(self.epochs_per_experience):
+            perm = torch.randperm(n_sel, device=self.device)
+            shuffled_data = selected_data[perm]
+            shuffled_labels = selected_labels[perm]
+            for start in range(0, n_sel, self.batch_size):
+                end = min(start + self.batch_size, n_sel)
                 batch_data = shuffled_data[start:end]
                 batch_labels = shuffled_labels[start:end]
 
                 replay_batch = None
-                if self.memory_manager.size() > 0:
-                    r_data, r_labels = self.memory_manager.get_replay_batch(
-                        self.batch_size)
-                    if r_data is not None:
-                        replay_batch = (r_data.to(self.device),
-                                        r_labels.to(self.device))
+                r_data, r_labels = self.memory_manager.get_replay_batch(self.batch_size)
+                if r_data is not None:
+                    replay_batch = (r_data.to(self.device), r_labels.to(self.device))
 
                 self.optimizer.zero_grad()
                 loss = self.anti_forgetting.compute_loss(
                     self.model, (batch_data, batch_labels), replay_batch)
                 loss.backward()
-
-                if hasattr(self.anti_forgetting, 'project_gradients'):
-                    self.anti_forgetting.project_gradients(self.model)
-
+                self.anti_forgetting.project_gradients(self.model)
                 self.optimizer.step()
-                total_loss += loss.item()
+
+                total_loss += float(loss.item())
                 n_steps += 1
 
-        # 6. Task-end hook (once per update call, not per batch)
+        # ---- Step 5: 메모리 갱신 (학습 이후) ----
+        self.memory_manager.update(selected_data, selected_labels, drift_detected)
+
+        # ---- Step 6: Anomaly Scorer 재보정 ----
+        self.model.eval()
+        with torch.no_grad():
+            current_normal_encoded, _, _ = self.model(
+                self._normal_reference_raw.to(self.device))
+        current_normal_encoded = current_normal_encoded.detach()
+        self.anomaly_scorer.refit_on_update(current_normal_encoded)
+        s_ref = self.anomaly_scorer.score(current_normal_encoded).detach()
+
+        # ---- Step 7: 평가 (experience 0..T-1 전부) ----
+        eval_scores: List[torch.Tensor] = []
+        eval_labels: List[torch.Tensor] = []
+        self.model.eval()
+        with torch.no_grad():
+            for test_x, test_y in all_test_splits:
+                z, _, _ = self.model(test_x.to(self.device))
+                scores = self.anomaly_scorer.score(z.detach())
+                eval_scores.append(scores.cpu())
+                eval_labels.append(test_y.cpu())
+
+        if self.track == "A":
+            threshold = self.anomaly_scorer.compute_threshold(s_ref, None)
+        else:
+            all_scores = torch.cat(eval_scores)
+            all_labels = torch.cat(eval_labels)
+            threshold = self.anomaly_scorer.compute_threshold(all_scores, all_labels)
+
+        # ---- Step 8: 다음 라운드 준비 ----
         self.anti_forgetting.on_task_end(self.model)
+        # SPIDERMemoryManager 전용 훅 — 표준 계약(모델 접근 없음) 밖에서
+        # "직전 태스크까지 학습된 모델" 스냅샷이 필요한 유일한 memory_manager
+        # (components/spider_gpm/spider_memory_manager.py 참고).
+        if hasattr(self.memory_manager, "set_snapshot_model"):
+            self.memory_manager.set_snapshot_model(self.model)
 
         return {
-            'loss': total_loss / max(n_steps, 1),
-            'drift': drift_detected,
-            'drift_score': drift_score,
-            'round': self._round,
+            "round": self._round,
+            "exp_idx": exp_idx,
+            "drift_detected": bool(drift_detected),
+            "drift_score": float(drift_score),
+            "avg_train_loss": total_loss / max(n_steps, 1),
+            "threshold": float(threshold),
+            "eval_scores": eval_scores,
+            "eval_labels": eval_labels,
+            # 15절 스모크 테스트 정량 게이트 검증용 진단 필드
+            "n_selected": n_sel,
+            "label_budget_int": label_budget_int,
+            "n_optimizer_steps": n_steps,
         }
-
-    # ------------------------------------------------------------------
-    def fit_anomaly_scorer(self, normal_data: torch.Tensor) -> None:
-        """Fit the anomaly scorer on normal (inlier) data and set threshold.
-
-        Trains the scorer on normal samples, then sets the decision threshold
-        to the 95th percentile of normal scores. This ensures the threshold is
-        data-adaptive rather than a fixed constant (which would cause F1=0 for
-        reconstruction-error scorers like PCA and DeepSVDD).
-
-        Args:
-            normal_data: Normal samples. Shape (N, D).
-        """
-        normal_data = normal_data.to(self.device)
-        self.model.eval()
-        with torch.no_grad():
-            out = self.model(normal_data)
-            encoded = out[0] if isinstance(out, (tuple, list)) else out
-        encoded_cpu = encoded.cpu()
-        self.anomaly_scorer.fit(encoded_cpu)
-        # 정상 데이터 점수의 95th percentile을 임계값으로 자동 설정 (B1 버그 수정)
-        # 고정값 0.5는 PCA/DeepSVDD 등 재구성 오차 기반 scorer에서 F1=0을 유발했음
-        with torch.no_grad():
-            val_scores = self.anomaly_scorer.score(encoded_cpu)
-        if len(val_scores) > 0:
-            self._anomaly_threshold = float(
-                torch.quantile(val_scores.float(), 0.95).item()
-            )
-
-    # ------------------------------------------------------------------
-    def infer(self, data: torch.Tensor) -> Dict[str, torch.Tensor]:
-        """Score and classify a batch of samples.
-
-        Args:
-            data: Input samples. Shape (N, D).
-
-        Returns:
-            Dict with 'scores' (float, shape N) and 'predictions' (long, shape N).
-        """
-        data = data.to(self.device)
-        self.model.eval()
-        with torch.no_grad():
-            out = self.model(data)
-            encoded = out[0] if isinstance(out, (tuple, list)) else out
-        encoded = encoded.cpu()
-        scores = self.anomaly_scorer.score(encoded)
-        preds = self.anomaly_scorer.predict(encoded, self._anomaly_threshold)
-        return {'scores': scores, 'predictions': preds}
-
-    # ------------------------------------------------------------------
-    def get_model_state(self) -> Dict[str, torch.Tensor]:
-        """Return model state dict for FL aggregation.
-
-        Returns:
-            state_dict compatible with nn.Module.load_state_dict().
-        """
-        return {k: v.cpu() for k, v in self.model.state_dict().items()}
-
-    def load_model_state(self, state_dict: Dict[str, torch.Tensor]) -> None:
-        """Load a global model received from the FL server.
-
-        Args:
-            state_dict: Model weights dict from the server.
-        """
-        self.model.load_state_dict(
-            {k: v.to(self.device) for k, v in state_dict.items()})
-
-    def set_anomaly_threshold(self, threshold: float) -> None:
-        """Update the decision threshold for anomaly classification.
-
-        Args:
-            threshold: New threshold value.
-        """
-        self._anomaly_threshold = threshold

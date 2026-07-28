@@ -1,0 +1,32 @@
+# CADE 원 논문 근거 (CADE/cade/utils.py, CADE/cade/detect.py, CADE/cade/autoencoder.py)
+# 서브에이전트 조사로 파일:라인까지 대조 완료 (testbed/docs/metric_justification.md 참고)
+
+# --- CADEMADScorer (anomaly_scorer='cade_mad') ---
+t_mad: 3.5
+# CADE detect.py:97-104, utils.py:77-78 "mad_threshold" 기본값.
+# threshold = median(s_ref) + t_mad * MAD(s_ref) (PRD 3.4/3.5절)
+
+# --- CADEDriftDetector 내부 사설 encoder(contrastive AE) 학습 하이퍼파라미터 ---
+# PRD 10.2절이 요구하는 필수 필드는 t_mad뿐이지만, 사설 encoder 학습에 쓰이는
+# 값도 원문과 동일하게 맞춰 재현 충실도를 높인다.
+contrastive_margin: 10.0
+# CADE cade/utils.py:72-73 "-m"/margin 기본값. contrastive loss:
+# L_con = is_same*dist + (1-is_same)*relu(margin-dist)  (autoencoder.py:224-226)
+
+contrastive_lambda: 0.1
+# CADE cade/utils.py:68-69 "--cae-lambda-1" 기본값.
+# total_loss = contrastive_lambda * L_con + L_AE(MSE)  (autoencoder.py:232)
+
+encoder_epochs: 5
+# CADE 원본(cade/utils.py:66-67)의 기본값은 epochs=250이다. 하지만 원본은
+# encoder를 "한 번 학습해서 고정"해 놓고 쓰는 one-shot 설계인 반면, 이
+# 테스트베드의 CADEDriftDetector.fit()은 CLClient 13절 step 3d에 따라 매
+# experience(5회)마다 다시 호출되는 continual 재학습 구조다. 원본 그대로
+# 250 epoch을 매 experience마다 반복하면 5 experience 기준 1250 epoch로
+# 과도하고, 매번 새로 선택된 작은 라벨 예산 서브셋(전체의 ~10%)에 반복
+# 과적합할 위험도 있다. 따라서 매 라운드 재학습이라는 구조 차이를 반영해
+# 5로 낮췄다 — 이는 "속도를 위한 임의 축소"가 아니라 one-shot vs continual
+# 재학습이라는 설계 차이에 따른 의도적 조정이다.
+
+encoder_lr: 0.001
+# CADE cade/main.py:193, utils.py:64-65 기본값과 동일(Adam, lr=0.001).

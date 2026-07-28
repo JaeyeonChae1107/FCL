@@ -1,226 +1,97 @@
-"""Component registry — maps string keys to component classes.
+"""Component registry — 문자열 키를 컴포넌트 클래스에 매핑한다 (PRD 4절 표 그대로).
 
 Paper → component mapping (슬롯 순서: drift / sample / memory / anti / anomaly):
-  CND-IDS : ddm  / random / cndids / cndids  / pca
-  SSF     : ssf  / ssf    / ssf    / lwf_ssf / pca
-  CADE    : cade / random / none   / none    / cade_mad
-  SPIDER  : none / random / fifo   / gpm     / pca
+  SSF     : ssf    / ssf    / ssf 또는 spider / lwf_ssf 또는 none / cade_mad 또는 none
+  CADE    : cade   / random / none   / none    / cade_mad
+  SPIDER  : none   / random / spider / gpm     / cade_mad 또는 none
+  CND-IDS : none   / random / cndids 또는 spider / cndids  / pca
 
-그리드: 4 × 2 × 4 × 4 × 2 = 256 조합 / 데이터셋
+memory_manager='spider'는 SPIDER 원 논문의 "유한 버퍼 메모리(M)" 메커니즘이다
+(components/spider_gpm/spider_memory_manager.py 참고, 사용자가 원 논문을
+직접 확인해 제공한 근거). Track A/B 양쪽에서 쓸 수 있다(사용자 지시).
+기존 memory_manager='fifo'(특정 논문 근거 없는 공통 baseline)는 이 SPIDER
+메커니즘으로 대체되어 삭제했다.
+
+anomaly_scorer는 Track B에서 pca만 남겼다 — lof/dif는 CND-IDS 원 논문이
+"자체 제안한 방법"이 아니라 "비교를 위해 인용한 제3자(다른 논문) baseline"
+이라(부록A: "CND-IDS 비교 baseline"), PRD 0절의 "네 논문이 실제로 제안한
+메커니즘만 재조합한다" 원칙에 비춰볼 때 포함 근거가 약했다(사용자 지시).
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
+import inspect
+from typing import Any, Dict
 
-from typing import Optional, Tuple, List
-import numpy as np
-import torch
-import torch.nn.functional as F
+from testbed.components.cade import CADEDriftDetector, CADEMADScorer
+from testbed.components.cndids import CNDIDSAntiForgetting, CNDIDSMemoryManager
+from testbed.components.novelty_baselines import PCAScorer
+from testbed.components.spider_gpm import GPMAntiForgetting, SPIDERMemoryManager
+from testbed.components.ssf import (
+    SSFDriftDetector,
+    SSFSampleSelector,
+    SSFMemoryManager,
+    SSFAntiForgetting,
+)
+from testbed.pipeline.common_baselines import (
+    NoDriftDetector,
+    RandomSelector,
+    NoMemoryManager,
+    NoAntiForgetting,
+    NoAnomalyScorer,
+)
 
-from testbed.base import (BaseDriftDetector, BaseSampleSelector,
-                           BaseMemoryManager, BaseAntiForgetting,
-                           BaseAnomalyScorer)
-
-# ── Component imports ──────────────────────────────────────────────────────
-from testbed.components.ssf import (SSFDriftDetector, SSFSampleSelector,
-                                     SSFMemoryManager, SSFAntiForgetting)
-from testbed.components.cade import CADEDriftDetector, CADEAnomalyScorer
-from testbed.components.cndids import (CNDIDSAntiForgetting, PCAAnomalyScorer,
-                                        DDMDriftDetector, CNDIDSMemoryManager)
-from testbed.components.gpm import GPMAntiForgetting
-
-
-# ── Fallback / paper-agnostic classes ─────────────────────────────────────
-
-class NoDriftDetector(BaseDriftDetector):
-    """No drift detection (pass-through)."""
-
-    def detect(self, new_data, memory_buffer=None) -> bool:
-        return False
-
-    def get_drift_score(self, new_data, memory_buffer=None) -> float:
-        return 0.0
-
-
-class AllSampleSelector(BaseSampleSelector):
-    """Selects the first label_budget samples without any active-learning filter.
-
-    Represents the CND-IDS 'use all available samples' strategy — no sample
-    selection overhead.
-    """
-
-    def select(self, new_data: torch.Tensor,
-               new_labels: torch.Tensor,
-               label_budget: int,
-               drift_score: float = 0.0) -> List[int]:
-        n = min(label_budget, len(new_data))
-        return list(range(n))
-
-
-class RandomSelector(BaseSampleSelector):
-    """Selects label_budget samples uniformly at random."""
-
-    def select(self, new_data: torch.Tensor,
-               new_labels: torch.Tensor,
-               label_budget: int,
-               drift_score: float = 0.0) -> List[int]:
-        n = len(new_data)
-        k = min(label_budget, n)
-        return list(np.random.choice(n, k, replace=False))
-
-
-class NoMemoryManager(BaseMemoryManager):
-    """No-op memory manager (CND-IDS does not use a replay buffer)."""
-
-    def update(self, selected_data, selected_labels, drift_detected=False):
-        pass
-
-    def get_replay_batch(self, batch_size) -> Tuple[None, None]:
-        return None, None
-
-    def get_buffer(self) -> Tuple[None, None]:
-        return None, None
-
-    def size(self) -> int:
-        return 0
-
-
-class FIFOMemoryManager(BaseMemoryManager):
-    """FIFO ring buffer — evicts oldest samples on overflow.
-
-    Used for SPIDER's unlabeled privacy-preserving replay buffer.
-    """
-
-    def __init__(self, max_size: int = 1000):
-        self.max_size = max_size
-        self._buf_data: Optional[torch.Tensor] = None
-        self._buf_labels: Optional[torch.Tensor] = None
-
-    def update(self, selected_data: torch.Tensor,
-               selected_labels: torch.Tensor,
-               drift_detected: bool = False) -> None:
-        if self._buf_data is None:
-            self._buf_data = selected_data.clone()
-            self._buf_labels = selected_labels.clone()
-        else:
-            self._buf_data = torch.cat([self._buf_data, selected_data], dim=0)
-            self._buf_labels = torch.cat([self._buf_labels, selected_labels], dim=0)
-
-        if len(self._buf_data) > self.max_size:
-            excess = len(self._buf_data) - self.max_size
-            self._buf_data = self._buf_data[excess:]
-            self._buf_labels = self._buf_labels[excess:]
-
-    def get_replay_batch(self, batch_size: int) -> Tuple[Optional[torch.Tensor],
-                                                          Optional[torch.Tensor]]:
-        if self._buf_data is None:
-            return None, None
-        n = min(batch_size, len(self._buf_data))
-        idx = torch.randperm(len(self._buf_data))[:n]
-        return self._buf_data[idx], self._buf_labels[idx]
-
-    def get_buffer(self) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
-        return self._buf_data, self._buf_labels
-
-    def size(self) -> int:
-        return 0 if self._buf_data is None else len(self._buf_data)
-
-
-class ReplayOnlyLoss(BaseAntiForgetting):
-    """Replay MSE loss only; no explicit forgetting penalty.
-
-    'none' anti-forgetting baseline: uses reconstruction loss on
-    new batch + replay batch. Gradient flows only through the decoder.
-    """
-
-    def compute_loss(self,
-                     model,
-                     new_batch: Tuple[torch.Tensor, torch.Tensor],
-                     replay_batch: Optional[Tuple[torch.Tensor, torch.Tensor]],
-                     old_model=None) -> torch.Tensor:
-        data, labels = new_batch
-        device = data.device
-        model = model.to(device)
-
-        out = model(data)
-        recon = out[1] if isinstance(out, (tuple, list)) else out
-        if recon.shape == data.shape:
-            loss = F.mse_loss(recon, data)
-        else:
-            loss = recon.pow(2).mean()
-
-        if replay_batch is not None and replay_batch[0] is not None:
-            r_data = replay_batch[0].to(device)
-            r_out = model(r_data)
-            r_recon = r_out[1] if isinstance(r_out, (tuple, list)) else r_out
-            if r_recon.shape == r_data.shape:
-                loss = loss + F.mse_loss(r_recon, r_data)
-            else:
-                loss = loss + r_recon.pow(2).mean()
-
-        return loss
-
-
-# ── Registry ───────────────────────────────────────────────────────────────
-
-REGISTRY = {
+REGISTRY: Dict[str, Dict[str, Any]] = {
     "drift_detector": {
-        "none": NoDriftDetector,       # CADE·SPIDER — 드리프트 감지 없음
-        "ssf":  SSFDriftDetector,      # SSF — KS 검정
-        "cade": CADEDriftDetector,     # CADE — MAD 거리
-        "ddm":  DDMDriftDetector,      # CND-IDS — z-스코어 3상태 감지
+        "none": NoDriftDetector,
+        "ssf": SSFDriftDetector,
+        "cade": CADEDriftDetector,
     },
     "sample_selector": {
-        "random": RandomSelector,      # CADE·SPIDER·CND-IDS — 무작위 선택
-        "ssf":    SSFSampleSelector,   # SSF — KL-div 마스크 최적화
+        "random": RandomSelector,
+        "ssf": SSFSampleSelector,
     },
     "memory_manager": {
-        "none":   NoMemoryManager,     # CADE — 버퍼 없음
-        "fifo":   FIFOMemoryManager,   # SPIDER — 링 버퍼
-        "ssf":    SSFMemoryManager,    # SSF — 표류 시 공격적 교체
-        "cndids": CNDIDSMemoryManager, # CND-IDS — 클래스 균형 버퍼
+        "none": NoMemoryManager,
+        "spider": SPIDERMemoryManager,
+        "ssf": SSFMemoryManager,
+        "cndids": CNDIDSMemoryManager,
     },
     "anti_forgetting": {
-        "none":    ReplayOnlyLoss,      # CADE — 재구성 손실만
-        "lwf_ssf": SSFAntiForgetting,   # SSF — InfoNCE + LwF
-        "cndids":  CNDIDSAntiForgetting,# CND-IDS — L_CS + L_R + L_CL
-        "gpm":     GPMAntiForgetting,   # SPIDER — 그래디언트 정사영
+        "none": NoAntiForgetting,
+        "lwf_ssf": SSFAntiForgetting,
+        "gpm": GPMAntiForgetting,
+        "cndids": CNDIDSAntiForgetting,
     },
     "anomaly_scorer": {
-        "pca":      PCAAnomalyScorer,  # CND-IDS·SSF·SPIDER — 재구성 오차
-        "cade_mad": CADEAnomalyScorer, # CADE·SSF — MAD 정규화 거리
+        "cade_mad": CADEMADScorer,
+        "none": NoAnomalyScorer,
+        "pca": PCAScorer,
     },
 }
 
 
 def build(slot: str, name: str, **kwargs):
-    """Instantiate a component from the registry.
+    """레지스트리에서 컴포넌트를 생성한다.
 
     Args:
-        slot: Component slot name (e.g. 'drift_detector').
-        name: Component key within that slot (e.g. 'ssf').
-        **kwargs: Constructor keyword arguments forwarded to the class.
+        slot: 슬롯 이름 (예: 'drift_detector').
+        name: 슬롯 내 컴포넌트 키 (예: 'ssf').
+        **kwargs: 생성자에 전달할 키워드 인자(불필요한 키는 생성자 시그니처에
+                  맞춰 자동으로 걸러진다).
 
     Returns:
-        Instantiated component object.
+        생성된 컴포넌트 인스턴스.
 
     Raises:
-        KeyError: If slot or name is not registered.
+        KeyError: slot 또는 name이 등록되어 있지 않은 경우.
     """
     if slot not in REGISTRY:
         raise KeyError(f"Unknown slot: {slot!r}. Available: {list(REGISTRY)}")
     slot_map = REGISTRY[slot]
     if name not in slot_map:
         raise KeyError(
-            f"Unknown component {name!r} in slot {slot!r}. "
-            f"Available: {list(slot_map)}"
-        )
+            f"Unknown component {name!r} in slot {slot!r}. Available: {list(slot_map)}")
     cls = slot_map[name]
-    try:
-        return cls(**kwargs)
-    except TypeError:
-        import inspect
-        sig = inspect.signature(cls.__init__)
-        valid = set(sig.parameters) - {'self'}
-        filtered = {k: v for k, v in kwargs.items() if k in valid}
-        return cls(**filtered)
+    sig = inspect.signature(cls.__init__)
+    valid_params = set(sig.parameters) - {"self"}
+    filtered = {k: v for k, v in kwargs.items() if k in valid_params}
+    return cls(**filtered)

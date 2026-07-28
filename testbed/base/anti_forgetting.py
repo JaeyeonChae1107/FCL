@@ -1,60 +1,29 @@
+"""BaseAntiForgetting — PRD 12.5절."""
+
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
+
 import torch
+
+from testbed.base.models import BaseCLModel
 
 
 class BaseAntiForgetting(ABC):
-    """파이프라인 Stage 5 — Catastrophic Forgetting 방지 전략 추상 기반 클래스.
-
-    new_batch(현재 태스크)와 replay_batch(메모리 버퍼)를 결합하여 이전 태스크 망각을
-    방지하는 스칼라 손실을 계산한다.
-
-    학습 순서 (CLClient.update() 내):
-      1. compute_loss(model, new_batch, replay_batch) → loss
-      2. loss.backward()
-      3. [선택] project_gradients(model)  ← GPM 전용, hasattr 체크 후 호출
-      4. optimizer.step()
-      5. on_task_end(model)  ← 교사 모델 스냅샷, 메모리 업데이트 등
-
-    replay_batch=None 처리:
-    - SSFAntiForgetting: LwF 생략, InfoNCE만 계산 (drift 모드로 간주)
-    - CNDIDSAntiForgetting / CFEExtractor / GPMAntiForgetting: 미사용 (LwF 방식)
-
-    등록 키: 'none' | 'lwf_ssf' | 'cfe' | 'cndids' | 'gpm'
-    """
+    backbone_type: str  # 'classifier' | 'autoencoder'
 
     @abstractmethod
-    def compute_loss(self,
-                     model: torch.nn.Module,
-                     new_batch: Tuple[torch.Tensor, torch.Tensor],
-                     replay_batch: Optional[Tuple[torch.Tensor, torch.Tensor]],
-                     old_model: Optional[torch.nn.Module] = None) -> torch.Tensor:
-        """Compute the total training loss for one step.
+    def compute_loss(self, model: BaseCLModel,
+                      new_batch: Tuple[torch.Tensor, torch.Tensor],
+                      replay_batch: Optional[Tuple[torch.Tensor, torch.Tensor]]
+                      ) -> torch.Tensor:
+        """new_batch는 (selected_data, selected_labels)다 — experience 전체의
+        (X_i, y_i)가 아니라 CLClient step 3에서 sample_selector가 고른, 라벨이
+        "공개된" 서브셋만 들어온다. replay_batch는 None일 수 있다(experience 0,
+        또는 메모리가 비어있는 경우)."""
 
-        Args:
-            model: The current (student) model being trained.
-            new_batch: Tuple (data, labels) for the current new mini-batch.
-            replay_batch: Tuple (data, labels) sampled from the replay buffer,
-                          or None if the buffer is empty.
-            old_model: Frozen teacher model snapshot, or None.
+    def on_task_end(self, model: BaseCLModel) -> None:
+        pass
 
-        Returns:
-            Scalar loss tensor with requires_grad=True.
-
-        Raises:
-            ValueError: If new_batch contains tensors of mismatched shapes.
-        """
-
-    def on_task_end(self, model: torch.nn.Module) -> None:
-        """Hook called after each task / round ends.
-
-        Override to implement teacher-model updates, gradient projection
-        memory updates, etc.
-
-        Args:
-            model: The current model after the task.
-
-        Returns:
-            None
-        """
+    def project_gradients(self, model: BaseCLModel) -> None:
+        """GPM 전용. 그 외 컴포넌트는 기본 no-op."""
         pass

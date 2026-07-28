@@ -1,10 +1,25 @@
-torch>=2.0.0
-numpy>=1.24.0
-scikit-learn>=1.3.0
-scipy>=1.11.0
-pandas>=2.0.0
-pyyaml>=6.0
-matplotlib>=3.7.0
-seaborn>=0.12.0
-pytest>=7.4.0
-tqdm>=4.65.0
+# CL-NIDS-Bench v2.5 의존성.
+#
+# torch — 이 개발 환경에는 CUDA GPU가 없어(Intel Iris Xe 내장 그래픽뿐,
+# NVIDIA/AMD 미탑재) CPU 전용 빌드(torch==2.12.0+cpu)로 확인했다. 코드 자체는
+# device 인자를 이미 지원하므로(pipeline/cl_client.py, experiments/grid_runner.py,
+# experiments/smoke_test.py) CUDA GPU가 있는 환경으로 옮긴 뒤에는 아래처럼
+# CUDA 빌드를 설치하고 `--device cuda`만 넘기면 된다 — 코드 변경이 필요 없다.
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+# (cu121은 예시 — 대상 머신의 실제 CUDA 버전에 맞는 인덱스를 pytorch.org에서
+# 확인해 선택할 것.)
+torch==2.12.0
+
+numpy==1.26.4
+pandas==2.3.3
+scikit-learn==1.2.1
+scipy==1.15.3
+PyYAML==6.0.3
+kneed==0.8.6
+
+# CICIDS2018 자동 다운로드 전용(data/dataset_loader.py의
+# _download_cicids2018_from_s3). <repo_root>/CICIDS2018/*.csv를 직접
+# 채워두면 이 패키지 없이도 동작한다. 자동 다운로드는 공식 AWS Open Data
+# 버킷(s3://cse-cic-ids2018/)을 익명(unsigned) 요청으로 받아오므로 AWS
+# 계정/자격증명이 필요 없다 — 전체 약 6.9GB.
+boto3==1.43.57

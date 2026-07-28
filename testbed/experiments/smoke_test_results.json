@@ -1,0 +1,3334 @@
+[
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "B_dd=none_ss=random_mm=none_af=cndids_as=pca",
+    "combo": {
+      "anti_forgetting": "cndids",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "pca",
+      "track": "B"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "B_dd=none_ss=random_mm=spider_af=cndids_as=pca",
+    "combo": {
+      "anti_forgetting": "cndids",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "pca",
+      "track": "B"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "B_dd=none_ss=random_mm=cndids_af=cndids_as=pca",
+    "combo": {
+      "anti_forgetting": "cndids",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "cndids",
+      "anomaly_scorer": "pca",
+      "track": "B"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "nsl-kdd"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [
+      "exp1: 15.2 경고 - 다수 클래스 비율 0.9912 >= 0.99"
+    ],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=none_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=none_as=none",
+    "combo": {
+      "anti_forgetting": "none",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
+    "combo": {
+      "anti_forgetting": "lwf_ssf",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=random_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "none",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "ssf",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=random_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "random",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=none_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "none",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "spider",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "cade_mad",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=gpm_as=none",
+    "combo": {
+      "anti_forgetting": "gpm",
+      "drift_detector": "cade",
+      "sample_selector": "ssf",
+      "memory_manager": "ssf",
+      "anomaly_scorer": "none",
+      "track": "A"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "B_dd=none_ss=random_mm=none_af=cndids_as=pca",
+    "combo": {
+      "anti_forgetting": "cndids",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "none",
+      "anomaly_scorer": "pca",
+      "track": "B"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "B_dd=none_ss=random_mm=spider_af=cndids_as=pca",
+    "combo": {
+      "anti_forgetting": "cndids",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "spider",
+      "anomaly_scorer": "pca",
+      "track": "B"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  },
+  {
+    "combo_id": "B_dd=none_ss=random_mm=cndids_af=cndids_as=pca",
+    "combo": {
+      "anti_forgetting": "cndids",
+      "drift_detector": "none",
+      "sample_selector": "random",
+      "memory_manager": "cndids",
+      "anomaly_scorer": "pca",
+      "track": "B"
+    },
+    "passed": true,
+    "failures": [],
+    "warnings": [],
+    "dataset": "unsw-nb15"
+  }
+]

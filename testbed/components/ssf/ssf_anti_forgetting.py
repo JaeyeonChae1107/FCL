@@ -1,126 +1,55 @@
-"""SSF Anti-Forgetting — weighted BCE + LwF distillation.
+"""SSF AntiForgetting — LwF 스타일 distillation + task loss (PRD 4절/12.5절).
 
-FROM: Zhang et al. "SSF: Strategic Selection and Forgetting for Federated
-      Continual Learning" INFOCOM 2025.
-      ssf.py (line 262-334)
-
-Loss rules:
-  No drift  →  L_total = L_task + λ · L_reg
-  Drift     →  L_total = L_task   (fast adaptation; skip regularisation)
-
-  L_task : weighted binary cross-entropy on classifier logit
-           new samples receive new_sample_weight; replay gets weight 1.0
-  L_reg  : MSE(z_current, z_teacher)  LwF latent-space distillation
+SSF 원 논문 근거: ssf.py의 distillation은 MSE(현재 출력, teacher 출력)이며
+(reconstruction/classifier 출력에 직접 적용, 온도 스케일링 없음), 총 손실은
+task_loss + lwf_lambda * distillation_loss (ssf.py:45,292-334, 기본
+lwf_lambda=0.5). Teacher는 이전 태스크 종료 시점 모델 스냅샷이다
+(ssf.py:149,336, on_task_end에서 갱신).
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
-
+import copy
 from typing import Optional, Tuple
+
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from copy import deepcopy
+
 from testbed.base.anti_forgetting import BaseAntiForgetting
+from testbed.base.models import BaseCLModel
 
 
 class SSFAntiForgetting(BaseAntiForgetting):
-    """Weighted binary cross-entropy + optional LwF distillation.
+    backbone_type = "classifier"
 
-    FROM: SSF-Strategic-Selection-and-Forgetting/ssf.py (line 262-334)
-    """
-
-    def __init__(self, lwf_lambda: float = 0.5,
-                 new_sample_weight: float = 100.0):
-        """
-        Args:
-            lwf_lambda:        Weight of the LwF regularisation term (default 0.5).
-            new_sample_weight: Loss multiplier for newly selected samples
-                               (replay samples get weight 1.0). Default 100.0.
-        """
+    def __init__(self, lwf_lambda: float = 0.5):
         self.lwf_lambda = lwf_lambda
-        self.new_sample_weight = new_sample_weight
-        self.teacher: Optional[nn.Module] = None
+        self._teacher: Optional[BaseCLModel] = None
 
-    def compute_loss(self,
-                     model: nn.Module,
-                     new_batch: Tuple[torch.Tensor, torch.Tensor],
-                     replay_batch: Optional[Tuple[torch.Tensor, torch.Tensor]],
-                     old_model: Optional[nn.Module] = None) -> torch.Tensor:
-        """Weighted BCE + optional LwF.
-
-        FROM: ssf.py (line 262-334)
-
-        Args:
-            model: Current model. Expected forward: x → (z, x_hat, logit).
-            new_batch: (data, labels) — newly selected samples this round.
-            replay_batch: (mem_data, mem_labels) or None.
-                          None signals drift mode → skip regularisation.
-            old_model: Explicit teacher override (falls back to self.teacher).
-
-        Returns:
-            Scalar loss tensor.
-        """
+    def compute_loss(self, model: BaseCLModel,
+                      new_batch: Tuple[torch.Tensor, torch.Tensor],
+                      replay_batch: Optional[Tuple[torch.Tensor, torch.Tensor]]
+                      ) -> torch.Tensor:
         data, labels = new_batch
-        device = data.device
-        model = model.to(device)
+        _, _, logit = model(data)
+        loss = F.binary_cross_entropy_with_logits(logit.squeeze(-1), labels.float())
 
-        drift_mode = (replay_batch is None)
-
-        # Build combined batch (replay + new)
         if replay_batch is not None and replay_batch[0] is not None:
-            mem_data = replay_batch[0].to(device)
-            mem_labels = replay_batch[1].to(device)
-            inputs = torch.cat([mem_data, data], dim=0)
-            combined_labels = torch.cat([mem_labels, labels], dim=0)
-            n_mem = len(mem_data)
-        else:
-            inputs = data
-            combined_labels = labels
-            n_mem = 0
+            r_data, r_labels = replay_batch
+            _, _, r_logit = model(r_data)
+            loss = loss + F.binary_cross_entropy_with_logits(
+                r_logit.squeeze(-1), r_labels.float())
 
-        # Forward
-        out = model(inputs)
-        z = out[0] if isinstance(out, (tuple, list)) else out
-        # logit at position 2; fall back to a linear projection of z if absent
-        if isinstance(out, (tuple, list)) and len(out) >= 3:
-            logit = out[2].squeeze(-1)          # (N,)
-        else:
-            logit = z[:, 0]                     # fallback: first latent dim
+        # teacher가 없으면(experience 0) LwF 항을 생략한다 — replay_batch=None인
+        # 경우와 무관하게, teacher 존재 여부가 유일한 게이팅 조건이다.
+        if self._teacher is not None:
+            with torch.no_grad():
+                _, _, teacher_logit = self._teacher(data)
+            distill = F.mse_loss(logit, teacher_logit)
+            loss = loss + self.lwf_lambda * distill
 
-        # Weighted binary cross-entropy (FROM: ssf.py line 280-288)
-        # Only apply differential weighting when both replay and new samples exist.
-        # When n_mem=0 (no replay yet), all samples are "new" — use uniform weight 1.0
-        # to avoid 100× loss inflation in early rounds.
-        weights = torch.ones(len(inputs), device=device)
-        if 0 < n_mem < len(inputs):
-            weights[n_mem:] = self.new_sample_weight
+        return loss
 
-        l_task = F.binary_cross_entropy_with_logits(
-            logit, combined_labels.float(), weight=weights
-        )
-
-        if drift_mode or self.teacher is None:
-            # Drift mode: fast adaptation without distillation
-            # FROM: ssf.py line 262-291
-            return l_task
-
-        # No-drift mode: add LwF regularisation (FROM: ssf.py line 323-334)
-        teacher = (old_model or self.teacher).to(device)
-        teacher.eval()
-        with torch.no_grad():
-            t_out = teacher(inputs)
-            teacher_z = t_out[0] if isinstance(t_out, (tuple, list)) else t_out
-
-        l_reg = F.mse_loss(z, teacher_z.to(device))
-        return l_task + self.lwf_lambda * l_reg
-
-    def on_task_end(self, model: nn.Module) -> None:
-        """Update teacher with current student weights.
-
-        FROM: ssf.py line 336: teacher_model.load_state_dict(model.state_dict())
-        """
-        self.teacher = deepcopy(model)
-        self.teacher.eval()
-        for p in self.teacher.parameters():
+    def on_task_end(self, model: BaseCLModel) -> None:
+        self._teacher = copy.deepcopy(model)
+        self._teacher.eval()
+        for p in self._teacher.parameters():
             p.requires_grad_(False)

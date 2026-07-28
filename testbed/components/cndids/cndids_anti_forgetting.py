@@ -1,184 +1,191 @@
-"""CND-IDS Anti-Forgetting.
+"""CNDIDSAntiForgetting — 결합 손실 anti-forgetting (PRD 4절/12.5절).
 
-Loss = L_CS + λ_R · L_R + λ_CL · L_CL
+CND-IDS 원 논문 근거 (CND-IDS/FeatureExtractors/CND_IDS.py:161-166):
+  loss = metric_loss(L_CS) + reg_strength * reconstruction_loss(L_R)
+         + LwF_strength * lossLwF(L_CL)
+  기본 reg_strength=0.1(lambda_r), LwF_strength=0.1(lambda_cl) (CND_IDS.py:43,45).
+  metric_loss는 TripletMarginLoss(margin=2, semihard mining)를 pseudo-label
+  클러스터(0=정상, 1=신규) 간 거리에 적용한다(CND_IDS.py:76-78).
 
-FROM: Fuhrman et al. "CND-IDS: Continual Network Defence IDS" (DAC 2025)
-  L_CS : Cluster Separation Loss
-         K-Means (K=2) pseudo-labels on z → TripletMarginLoss
-         pushes normal / attack latent clusters apart
-  L_R  : Reconstruction loss  MSE(x_hat, x)
-  L_CL : Continual Learning loss  Σ_i MSE(z_current, old_model_i(x))
-         multi-teacher LwF on latent space
+**Pseudo-label 생성 방식 (수정됨 — 원본과 대조 후 재작성)**: 처음에는 z에
+대한 2-means로 근사했으나, CND-IDS 원본(`FeatureExtractors/CND_IDS.py:105-115`,
+실제 clusterer는 `FeatureExtractors/modules/K_Means.py`)을 다시 대조한 결과
+실제 메커니즘은 다음과 같음을 확인했다:
+  1. `cluster_labels = self.labeler.fit_transform(x)` — experience의 **원본
+     입력 x**(인코딩 전)에 elbow-선택 K-Means를 **한 번** 적용 (후보
+     K=[100,300,500,1000,2000], `modules/K_Means.py:18`).
+  2. `init_normal_labels = self.labeler.transform(init_normal)` — **알려진
+     정상 참조 데이터**(`datastream.init_normal`)가 속하는 클러스터 ID 집합을
+     구한다.
+  3. `y = [0 if i in init_normal_labels else 1 for i in cluster_labels]` —
+     그 클러스터 ID 집합에 속하면 정상(0), 아니면 신규/이상(1)으로 pseudo-label
+     을 부여한다. **공격 라벨은 전혀 쓰지 않는다** — 오직 "이 클러스터에 알려진
+     정상 참조 데이터가 있는가"만 본다.
+  (참고: 같은 폴더의 `AnomolyDetectors/K_Means.py`는 이름은 같지만 별개의
+  standalone anomaly-scorer 베이스라인이며, 그건 실제 라벨이 섞인 캘리브레이션
+  서브셋을 쓴다 — CND_IDS.py의 pseudo-labeling과는 무관하다. 처음에 이 둘을
+  혼동해 "CND-IDS가 공격 라벨을 쓴다"고 잘못 판단했었다.)
+
+이 구현은 위 메커니즘을 그대로 따르되, 두 가지를 이 테스트베드 스케일에 맞게
+조정했다:
+  - K 후보를 [100,300,500,1000,2000]에서 축소했다 — 원본은 label_budget 없이
+    experience 전체(수만 건)에 클러스터링하지만, 이 테스트베드는 PRD 9.2절에
+    따라 Track B도 label_budget(기본 10%)만큼 선택된 데이터(수천 건)에만
+    접근하므로, 그 스케일에 맞춰 후보를 줄였다. "여러 K를 elbow로 선택한다"는
+    메커니즘 자체는 동일하다.
+  - "알려진 정상 참조 데이터"로 이 테스트베드에 이미 있는
+    `_normal_reference_raw`(12.6절, experience 0의 정상 500개)를 그대로 쓴다 —
+    CND-IDS의 `datastream.init_normal`과 같은 역할이다.
+  - 클러스터링은 experience(라운드)당 한 번만 수행하고(`on_experience_start`),
+    이후 각 미니배치에서는 이미 학습된 K-Means로 predict만 한다 — 원본이
+    `fit()` 진입 시 한 번 클러스터링하고 그 결과를 epoch 전체에서 재사용하는
+    것과 동일한 절차다.
+
+`pytorch_metric_learning`은 이 환경에 없는 의존성을 새로 설치하는 위험을
+피하기 위해(이전 `deepod` 사고 참고, testbed/docs/metric_justification.md)
+TripletMarginLoss를 CADE의 contrastive pairing과 동일한 형태(배치를 반으로
+나눠 쌍을 구성, margin 기반)로 직접 구현했다 — 알고리즘의 본질(같은
+클러스터는 가깝게, 다른 클러스터는 margin 이상 멀게)은 동일하게 유지한다.
+
+**라벨-프리(label-free) 준수**: `new_batch`의 `selected_labels`는 손실 계산에
+전혀 쓰지 않는다(PRD 12.5절 명시 사항) — 위 확인대로 CND-IDS 원본도 pseudo-
+label 생성에 공격 라벨을 쓰지 않으므로 이 원칙과 실제로 상충하지 않는다.
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
+import copy
+from typing import List, Optional, Set, Tuple
 
-from typing import Optional, Tuple, List
-from copy import deepcopy
+import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+
 from testbed.base.anti_forgetting import BaseAntiForgetting
+from testbed.base.models import BaseCLModel
+
+# CND-IDS 원본(modules/K_Means.py:18)은 [100,300,500,1000,2000]. label_budget
+# 적용으로 데이터 스케일이 훨씬 작아졌으므로(9.2절) 비례해 축소했다.
+_CLUSTER_K_CANDIDATES = [5, 10, 20, 30, 50, 80]
+
+
+def _elbow_kmeans_fit(data_np: np.ndarray, candidates: List[int], seed: int = 42):
+    """CND-IDS modules/K_Means.py:fit()과 동일한 elbow 선택 절차.
+
+    원본(`KMeans(n_clusters=i, random_state=42)`)은 n_init을 명시하지 않아
+    설치된 sklearn(1.2.1)의 기본값인 n_init=10이 그대로 적용된다. 이 테스트베드는
+    원본과 달리 experience(라운드)마다 이 elbow 탐색을 반복하므로(원본은 한
+    학습 세션당 한 번), 후보 6개 × n_init=10 조합이 라운드마다 반복되면 비용이
+    크다(NSL-KDD 기준 조합당 최대 수십~수백 초). 그래서 **elbow 탐색 단계**(어떤
+    K가 좋은지 WCSS 추세만 보면 되는 단계)는 n_init=3으로 줄이고, **실제
+    pseudo-label에 쓰이는 최종 fit**만 원본과 동일하게 n_init=10(기본값)을
+    유지한다 — 클러스터 배정 품질에 영향을 주는 부분은 원본 그대로 두고,
+    탐색용 반복만 줄인 것이다.
+    """
+    from sklearn.cluster import KMeans
+    from kneed import KneeLocator
+
+    n = len(data_np)
+    valid = [k for k in candidates if k < n]
+    if not valid:
+        valid = [max(2, min(n, 2))]
+
+    wcss = []
+    for k in valid:
+        km = KMeans(n_clusters=k, random_state=seed, n_init=3)
+        km.fit(data_np)
+        wcss.append(km.inertia_)
+
+    optimal_k = valid[-1]
+    if len(valid) > 2:
+        kneedle = KneeLocator(valid, wcss, curve="convex", direction="decreasing")
+        if kneedle.elbow is not None:
+            optimal_k = kneedle.elbow
+
+    final_km = KMeans(n_clusters=optimal_k, random_state=seed)  # n_init 기본값(10) 유지
+    final_km.fit(data_np)
+    return final_km
+
+
+def _metric_loss(z: torch.Tensor, pseudo_labels: torch.Tensor, margin: float = 2.0) -> torch.Tensor:
+    n = z.shape[0]
+    half = n // 2
+    if half == 0:
+        return z.sum() * 0.0
+    left, right = z[:half], z[half:2 * half]
+    left_l, right_l = pseudo_labels[:half], pseudo_labels[half:2 * half]
+    dist = torch.norm(left - right, dim=1)
+    same = (left_l == right_l).float()
+    loss = same * dist + (1 - same) * F.relu(margin - dist)
+    return loss.mean()
 
 
 class CNDIDSAntiForgetting(BaseAntiForgetting):
-    """Full CND-IDS loss: L_CS + λ_R·L_R + λ_CL·L_CL.
-
-    FROM: Fuhrman et al. DAC 2025 — CND_IDS.py::CND_IDS.fit() (lines 100-195)
-    """
+    backbone_type = "autoencoder"
 
     def __init__(self, lambda_r: float = 0.1, lambda_cl: float = 0.1,
-                 triplet_margin: float = 1.0, kmeans_iters: int = 10):
-        """
-        Args:
-            lambda_r:       Reconstruction loss weight (default 0.1).
-            lambda_cl:      Continual learning (LwF) loss weight (default 0.1).
-            triplet_margin: Margin for TripletMarginLoss (default 1.0).
-            kmeans_iters:   K-Means iterations for pseudo-labelling (default 10).
-        """
+                 triplet_margin: float = 2.0):
         self.lambda_r = lambda_r
         self.lambda_cl = lambda_cl
-        self.triplet_margin = triplet_margin
-        self.kmeans_iters = kmeans_iters
-        self.old_models: List[nn.Module] = []
+        self.margin = triplet_margin
+        self._teacher: Optional[BaseCLModel] = None
+        self._kmeans = None
+        self._normal_cluster_ids: Set[int] = set()
+        # PRD 15.4절 — Track B pseudo-label 균형 확인(경고 전용)을 위해 마지막
+        # compute_loss 호출에서 생성된 pseudo-label의 다수 클래스 비율을 기록한다.
+        self.last_pseudo_label_ratio: Optional[float] = None
 
-    # ------------------------------------------------------------------ L_CS
-    def _cluster_separation_loss(self, z: torch.Tensor) -> torch.Tensor:
-        """K-Means pseudo-labels → TripletMarginLoss.
+    def on_experience_start(self, selected_data: torch.Tensor,
+                             normal_reference_raw: torch.Tensor) -> None:
+        """CND-IDS CND_IDS.py:fit() 진입부와 동일 — experience(라운드) 시작 시
+        원본 입력 공간에서 K-Means를 한 번 학습하고, 정상 참조 데이터가 속하는
+        클러스터 ID 집합을 구해둔다. CLClient가 학습 루프(step 4) 이전에
+        호출한다."""
+        data_np = selected_data.detach().cpu().numpy()
+        self._kmeans = _elbow_kmeans_fit(data_np, _CLUSTER_K_CANDIDATES)
 
-        FROM: CND_IDS.py::CND_IDS.metric_loss() (line 76-78)
-        Runs K=2 K-Means on z.detach() to obtain pseudo cluster assignments,
-        then computes TripletMarginLoss(anchor, positive, negative).
-        """
-        n = len(z)
-        if n < 4:
-            return torch.tensor(0.0, device=z.device)
+        ref_np = normal_reference_raw.detach().cpu().numpy()
+        ref_clusters = self._kmeans.predict(ref_np)
+        self._normal_cluster_ids = set(ref_clusters.tolist())
 
-        # K-Means with K=2 (no gradients through cluster assignment)
-        with torch.no_grad():
-            z_d = z.detach()
-            # Initialise centres from two random samples
-            perm = torch.randperm(n, device=z.device)
-            c0, c1 = z_d[perm[0]].clone(), z_d[perm[1]].clone()
+    def _pseudo_labels_for_batch(self, data: torch.Tensor) -> torch.Tensor:
+        if self._kmeans is None:
+            # on_experience_start이 호출되지 않은 경우(단위 테스트 등)의 안전
+            # 폴백 — 전부 "정상"으로 간주(원본의 "정상 참조와 다른 클러스터가
+            # 없으면 전부 정상" 극단 상황과 동일하게 처리).
+            return torch.zeros(len(data), dtype=torch.long, device=data.device)
+        cluster_ids = self._kmeans.predict(data.detach().cpu().numpy())
+        pseudo = [0 if c in self._normal_cluster_ids else 1 for c in cluster_ids]
+        return torch.tensor(pseudo, dtype=torch.long, device=data.device)
 
-            labels = torch.zeros(n, dtype=torch.long, device=z.device)
-            for _ in range(self.kmeans_iters):
-                d0 = torch.norm(z_d - c0, dim=1)
-                d1 = torch.norm(z_d - c1, dim=1)
-                labels = (d1 < d0).long()
-                mask0, mask1 = labels == 0, labels == 1
-                if mask0.any():
-                    c0 = z_d[mask0].mean(0)
-                if mask1.any():
-                    c1 = z_d[mask1].mean(0)
+    def compute_loss(self, model: BaseCLModel,
+                      new_batch: Tuple[torch.Tensor, torch.Tensor],
+                      replay_batch: Optional[Tuple[torch.Tensor, torch.Tensor]]
+                      ) -> torch.Tensor:
+        data, _labels = new_batch  # _labels는 의도적으로 미사용 (라벨-프리)
+        z, x_hat, _ = model(data)
+        recon_loss = F.mse_loss(x_hat, data)
 
-            # Assign smaller cluster = class 1 (attack), larger = class 0 (normal)
-            if mask0.sum() < mask1.sum():
-                labels = 1 - labels
-                mask0, mask1 = mask1, mask0
+        pseudo = self._pseudo_labels_for_batch(data)
+        ratio = pseudo.float().mean().item()
+        self.last_pseudo_label_ratio = max(ratio, 1.0 - ratio)
+        metric_loss = _metric_loss(z, pseudo, self.margin)
 
-            # Need both classes present to form triplets
-            if not (mask0.any() and mask1.any()):
-                return torch.tensor(0.0, device=z.device)
+        loss = metric_loss + self.lambda_r * recon_loss
 
-            # Build triplet indices
-            idx0 = mask0.nonzero(as_tuple=True)[0]
-            idx1 = mask1.nonzero(as_tuple=True)[0]
+        if replay_batch is not None and replay_batch[0] is not None:
+            r_data, _ = replay_batch
+            _, r_x_hat, _ = model(r_data)
+            loss = loss + self.lambda_r * F.mse_loss(r_x_hat, r_data)
 
-        # Sample min(n, max_triplets) triplets (cap to avoid OOM on large batches)
-        max_triplets = min(n, 64)
-        anchors, positives, negatives = [], [], []
-        for i in range(max_triplets):
-            label_i = labels[i % n].item()
-            same_idx = idx0 if label_i == 0 else idx1
-            diff_idx = idx1 if label_i == 0 else idx0
-            # Need at least one sample different from self in same cluster
-            same_excl = same_idx[same_idx != (i % n)]
-            if len(same_excl) == 0 or len(diff_idx) == 0:
-                continue
-            p = same_excl[torch.randint(len(same_excl), (1,), device=z.device).item()]
-            neg = diff_idx[torch.randint(len(diff_idx), (1,), device=z.device).item()]
-            anchors.append(z[i % n])
-            positives.append(z[p])
-            negatives.append(z[neg])
-
-        if not anchors:
-            return torch.tensor(0.0, device=z.device)
-
-        a = torch.stack(anchors)
-        p = torch.stack(positives)
-        n_t = torch.stack(negatives)
-        return F.triplet_margin_loss(a, p, n_t, margin=self.triplet_margin)
-
-    # ------------------------------------------------------------------ L_CL
-    def _lcl_loss(self, z: torch.Tensor, data: torch.Tensor) -> torch.Tensor:
-        """Multi-teacher LwF on latent space.
-
-        FROM: CND_IDS.py::CND_IDS.LwFloss() (line 54-69)
-        L_CL = Σ_i MSE(z_current, old_model_i(x))
-
-        Args:
-            z:    Pre-computed current latent (reuse from compute_loss forward pass).
-            data: Original input — passed to frozen old models for reference z.
-        """
-        if not self.old_models:
-            return torch.tensor(0.0, device=z.device)
-
-        total = torch.tensor(0.0, device=z.device)
-        for old_model in self.old_models:
-            old_model.eval()
+        if self._teacher is not None:
             with torch.no_grad():
-                o = old_model(data.cpu())
-                z_old = (o[0] if isinstance(o, (tuple, list)) else o).to(z.device)
-            total = total + F.mse_loss(z, z_old)
-        return total
+                teacher_z, _, _ = self._teacher(data)
+            lwf_loss = F.mse_loss(z, teacher_z)
+            loss = loss + self.lambda_cl * lwf_loss
 
-    # ------------------------------------------------------------------ API
-    def compute_loss(self,
-                     model: nn.Module,
-                     new_batch: Tuple[torch.Tensor, torch.Tensor],
-                     replay_batch: Optional[Tuple[torch.Tensor, torch.Tensor]],
-                     old_model: Optional[nn.Module] = None) -> torch.Tensor:
-        """L_total = L_CS + λ_R·L_R + λ_CL·L_CL.
+        return loss
 
-        FROM: CND_IDS.py::CND_IDS.fit() (line 156-165)
-        replay_batch is ignored — CND-IDS uses teacher distillation, not replay.
-        """
-        data, labels = new_batch
-        device = data.device
-        model = model.to(device)
-
-        out = model(data)
-        z = out[0] if isinstance(out, (tuple, list)) else out
-        x_hat = out[1] if isinstance(out, (tuple, list)) and len(out) > 1 else None
-
-        # L_R: reconstruction loss
-        l_r = (F.mse_loss(x_hat, data)
-               if x_hat is not None and x_hat.shape == data.shape
-               else torch.tensor(0.0, device=device))
-
-        # L_CS: cluster separation loss
-        l_cs = self._cluster_separation_loss(z)
-
-        # L_CL: multi-teacher LwF (reuse z from first forward — no second model call)
-        l_cl = self._lcl_loss(z, data)
-
-        total = l_cs + self.lambda_r * l_r + self.lambda_cl * l_cl
-
-        # Ensure gradient flows even when sub-losses are all zero
-        if not total.requires_grad:
-            total = total + 0.0 * z.sum()
-
-        return total
-
-    def on_task_end(self, model: nn.Module) -> None:
-        """Snapshot current model as a new frozen teacher.
-
-        FROM: CND_IDS.py::CND_IDS.fit() (line 195): old_models.append(deepclone(self))
-        """
-        frozen = deepcopy(model).cpu()
-        frozen.eval()
-        for p in frozen.parameters():
+    def on_task_end(self, model: BaseCLModel) -> None:
+        self._teacher = copy.deepcopy(model)
+        self._teacher.eval()
+        for p in self._teacher.parameters():
             p.requires_grad_(False)
-        self.old_models.append(frozen)

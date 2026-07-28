@@ -1,0 +1,21 @@
+# CND-IDS 원 논문 근거 (CND-IDS/FeatureExtractors/CND_IDS.py)
+# 서브에이전트 조사로 파일:라인까지 대조 완료 (testbed/docs/metric_justification.md 참고)
+
+lambda_r: 0.1
+# CND_IDS.py:43 "self.reg_strength" — reconstruction loss 가중치.
+# L_CND = L_CS(metric/triplet, 가중치 1 암묵) + lambda_r * L_R(recon MSE)
+#         + lambda_cl * L_CL(LwF/continual MSE)   (CND_IDS.py:161-166)
+
+lambda_cl: 0.1
+# CND_IDS.py:45 "self.LwF_strength" — 이 테스트베드의 PRD가 정의하는 "L_CL"
+# (연속학습/증류 손실) 가중치로 대응시켰다. CND-IDS 코드에서는 과거 태스크
+# encoder 출력과의 MSE(LwFloss, CND_IDS.py:54-69)로 구현되어 있다.
+
+triplet_margin: 2.0
+# CND_IDS.py:76-78 TripletMarginLoss(margin=2), semihard mining(TripletMarginMiner)
+# — 정상(0)/신규(1) pseudo-label 클러스터 간 거리 학습에 사용.
+
+latent_dim: 30
+# CND_IDS.py:13 기본 latent 차원 (encoder: nInput→128→256→128→latent).
+# 단, 이 테스트베드는 10.1절 global_hparams.latent_dim=32를 모든 조합에
+# 동일 적용하므로, 이 값은 실제로는 global_hparams가 덮어쓴다(참고용 기록).

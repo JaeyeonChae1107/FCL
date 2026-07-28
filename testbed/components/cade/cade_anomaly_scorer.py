@@ -1,64 +1,50 @@
-"""CADE Anomaly Scorer — single-class MAD distance scorer.
+"""CADEMADScorer — CADE MAD 정규화 거리 기반 anomaly scorer (PRD 12.6절).
 
-PORTED FROM: CADE/cade/detect.py::detect_drift_samples() (line 45-105)
-(Single normal-class variant: treats all training data as one 'normal' family.)
+12.1절 참고 — 이 클래스는 CADEDriftDetector와 이름만 CADE를 공유할 뿐 완전히
+별개의 클래스이며 상태를 공유하지 않는다. 이 스코어러는 (A) 공유 표현
+소비자로, 메인 분류기(BaseCLModel)의 z 공간에서 직접 centroid/MAD를 계산한다.
+fit()은 항상 정상(label=0) 데이터만 받으므로 centroid는 단일(정상) centroid다.
+
+Threshold: Track A 원 논문 방식 그대로 — median(s_ref) + t_mad*MAD(s_ref)
+(PRD 3.4/3.5절, CADE/cade/detect.py:91,150-158, 기본 t_mad=3.5).
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
+from typing import Optional
 
 import torch
+
 from testbed.base.anomaly_scorer import BaseAnomalyScorer
 
 
-class CADEAnomalyScorer(BaseAnomalyScorer):
-    """Anomaly scorer based on MAD-normalised latent-space distance.
+class CADEMADScorer(BaseAnomalyScorer):
+    required_backbone = "classifier"
 
-    Fits on normal data to learn a centroid and distance distribution;
-    at inference time returns the normalised deviation from that centroid.
+    def __init__(self, t_mad: float = 3.5):
+        self.t_mad = t_mad
+        self._centroid: Optional[torch.Tensor] = None
+        self._median: Optional[torch.Tensor] = None
+        self._mad: Optional[torch.Tensor] = None
 
-    PORTED FROM: CADE/cade/detect.py::detect_drift_samples() (line 45-105)
-    """
-
-    def __init__(self):
-        self._centroid: torch.Tensor = None
-        self._median_dis: float = 0.0
-        self._mad: float = 1.0
-
-    # PORTED FROM: detect.py::get_latent_data_for_each_family() + get_MAD_for_each_family()
     def fit(self, normal_data: torch.Tensor) -> None:
-        """Learn centroid and MAD from normal (inlier) samples.
-
-        Args:
-            normal_data: Normal samples in latent or feature space. Shape (N, D).
-
-        Raises:
-            ValueError: If normal_data is empty.
-        """
         if len(normal_data) == 0:
-            raise ValueError("normal_data must not be empty")
+            return
+        self._centroid = normal_data.mean(dim=0)
+        dist = torch.norm(normal_data - self._centroid, dim=1)
+        self._median = dist.median()
+        mad = 1.4826 * (dist - self._median).abs().median()
+        self._mad = mad if mad > 1e-8 else torch.tensor(1e-8, device=normal_data.device)
 
-        self._centroid = normal_data.float().mean(dim=0)
-        dis = torch.norm(normal_data.float() - self._centroid.unsqueeze(0), dim=1)
-        self._median_dis = dis.median().item()
-        mad = 1.4826 * (dis - self._median_dis).abs().median().item()
-        self._mad = max(mad, 1e-8)
-
-    # PORTED FROM: detect.py (line 89-97): anomaly = |dist - median| / MAD
     def score(self, data: torch.Tensor) -> torch.Tensor:
-        """Return MAD-normalised anomaly scores.
-
-        PORTED FROM: CADE/cade/detect.py (line 91):
-          anomaly_k[i] = |dis_k[i] - median(dis[i])| / MAD[i]
-
-        Args:
-            data: Samples in same space as fit(). Shape (N, D).
-
-        Returns:
-            1-D float tensor of shape (N,). Higher = more anomalous.
-        """
         if self._centroid is None:
-            raise RuntimeError("CADEAnomalyScorer.fit() must be called before score().")
-        centroid = self._centroid.to(data.device)
-        dis = torch.norm(data.float() - centroid.unsqueeze(0), dim=1)
-        return (dis - self._median_dis).abs() / self._mad
+            return torch.zeros(len(data), device=data.device)
+        dist = torch.norm(data - self._centroid, dim=1)
+        return (dist - self._median).abs() / self._mad
+
+    def compute_threshold(self, eval_scores: torch.Tensor,
+                           eval_labels: Optional[torch.Tensor]) -> float:
+        # Track A(cade_mad): eval_scores는 정상 참조 데이터의 score(s_ref).
+        # eval_labels는 쓰지 않는다(통계적 threshold, 라벨 불필요 — PRD 3.5절).
+        median = eval_scores.median()
+        mad = 1.4826 * (eval_scores - median).abs().median()
+        mad = mad if mad > 1e-8 else torch.tensor(1e-8, device=eval_scores.device)
+        return float(median + self.t_mad * mad)

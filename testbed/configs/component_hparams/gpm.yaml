@@ -1,0 +1,12 @@
+# GPM (anti_forgetting='gpm', 레지스트리 키는 'gpm', 폴더는 components/spider_gpm/)
+# SPIDER 저장소 코드를 확보하지 못해, SPIDER 논문이 인용하는 일반 GPM 메커니즘의
+# 원 논문(Saha, Garg, Roy, "Gradient Projection Memory for Continual Learning",
+# ICLR 2021)의 알고리즘 설명을 직접 근거로 구현했다.
+# (testbed/docs/metric_justification.md "GPM — 논문 기반 신규 구현" 참고)
+
+activation_threshold: 0.97
+# GPM 논문 Algorithm 1의 "threshold hyperparameter (epsilon_th)" — 태스크별
+# activation SVD에서 누적 에너지 비율이 이 값 이상이 되는 최소 개수의
+# 우특이벡터를 기저로 채택한다. 원 논문은 데이터셋별로 0.95~0.99 범위를 실험에
+# 사용하며, 이 테스트베드는 그 중간값인 0.97을 기본값으로 채택한다(특정 논문
+# 실험 재현이 아니라 이 테스트베드의 기본값).
