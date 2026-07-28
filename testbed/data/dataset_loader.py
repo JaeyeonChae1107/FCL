@@ -204,10 +204,32 @@ def _load_cicids2018_raw(base_dir: str):
                 f"받거나, CSV 파일을 직접 {manual_dir}에 넣어주세요.") from e
         csv_paths = _download_cicids2018_from_s3(manual_dir)
 
+    # 공식 10일치 CSV가 전부 같은 컬럼 구성은 아니다 — 실측으로 확인됨:
+    # Thuesday-20-02-2018 파일이 다른 9개보다 컬럼이 1개 더 많다(78 vs 79,
+    # CICFlowMeter를 날짜마다 조금씩 다른 스크립트로 돌려서 생긴, 이 데이터셋
+    # 자체에 알려진 스키마 불일치). 헤더만 먼저 읽어(nrows=0, 수 GB 파일도
+    # 즉시 끝남) 전체 파일 공통 컬럼만 쓰도록 맞춘 뒤 본 로딩을 한다 — 어느
+    # 파일이 "옳은" 스키마인지 임의로 정하지 않고, 공통으로 존재하는 컬럼만
+    # 신뢰한다.
+    header_sets = []
+    for path in csv_paths:
+        cols = {c.strip() for c in pd.read_csv(path, nrows=0).columns}
+        header_sets.append((path, cols))
+    common_cols = set.intersection(*(cols for _, cols in header_sets))
+    if not any(c.lower() == "label" for c in common_cols):
+        raise ValueError(
+            "CICIDS2018 CSV 10개의 공통 컬럼에 'Label'이 없습니다 — 파일 "
+            "구성이 예상보다 크게 다릅니다. 파일별 컬럼을 직접 확인해야 합니다.")
+    for path, cols in header_sets:
+        extra = cols - common_cols
+        if extra:
+            print(f"CICIDS2018: {os.path.basename(path)}에만 있는 컬럼 "
+                  f"{sorted(extra)} - 다른 파일엔 없어 전체 공통 컬럼에서 제외.")
+
     X_parts, y_parts = [], []
     for path in csv_paths:
         print(f"CICIDS2018 로딩 중: {os.path.basename(path)}...")
-        df = pd.read_csv(path, low_memory=False)
+        df = pd.read_csv(path, usecols=lambda c: c.strip() in common_cols, low_memory=False)
         X, y = _read_cicids2018_features(df)
         X_parts.append(X)
         y_parts.append(y)
