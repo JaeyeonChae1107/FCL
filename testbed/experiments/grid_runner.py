@@ -1,11 +1,11 @@
 """그리드 실행 — PRD Phase 3.
 
-enumerate_valid_combos()가 직접 구성한 조합(현재 75개: Track A 72 + Track B 3 —
-drift_detector가 실제로 소비되지 않는 (sample_selector, memory_manager)
-조합은 제외했다, common/compatibility.py 참고) 중 스모크 테스트(Phase 2.5)를
-통과한 조합만 NSL-KDD/UNSW-NB15 전체 데이터로 실행해 results/*.json
-(REQUIRED_RESULT_FIELDS 전체)을 생성한다. 완전 교차 조합을 그대로 도는
-코드 경로는 두지 않는다(PRD 6절).
+enumerate_valid_combos()가 직접 구성한 조합(현재 93개: Track A 90 + Track B 3 —
+drift_detector가 실제로 소비되지 않는 (sample_selector, memory_manager) 조합은
+'ssf'만 제외하고 'none'/'cade'는 남긴다, common/compatibility.py 참고) 중
+스모크 테스트(Phase 2.5)를 통과한 조합만 NSL-KDD/UNSW-NB15/CICIDS2018 전체
+데이터로 실행해 results/*.json(REQUIRED_RESULT_FIELDS 전체)을 생성한다.
+완전 교차 조합을 그대로 도는 코드 경로는 두지 않는다(PRD 6절).
 """
 
 import io

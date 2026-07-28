@@ -212,7 +212,7 @@ deep-svdd와 lof는?"이라고 질문해 확인한 결과, 기존 `FIFOMemoryMan
 3개(1·1·1·3·1)로 축소, 전체 조합 수는 117개 → **111개**로 변경했다
 (`common/compatibility.py`).
 
-## drift_detector 무효 조합 제거 (Track A 108개 → 72개, 전체 111개 → 75개)
+## drift_detector 무효 조합 제거 (Track A 108개 → 최종 90개, 전체 111개 → 최종 93개 — 최초 시도는 72/75였다가 아래 "정정" 절에서 90/93으로 재수정됨)
 
 111개 조합의 실제 결과(`leaderboard_for_chart.json`, 222행)를 슬롯별로
 전수 대조한 결과, `drift_detector`만 완전한 중복을 만드는 축임을 확인했다
