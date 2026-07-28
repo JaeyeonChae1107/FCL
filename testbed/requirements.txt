@@ -1,14 +1,18 @@
 # CL-NIDS-Bench v2.5 의존성.
 #
-# torch — 이 개발 환경에는 CUDA GPU가 없어(Intel Iris Xe 내장 그래픽뿐,
-# NVIDIA/AMD 미탑재) CPU 전용 빌드(torch==2.12.0+cpu)로 확인했다. 코드 자체는
+# torch — 이 개발 환경(로컬 노트북)에는 CUDA GPU가 없어(Intel Iris Xe 내장
+# 그래픽뿐, NVIDIA/AMD 미탑재) CPU 전용 빌드(torch==2.12.0+cpu)로 확인했다.
+# 정확한 패치 버전을 고정해뒀더니 다른 서버의 PyPI 인덱스에는 그 버전이 없어
+# `pip install -r requirements.txt` 자체가 실패하는 걸 실측으로 확인해(예:
+# 어떤 인덱스는 2.4.1까지만 노출) 하한선만 두는 것으로 완화했다. 코드 자체는
 # device 인자를 이미 지원하므로(pipeline/cl_client.py, experiments/grid_runner.py,
-# experiments/smoke_test.py) CUDA GPU가 있는 환경으로 옮긴 뒤에는 아래처럼
-# CUDA 빌드를 설치하고 `--device cuda`만 넘기면 된다 — 코드 변경이 필요 없다.
-#   pip install torch --index-url https://download.pytorch.org/whl/cu121
-# (cu121은 예시 — 대상 머신의 실제 CUDA 버전에 맞는 인덱스를 pytorch.org에서
-# 확인해 선택할 것.)
-torch==2.12.0
+# experiments/smoke_test.py) 아래 순서로 설치하면 코드 변경 없이 GPU를 쓸 수
+# 있다:
+#   1) pip install -r testbed/requirements.txt   (아래 torch>=2.0이 일단 설치됨)
+#   2) pip install torch --index-url https://download.pytorch.org/whl/cu121
+#      (1번이 깐 torch를 CUDA 빌드로 덮어씀 — cu121은 예시, 대상 머신의 실제
+#      CUDA 버전에 맞는 인덱스를 pytorch.org에서 확인해 선택할 것)
+torch>=2.0
 
 numpy==1.26.4
 pandas==2.3.3
