@@ -175,12 +175,23 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
     return result
 
 
-def load_smoke_passed_combo_ids(smoke_results_path: str) -> Optional[set]:
+def load_smoke_passed_combo_ids(smoke_results_path: str) -> Optional[Dict[str, set]]:
+    """데이터셋별 스모크 테스트 통과 combo_id 집합을 반환한다.
+
+    combo_id만으로 묶으면(데이터셋 구분 없이) 한 데이터셋에서 통과한 조합이
+    다른 데이터셋에서 실제로 실패해도(예: CICIDS2018에서만 score 분포가
+    퇴화하는 경우) 그 데이터셋 그리드에 그대로 포함되는 문제가 있었다 —
+    데이터셋별로 분리해 반환한다.
+    """
     if not os.path.exists(smoke_results_path):
         return None
     with io.open(smoke_results_path, encoding="utf-8") as f:
         smoke_results = json.load(f)
-    return {r["combo_id"] for r in smoke_results if r["passed"]}
+    passed_by_dataset: Dict[str, set] = {}
+    for r in smoke_results:
+        if r["passed"]:
+            passed_by_dataset.setdefault(r["dataset"], set()).add(r["combo_id"])
+    return passed_by_dataset
 
 
 def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
@@ -189,21 +200,26 @@ def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
     global_hparams, component_hparams = _load_configs()
     if smoke_results_path is None:
         smoke_results_path = os.path.join(_TESTBED_ROOT, "experiments", "smoke_test_results.json")
-    passed_ids = load_smoke_passed_combo_ids(smoke_results_path)
+    passed_by_dataset = load_smoke_passed_combo_ids(smoke_results_path)
 
-    combos = enumerate_valid_combos()
-    total_combos = len(combos)
-    if passed_ids is not None:
-        combos = [c for c in combos if make_combo_id(c) in passed_ids]
-        print(f"스모크 테스트를 통과한 {len(combos)}/{total_combos}개 조합만 실행합니다.")
-    else:
-        print(f"경고: 스모크 테스트 결과 파일이 없어 {total_combos}개 조합 전체를 실행합니다.")
+    all_combos = enumerate_valid_combos()
+    total_combos = len(all_combos)
 
     labeling_budget = {"mode": "fixed_ratio", "value": 0.1}
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
     all_results = []
     for dataset_name in datasets:
+        if passed_by_dataset is not None:
+            passed_ids = passed_by_dataset.get(dataset_name, set())
+            combos = [c for c in all_combos if make_combo_id(c) in passed_ids]
+            print(f"[{dataset_name}] 스모크 테스트를 통과한 "
+                  f"{len(combos)}/{total_combos}개 조합만 실행합니다.")
+        else:
+            combos = all_combos
+            print(f"경고: 스모크 테스트 결과 파일이 없어 [{dataset_name}] "
+                  f"{total_combos}개 조합 전체를 실행합니다.")
+
         # 두 데이터셋 모두 동일한 프로토콜(원본 train/test 파일 분리 유지,
         # 각 파일 내부는 고정 seed로 섞은 뒤 분할)을 쓴다 — dataset_loader.py의
         # preserve_official_split 기본값(True)과 동일. UNSW-NB15는 원본 파일이
