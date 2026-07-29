@@ -59,10 +59,18 @@ def pr_auc(y_true: np.ndarray, y_score: np.ndarray) -> float:
 def bwt(r_matrix: Sequence[Sequence[float]]) -> float:
     """Backward Transfer — CND-IDS 원 논문 공식 그대로 (PRD 3.3절).
 
-    BwdTrans = sum_{i=1}^{m} (R_{mi} - R_{ii}) / (m(m-1)/2)
+    BWT = (1 / (T-1)) * sum_{i=0}^{T-2} (R_{T-1,i} - R_{i,i})
 
-    r_matrix는 (T, T) 크기의 F1 성능 행렬 (PRD 3.4절 정의). 1-indexed 논문
-    공식의 R_{mi}는 마지막 행(0-indexed 로 T-1행)에 대응한다.
+    CND-IDS 저장소(`AutonomousDCN/ADCNmainloop.py:418`)의 실제 구현
+    `BWT = 1/(nTask-1)*(sum(allTaskAccuracies)-sum(postTaskAcc))`을 그대로
+    옮긴 것이다 — `allTaskAccuracies`/`postTaskAcc` 둘 다 **마지막 태스크를
+    제외한** T-1개 태스크만 순회한다(같은 파일 406행 주석 "except the last
+    task. For calculating BWT"). 분모도 `(T-1)`이지 `T(T-1)/2`가 아니다 —
+    이전 구현은 분모를 `T(T-1)/2`로 잘못 써서(값이 2.5배 작게 나옴, T=5 기준)
+    실측 대조 없이 넘어간 버그였다.
+
+    r_matrix는 (T, T) 크기의 F1 성능 행렬 (PRD 3.4절 정의). R_{T-1,i}는
+    마지막 행(0-indexed T-1행), R_{i,i}는 대각 원소다.
 
     Args:
         r_matrix: T x T performance matrix (R_ij = experience i까지 학습한
@@ -75,12 +83,11 @@ def bwt(r_matrix: Sequence[Sequence[float]]) -> float:
     T = R.shape[0]
     if T < 2:
         return 0.0
-    m = T - 1  # 0-indexed 마지막 행
+    last = T - 1  # 0-indexed 마지막 행
     total = 0.0
-    for i in range(T):
-        total += R[m, i] - R[i, i]
-    denom = T * (T - 1) / 2
-    return float(total / denom)
+    for i in range(T - 1):  # 마지막 태스크(i=last) 제외, CND-IDS 원본과 동일
+        total += R[last, i] - R[i, i]
+    return float(total / (T - 1))
 
 
 def build_r_matrix(f1_grid: List[List[float]]) -> np.ndarray:

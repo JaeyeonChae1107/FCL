@@ -49,15 +49,16 @@ def test_pr_auc_single_class_returns_zero():
 
 
 def test_bwt_hand_computed():
-    # T=3. diagonal = [0.9, 0.85, 0.8], last row (index 2) = [0.6, 0.55, 0.8]
-    # sum = (0.6-0.9) + (0.55-0.85) + (0.8-0.8) = -0.6 ; denom = 3*2/2 = 3
-    # bwt = -0.2
+    # T=3, 마지막 태스크(index 2) 제외. diagonal[0:2] = [0.9, 0.85],
+    # last row[0:2] = [0.6, 0.55]
+    # sum = (0.6-0.9) + (0.55-0.85) = -0.6 ; denom = T-1 = 2 ; bwt = -0.3
+    # (CND-IDS 원본 AutonomousDCN/ADCNmainloop.py:418 공식)
     R = [
         [0.9, 0.0, 0.0],
         [0.0, 0.85, 0.0],
         [0.6, 0.55, 0.8],
     ]
-    assert bwt(R) == pytest.approx(-0.2)
+    assert bwt(R) == pytest.approx(-0.3)
 
 
 def test_bwt_zero_forgetting_when_no_degradation():

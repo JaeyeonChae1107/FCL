@@ -49,7 +49,7 @@ class SPIDERMemoryManager(BaseMemoryManager):
         # "단순 교체 정책(No MRP)" — 기존 버퍼를 누적하지 않고 통째로 교체한다.
         n = len(selected_data)
         k = min(self.max_size, n)
-        idx = torch.randperm(n)[:k]
+        idx = torch.randperm(n, device=selected_data.device)[:k]
         self._buf_data = selected_data[idx].clone()
 
     def set_snapshot_model(self, model: BaseCLModel) -> None:

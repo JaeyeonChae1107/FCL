@@ -62,6 +62,14 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
     input_dim = dataset["input_dim"]
     hp = dict(global_hparams)
     hp["_input_dim"] = input_dim
+    # Track B(CND-IDS)는 원 논문 에폭(20)을 쓴다 — Track A와 같은 200을
+    # 그대로 적용하면 CND-IDS의 약한 망각방지 가중치(lambda_cl=0.1)가 그
+    # 학습 강도를 못 버텨 catastrophic forgetting이 발생함을 실측으로
+    # 확인했다(configs/global_hparams.yaml 주석 참고). Track B 3개 조합은
+    # 전부 anti_forgetting=cndids로 고정이라 이 오버라이드로도 트랙 내부
+    # 비교의 공정성은 그대로 유지된다.
+    if combo["track"] == "B":
+        hp["epochs_per_experience"] = global_hparams["epochs_per_experience_track_b"]
     seed = hp.get("seed", 42)
 
     torch.manual_seed(seed)

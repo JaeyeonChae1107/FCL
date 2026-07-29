@@ -62,6 +62,10 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
     input_dim = dataset["input_dim"]
     hp = dict(global_hparams)
     hp["_input_dim"] = input_dim
+    # Track B(CND-IDS) 에폭 오버라이드 — grid_runner.py의 run_combo_full과
+    # 동일한 근거(configs/global_hparams.yaml 주석 참고).
+    if combo["track"] == "B":
+        hp["epochs_per_experience"] = global_hparams["epochs_per_experience_track_b"]
 
     torch.manual_seed(hp.get("seed", 42))
     model = FCLAutoEncoder(input_dim=input_dim, hidden_dim=hp["hidden_dim"],

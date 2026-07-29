@@ -416,3 +416,58 @@ registry.opendata.aws/cse-cic-ids2018 — 계정/자격증명 없이 익명(unsi
 — 10일치를 다 이어붙이면 수천만 행 규모라 메모리를 불필요하게 두 배 쓰는
 것을 피하기 위함이다(NSL-KDD/UNSW-NB15는 행 수가 훨씬 적어 float64
 유지). `requirements.txt`에서 `kagglehub`를 `boto3`로 교체했다.
+
+## Track별 에폭 분리 (Track A=200, Track B=20) + 전체 라인별 최종 검토 (2026-07-29)
+
+사용자 지시로 `epochs_per_experience_track_b=20`(CND-IDS 원 논문 값)을
+Track B에만 적용하도록 분리했다(`global_hparams.yaml`, `grid_runner.py`/
+`smoke_test.py`의 `run_combo_full`/`run_smoke_test_for_combo`에서
+`combo["track"]=="B"`일 때 오버라이드). 근거는 이전 절(kagglehub→S3 교체
+바로 위 실측 비교)의 catastrophic forgetting 분석 그대로.
+
+이어서 사용자 지시로 전체 코드베이스를 디렉터리별로 한 줄씩 다시 읽으며
+"테스트베드로서의 역할, gold-plating, 보여주기식 코드, 구조적 합리성"을
+점검했다. 발견하고 수정한 것:
+
+1. **BWT 공식 버그(실제 계산 오류)**: `common/metrics.py`의 `bwt()`가
+   분모를 `T(T-1)/2`로 쓰고 있었는데, "CND-IDS 원 논문 공식 그대로"라는
+   docstring의 주장과 달리 실제 CND-IDS 코드(`CND-IDS/AutonomousDCN/
+   ADCNmainloop.py:418` — `BWT = 1/(nTask-1)*(sum(allTaskAccuracies)-
+   sum(postTaskAcc))`, 406행 주석 "except the last task")를 직접 대조해보니
+   분모는 `(T-1)`이고 마지막 태스크는 애초에 합산에서 제외돼야 했다. T=5
+   기준 이전 값은 실제 CND-IDS 공식 대비 2.5배 작게(0에 더 가깝게) 나오고
+   있었다 — F1 순위나 조합 간 비교에는 영향 없지만(모든 조합이 같은 T라
+   같은 배율로 축소됐을 뿐), 절대 BWT 수치 자체는 전부 틀려 있었다.
+   `common/metrics.py`/`tests/test_metrics.py` 수정, `results/*.json` 186개
+   전부 이미 저장된 `perf_matrix`로부터 재계산(재실행 불필요), 이 문서에
+   기록된 이전 BWT 수치(예: epoch=200/20 비교)들도 이 버그가 있던 시점의
+   값이라 절대 크기는 이 수정 이후 재실행하면 달라진다(방향과 결론은
+   동일).
+2. **SPIDERMemoryManager GPU 버그**: `update()`의 `torch.randperm(n)`에
+   `device=`가 빠져 있었다 — CPU에서는 안 드러나지만 GPU에서 `selected_data`
+   (CUDA)를 CPU 인덱스 텐서로 인덱싱하면 크래시한다. 같은 파일의
+   `get_replay_batch()`, 다른 memory_manager들은 전부 `device=`가 있는데
+   이 한 곳만 이전 GPU 이식성 수정 때 빠뜨렸었다. 수정 완료.
+3. **죽은 코드**: `common/scenario_loader.py`(`load_scenario()`)와
+   `testbed/scenarios/*.yaml` 2개 파일이 실제 실행 경로(`grid_runner.py`/
+   `smoke_test.py`) 어디에서도 호출되지 않는다 — PRD 원래 구조(9절)에
+   있던 것을 만들어만 놓고, 실제로는 `labeling_budget`/`n_experiences`를
+   `global_hparams.yaml`과 코드에 직접 하드코딩하는 방식으로 구현이
+   진행되어 이 파일들이 고아가 됐다. 삭제할지 실제로 연결할지는 사용자
+   결정 필요 — 아직 손대지 않았다.
+4. **문서 정합성**: `base/anomaly_scorer.py` docstring이 이미 삭제된
+   `lof`/`dif`를 Track B 예시로 계속 언급하고 있어 수정. `global_hparams.yaml`
+   최상단 "조합별로 다르게 튜닝하지 않는다" 원칙 옆에 Track별 에폭 예외를
+   명시적으로 덧붙였다(안 그러면 바로 아래 `epochs_per_experience_track_b`
+   와 자기모순으로 보임). `n_experiences` 주석의 "CICIDS2017" 인용이
+   "CICIDS2018"과 혼동될 수 있어 명확히 구분하는 문구 추가.
+
+발견했지만 낮은 우선순위라 손대지 않은 것: `backbone_type`/
+`required_backbone` 클래스 속성이 모든 컴포넌트에 선언은 되어 있지만
+런타임에 한 번도 검사되지 않는다(현재는 `common/compatibility.py`의
+그리드 자체가 애초에 잘못된 조합을 못 만들게 막고 있어 실질적 위험은
+없음 — 추가 방어선을 원하면 `CLClient.__init__`에서 한 번 assert하는
+정도로 값싸게 강화 가능). `GPMAntiForgetting._update_basis`가 Track A의
+손실에 전혀 안 쓰이는 decoder 레이어의 activation basis(SVD)도 매번
+계산한다(틀린 건 아니고 그냥 낭비 — Track A는 x_hat을 안 쓰므로 decoder
+그래디언트가 항상 None이라 `project_gradients`에서 걸러지긴 함).

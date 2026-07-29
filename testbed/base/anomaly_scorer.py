@@ -6,10 +6,11 @@
   갱신한다. threshold 결정과는 별개 절차다.
 - compute_threshold()는 Track별로 완전히 다른 원 논문 방식을 그대로 구현한다
   (PRD 3.4/3.5절):
-    Track B(pca/lof/dif): eval_scores=test 데이터 전체의 score, eval_labels
+    Track B(pca): eval_scores=test 데이터 전체의 score, eval_labels
         필수 (Best-F, CND-IDS Algorithm 1).
-    Track A(cade_mad): eval_scores=정상 참조 데이터의 score(s_ref), eval_labels
-        불필요 (median + T_MAD*MAD, CADE 원 논문).
+    Track A(cade_mad/none): eval_scores=정상 참조 데이터의 score(s_ref),
+        eval_labels 불필요 (median + T_MAD*MAD, CADE 원 논문 / 고정 0.5,
+        SSF/SPIDER 원 논문).
 """
 
 from abc import ABC, abstractmethod
