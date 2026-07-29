@@ -93,6 +93,28 @@ class CLClient:
         self._normal_reference_raw: Optional[torch.Tensor] = None
         self._round = 0
 
+    def forward_batched(self, x: torch.Tensor
+                        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """model(x)를 self.batch_size 단위로 나눠 실행하고 (z, x_hat, logit)을
+        이어붙여 반환한다. NSL-KDD/UNSW-NB15는 experience 하나가 수천~수만 행이라
+        한 번에 통과시켜도 문제없었지만, CICIDS2018은 experience 하나가 수백만
+        행이라 그대로 통과시키면 GPU 메모리가 터진다(실측: CUDA OOM, GPU 서버에서
+        확인). Step 4(학습)는 이미 self.batch_size로 나눠 돌고 있었으므로, 그
+        외 forward 호출(step 2/3/7의 drift 감지·fit·평가)에도 동일하게 배치를
+        적용한다 — 호출부가 이미 `torch.no_grad()`로 감싸므로 여기서는 그래디언트
+        관리를 하지 않는다(기존 호출 패턴과 동일)."""
+        n = len(x)
+        if n <= self.batch_size:
+            return self.model(x)
+        zs, x_hats, logits = [], [], []
+        for start in range(0, n, self.batch_size):
+            end = min(start + self.batch_size, n)
+            z, x_hat, logit = self.model(x[start:end])
+            zs.append(z)
+            x_hats.append(x_hat)
+            logits.append(logit)
+        return torch.cat(zs, dim=0), torch.cat(x_hats, dim=0), torch.cat(logits, dim=0)
+
     def set_normal_reference(self, normal_data: torch.Tensor) -> None:
         """12.6절 — experience 0의 train split에서 뽑은 정상(label=0) 참조
         데이터(고정 크기, 실험 내내 불변). dataset_loader가 준비해 1회 주입한다."""
@@ -130,10 +152,10 @@ class CLClient:
         if self.drift_detector.uses_shared_representation:
             self.model.eval()
             with torch.no_grad():
-                _, _, new_logit = self.model(new_data)
+                _, _, new_logit = self.forward_batched(new_data)
                 buf_logit = None
                 if buf_data is not None:
-                    _, _, buf_logit = self.model(buf_data.to(self.device))
+                    _, _, buf_logit = self.forward_batched(buf_data.to(self.device))
             drift_score = self.drift_detector.get_drift_score(new_logit, buf_logit)
             drift_detected = self.drift_detector.detect(new_logit, buf_logit)
         else:
@@ -153,7 +175,7 @@ class CLClient:
         if self.drift_detector.uses_shared_representation:
             self.model.eval()
             with torch.no_grad():
-                _, _, sel_logit = self.model(selected_data)
+                _, _, sel_logit = self.forward_batched(selected_data)
             self.drift_detector.fit(sel_logit, selected_labels)
         else:
             self.drift_detector.fit(selected_data, selected_labels)
@@ -200,7 +222,7 @@ class CLClient:
         # ---- Step 6: Anomaly Scorer 재보정 ----
         self.model.eval()
         with torch.no_grad():
-            current_normal_encoded, _, _ = self.model(
+            current_normal_encoded, _, _ = self.forward_batched(
                 self._normal_reference_raw.to(self.device))
         current_normal_encoded = current_normal_encoded.detach()
         self.anomaly_scorer.refit_on_update(current_normal_encoded)
@@ -212,7 +234,7 @@ class CLClient:
         self.model.eval()
         with torch.no_grad():
             for test_x, test_y in all_test_splits:
-                z, _, _ = self.model(test_x.to(self.device))
+                z, _, _ = self.forward_batched(test_x.to(self.device))
                 scores = self.anomaly_scorer.score(z.detach())
                 eval_scores.append(scores.cpu())
                 eval_labels.append(test_y.cpu())

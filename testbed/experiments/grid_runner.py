@@ -130,12 +130,15 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
 
     # Inference latency: 마지막 라운드 모델로 pooled test 데이터를 다시
     # 인코딩+스코어링하는 데 걸리는 시간을 별도로 측정한다(학습/드리프트 감지
-    # 등과 분리된 순수 추론 지연).
+    # 등과 분리된 순수 추론 지연). CICIDS2018처럼 pooled 크기가 수백만 행이면
+    # 통째로 한 번에 forward하다 GPU 메모리가 터지므로(실측: CUDA OOM),
+    # client.forward_batched()로 배치 단위로 나눠 돌린다(pipeline/cl_client.py
+    # 참고 — Step 2/3/7과 같은 이유).
     model.eval()
     t0 = time.time()
     with torch.no_grad():
         pooled_test_x = torch.cat([tx for tx, _ in all_test_splits]).to(client.device)
-        z_all, _, _ = model(pooled_test_x)
+        z_all, _, _ = client.forward_batched(pooled_test_x)
         client.anomaly_scorer.score(z_all)
     inference_time = time.time() - t0
     n_inference_samples = sum(len(tx) for tx, _ in all_test_splits)
