@@ -18,7 +18,6 @@ from testbed.common.result_schema import (
     make_combo_id,
     validate_result,
 )
-from testbed.common.scenario_loader import load_scenario
 
 __all__ = [
     "f1_score",
@@ -35,5 +34,4 @@ __all__ = [
     "REQUIRED_RESULT_FIELDS",
     "make_combo_id",
     "validate_result",
-    "load_scenario",
 ]

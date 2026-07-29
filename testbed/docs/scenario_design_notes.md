@@ -1,5 +1,16 @@
 # 시나리오 설계 노트
 
+**추기(2026-07-29)**: 여기서 설명하는 `scenarios/*.yaml`과
+`common/scenario_loader.py`는 전체 코드베이스 최종 검토 중 실제 실행
+경로(`grid_runner.py`/`smoke_test.py`) 어디에서도 호출되지 않는 죽은
+코드임이 확인되어 삭제했다(사용자 지시) — 실제 구현은 이 문서 아래에 설명된
+값들(n_experiences=5, labeling_budget=0.1 등)을 `configs/global_hparams.yaml`과
+`grid_runner.py`/`smoke_test.py`에 직접 반영하는 방식으로 진행되었다. 이
+문서가 설명하는 설계 결정(왜 task_incremental만인지, 왜 이 값들인지, Track
+B에서 labeling_budget의 의미가 왜 축소되는지) 자체는 여전히 유효하고 실제
+구현과 일치하므로 그대로 남겨두되, "scenarios/*.yaml이 어떻게 검증되는지"에
+대한 서술만 죽은 코드를 가리키지 않도록 아래에서 정정한다.
+
 ## 구현 범위: task_incremental만 구현, streaming_window는 미구현
 
 PRD 9절은 `experience_definition.type`으로 `task_incremental`과
@@ -21,9 +32,10 @@ PRD 9절은 `experience_definition.type`으로 `task_incremental`과
   SSF의 실제 스트리밍 윈도우 방식을 그대로 쓰면 다른 세 논문 유래 컴포넌트와
   같은 experience 구조를 공유할 수 없다.
 
-따라서 `scenarios/*.yaml`은 `type: task_incremental`만 정의하며,
-`common/scenario_loader.py`도 이 형식만 검증한다. streaming_window 지원은
-이 구현의 범위 밖이며, 추가하려면 먼저 PRD 7절 이슈1을 해결해야 한다.
+따라서 실제 구현(`configs/global_hparams.yaml`의 `n_experiences`,
+`grid_runner.py`/`smoke_test.py`에 하드코딩된 `labeling_budget`)은
+`task_incremental` 하나만 반영한다. streaming_window 지원은 이 구현의
+범위 밖이며, 추가하려면 먼저 PRD 7절 이슈1을 해결해야 한다.
 
 ## n_experiences=5, labeling_budget=0.1 선택 근거
 
