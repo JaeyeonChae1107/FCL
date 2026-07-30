@@ -18,10 +18,12 @@
                (아래 프로토콜 설명 참고). 2026-07-30 재검토: CADE 원 논문의
                IDS2018 전처리(`CADE/IDS_data_preprocess/clean_data.py`,
                `gen_IDS_data.py`)를 근거로 완전 중복 행 제거, `Dst Port`
-               빈도 기반 범주화+원핫, `Protocol` 원핫을 추가했고,
-               `CICIDS2018_SUBSAMPLE_TARGET`(기본 20만 행, 다른 두 데이터셋과
-               같은 자릿수)으로 라벨 비율을 유지한 층화 서브샘플링을 적용한다
+               빈도 기반 범주화+원핫, `Protocol` 원핫을 추가했다
                (`_dedup_rows`/`_bucket_port_frequency`/`_one_hot` 참고).
+               중복 제거 후 남는 전체 데이터(약 1200만 행)를 서브샘플링 없이
+               그대로 쓴다(같은 날 사용자 지시로 서브샘플링 단계를 제거함 —
+               그리드 소요 시간이 훨씬 길어짐, docs/metric_justification.md
+               참고).
 
 라벨 극성: 0=정상, 1=공격으로 프로젝트 전체에서 통일한다(9.1절). 이 변환은
 이 모듈에서 한 번만 수행한다.
@@ -210,20 +212,6 @@ def _one_hot(values: np.ndarray, n_categories_cap: int = 16) -> np.ndarray:
     return onehot
 
 
-# CICIDS2018 서브샘플링 목표 총 행수 — 테스트베드 기본값(특정 논문 수치가
-# 아님). NSL-KDD 전체 풀은 148,517행, UNSW-NB15는 257,673행(둘 다 실측,
-# dataset_loader 원본 train+test 파일 합계) — CICIDS2018 원본(중복 제거 전
-# 약 1600만 행)을 이 규모에 맞춰 층화(라벨 비율 유지) 랜덤 서브샘플링한다.
-# 이유: experience당 행 수가 다른 두 데이터셋과 비슷해야 그리드/스모크 테스트
-# 소요 시간이 같은 자릿수가 된다(정상 참조 표본 대표성 문제는 2026-07-30
-# 이후 normal_reference를 매 라운드 selected_data에서 직접 뽑는 방식으로
-# 바뀌면서 더 이상 이 서브샘플링에 의존하지 않는다 — cl_client.py 참고).
-# CADE 원 논문처럼 특정 날짜/특정 공격 유형만 골라 쓰지는 않는다 — 그러면
-# 이 프로젝트가 CICIDS2018을 추가한 목적(더 크고 다양한 3번째 데이터셋)이
-# 무너지므로, 10일치·전체 공격 유형의 비율은 그대로 유지한 채 규모만 줄인다.
-CICIDS2018_SUBSAMPLE_TARGET = 200_000
-
-
 # 공식 배포처(AWS Open Data Registry, 계정/자격증명 없이 익명 접근 가능 —
 # registry.opendata.aws/cse-cic-ids2018 참고). "Original Network Traffic and
 # Log data/"는 원본 pcap(하루치가 수십 GB)이라 대상이 아니고, 여기 "Processed
@@ -344,13 +332,14 @@ def _load_cicids2018_raw(base_dir: str, seed: int = 42):
     port_full = np.concatenate(port_parts, axis=0)
     protocol_full = np.concatenate(protocol_parts, axis=0)
     y_full = np.concatenate(y_parts, axis=0)
-
-    if len(X_full) > CICIDS2018_SUBSAMPLE_TARGET:
-        X_full, _, port_full, _, protocol_full, _, y_full, _ = train_test_split(
-            X_full, port_full, protocol_full, y_full,
-            train_size=CICIDS2018_SUBSAMPLE_TARGET, stratify=y_full, random_state=seed)
-        print(f"CICIDS2018: 라벨 비율을 유지한 채 {CICIDS2018_SUBSAMPLE_TARGET}행으로 "
-              f"서브샘플링 (dataset_loader.py의 CICIDS2018_SUBSAMPLE_TARGET 주석 참고).")
+    # 2026-07-30: 서브샘플링을 없애고 중복 제거 후 전체(약 1200만 행)를
+    # 그대로 쓴다 — normal_reference를 매 라운드 selected_data에서 직접
+    # 뽑는 방식으로 바뀌면서(cl_client.py 참고) 대표성 문제가 없어졌고,
+    # 사용자가 CICIDS2018을 "더 크고 다양한 3번째 데이터셋"이라는 애초
+    # 취지대로 축소 없이 쓰기로 결정했다. 그리드/스모크 테스트 소요 시간이
+    # NSL-KDD/UNSW-NB15보다 훨씬 길어진다(experience당 행 수가 80배 이상
+    # 많음 — Track A 조합 기준 수십 분/조합, 그리드 전체는 며칠 단위가 될
+    # 수 있음, 실측 근거는 docs/metric_justification.md 참고).
 
     port_bucket = _bucket_port_frequency(port_full)
     port_onehot = _one_hot(port_bucket, n_categories_cap=3)
