@@ -471,3 +471,66 @@ Track B에만 적용하도록 분리했다(`global_hparams.yaml`, `grid_runner.p
 손실에 전혀 안 쓰이는 decoder 레이어의 activation basis(SVD)도 매번
 계산한다(틀린 건 아니고 그냥 낭비 — Track A는 x_hat을 안 쓰므로 decoder
 그래디언트가 항상 None이라 `project_gradients`에서 걸러지긴 함).
+
+## CICIDS2018 GPU 실행 중 발견된 문제 일괄 수정 (2026-07-30)
+
+CICIDS2018을 GPU에서 실제로 돌리는 과정에서 스모크 테스트가 특정 조합에
+대해 "score 분포가 사실상 상수 출력"으로 FAIL을 내는 것을 계기로, 관련된
+전체 파라미터를 원 논문 코드와 다시 대조했다. 아래는 그 과정에서 확인된
+실제 버그와 수정 내역이다.
+
+1. **`hidden_dim` 계산 오류(가장 영향이 큼)**: 이전 세션에서 SSF 공식
+   (`SSF-Strategic-Selection-and-Forgetting/utils.py:28-36`,
+   `nearest_pow2=2**round(log2(input_dim))`, `hidden=nearest_pow2//2`,
+   `latent=nearest_pow2//4`)을 UNSW-NB15(196차원)에 적용한 결과를
+   `hidden=256`으로 기록했었는데, 직접 재계산하면 `nearest_pow2=256`
+   자체를 hidden으로 잘못 대입한 계산 오류였다 — 올바른 값은
+   `hidden=128`(`latent=64`는 원래 맞았음). `global_hparams.yaml`의
+   `hidden_dim`을 128로 정정. 이 값은 Track A/B 모든 조합·모든 데이터셋의
+   공유 아키텍처에 쓰이므로 영향 범위가 가장 크다.
+2. **`labeling_budget` 방식 오류**: 이전에는 `{mode: fixed_ratio,
+   value: 0.1}`(전체의 10%)를 썼는데, 이건 이 테스트베드가 임의로 만든
+   값이었다. SSF 원 논문(`ssf.py:23`, `--num_labeled_sample` 기본값 200)은
+   라운드당 고정 개수 200을 라벨링 예산으로 쓴다. 비율 방식은 CICIDS2018처럼
+   experience당 행 수가 많은 데이터셋에서 라벨 예산이 수십만 개로 불어나
+   SSF 원 논문의 설계 의도(적은 라벨로 학습)를 벗어난다 — CICIDS2018에서
+   관찰된 이상 현상의 근본 원인 중 하나. `global_hparams.yaml`에
+   `labeling_budget: {mode: fixed_count, value: 200}`로 옮기고,
+   `grid_runner.py`/`smoke_test.py`가 하드코딩 대신 이 값을 읽도록 수정.
+3. **Track B `batch_size` 미분리**: CND-IDS 원 논문 실제 값(`CND_IDS.py:103`,
+   `batch_size = 64`)이 Track A(SSF 근거, 128)와 다른데 지금까지 전 트랙에
+   128을 그대로 적용했다. `epochs_per_experience_track_b`와 같은 논리로
+   `batch_size_track_b: 64`를 추가하고 `grid_runner.py`/`smoke_test.py`
+   양쪽에 Track B 오버라이드를 반영.
+4. **CICIDS2018 로더가 어느 논문 선례도 따르지 않던 문제**: 기존 로더는
+   10일치 전체(~1600만 행)를 그대로 병합하고 `Dst Port`/`Protocol`도
+   raw 숫자로 MinMaxScaler에 넣었다. CICIDS2018을 실제로 쓴 유일한 논문인
+   CADE(`CADE/IDS_data_preprocess/clean_data.py`,`gen_IDS_data.py`)는
+   완전 중복 행 제거, `Dst Port` 빈도 기반 3단계 범주화 후 원-핫,
+   `Protocol` 원-핫을 수행한다 — `dataset_loader.py`에 동일하게 반영
+   (`_dedup_rows`, `_bucket_port_frequency`, `_one_hot`). 단, CADE 자신의
+   실험 설계(특정 날짜 하루 + 특정 공격 유형 2종 + 10% 다운샘플링)는
+   CADE 고유의 "신규 공격군 드리프트 탐지"라는 연구 질문에 맞춘 것이라
+   그대로 가져오지 않았다 — 10일치·전체 공격 유형 비율은 유지한 채,
+   `CICIDS2018_SUBSAMPLE_TARGET=200,000`(NSL-KDD 전체 풀 148,517행/
+   UNSW-NB15 257,673행과 같은 자릿수, 테스트베드 자체 기본값)으로 층화
+   랜덤 서브샘플링만 적용한다.
+5. **`normal_reference_size=500`은 애초에 논문에 없는 개념임을 재확인**:
+   CADE 원 논문의 median/MAD 계산(`cade/detect.py:151-158`)은 고정 참조
+   샘플이 아니라 해당 클래스 학습 데이터 "전체"로 계산한다. 이 테스트베드는
+   매 라운드 전체 데이터를 재인코딩하는 계산 비용을 피하려고 고정 크기
+   참조 표본으로 단순화한 것 — 4번 항목의 서브샘플링으로 전체 모집단
+   규모가 다른 두 데이터셋과 비슷해지면서 이 500이라는 고정값의 대표성
+   문제도 함께 완화된다.
+6. **문서 정합성**: `cndids.yaml`의 "global_hparams.latent_dim=32" 주석이
+   실제 현재 값(64)과 어긋나 있어 수정. `cade.yaml`의 `encoder_epochs=5`
+   근거 설명이 옛 "라벨 예산 ~10%" 전제를 인용하고 있어 새 fixed_count=200
+   기준으로 갱신.
+
+낮은 우선순위로 보류한 것: CADE 원 논문의 IDS2018 전용 실행 설정
+(`CADE/run_cade_exp_ids_infiltration.sh:13`, `--cae-hidden 64-32-16`,
+은닉층 2개)은 이 테스트베드의 `ContrastiveAutoEncoder`(은닉층 1개, 현재
+global_hparams 오버라이드로 hidden=128/latent=64 적용)와 구조 자체가
+다르다. Track A 전체(SSF/CADE/GPM)에 통일된 아키텍처를 강제한다는 기존
+설계 원칙과 CADE 고유 아키텍처 재현 사이에 트레이드오프가 있어 사용자
+판단이 필요한 채로 남겨뒀다.

@@ -2,14 +2,18 @@
 # 조합별로 다르게 튜닝하지 않는다: 조합 간 성능 차이가 하이퍼파라미터가 아니라
 # 컴포넌트 메커니즘 자체의 차이에서 비롯되도록 하기 위함.
 #
-# 유일한 예외: epochs_per_experience_track_b (아래 참고) — Track 단위(조합
-# 단위가 아님)로만 다르다. Track A 내부끼리, Track B 내부끼리의 비교 공정성은
-# 그대로 유지된다(Track A vs B는 PRD 5절/7절에 따라 애초에 "우열 비교" 대상이
-# 아니므로 이 예외로 깨지는 원칙이 없다) — 실측으로 확인된 근거는 아래 주석.
+# 예외: epochs_per_experience_track_b, batch_size_track_b (아래 각각 참고) —
+# 둘 다 Track 단위(조합 단위가 아님)로만 다르다. Track A 내부끼리, Track B
+# 내부끼리의 비교 공정성은 그대로 유지된다(Track A vs B는 PRD 5절/7절에 따라
+# 애초에 "우열 비교" 대상이 아니므로 이 예외로 깨지는 원칙이 없다) — 실측/
+# 원 논문 근거는 아래 각 주석.
 
 optimizer: adam            # 테스트베드 기본값 (특정 논문 근거 아님)
-learning_rate: 0.001        # 테스트베드 기본값
-batch_size: 128             # 테스트베드 기본값
+learning_rate: 0.001        # 테스트베드 기본값 (SSF bs와 별개로 CND-IDS
+                            # Adam lr도 0.001 — CND_IDS.py:104, 우연히 일치)
+batch_size: 128             # Track A 기본값. SSF 원 논문 실제 값(ssf.py:48
+                            # "bs = 128") — Track A 아키텍처(hidden/latent dim)의
+                            # 근거 논문과 같아 우연이 아니다.
 epochs_per_experience: 200
 # Track A 기본값. 사용자 지시로 10 -> 200 상향(2026-07-28) — "학습이 너무
 # 빨리 끝나는 것 같다"는 우려에 대응. Track A(SSF/CADE/GPM 등)는 이 값에서
@@ -31,19 +35,44 @@ epochs_per_experience_track_b: 20
 # 달라도 트랙 "내부" 비교의 공정성(이 프로젝트가 지키려는 핵심 원칙)은
 # 전혀 깨지지 않는다 — Track B의 3개 조합은 전부 anti_forgetting=cndids로
 # 고정이라 여전히 셋 다 동일한 20에폭을 받는다.
+
+batch_size_track_b: 64
+# 2026-07-30 재검토로 추가: CND-IDS 원 논문 실제 값(CND_IDS.py:103
+# "batch_size = 64") — Track A의 128(SSF 근거)과 다르다. epochs_per_experience_
+# track_b와 같은 이유로 Track 단위 예외를 둔다 — Track B 3개 조합 전부
+# anti_forgetting=cndids로 고정이라 트랙 내부 비교 공정성은 깨지지 않는다.
+
 n_experiences: 5            # CND-IDS 원 논문 근거 — X-IIoTID/CICIDS2017(2018 아님)/
                             # UNSW-NB15를 5개 experience로 분할한다고 명시(CND-IDS
                             # utils.py 다수 위치에서 확인). CICIDS2018은 이 근거의
                             # 직접 대상이 아니지만, 그리드 전체에 동일 적용한다는
                             # 원칙에 따라 같은 값을 그대로 쓴다.
 latent_dim: 64
-hidden_dim: 256
-# 사용자 지시로 (128,32) -> (256,64) 상향(2026-07-28). 임의로 2배가 아니라
-# 근거가 있다 — SSF 원 논문 공식(utils.py:28-36)을 UNSW-NB15(196차원)에
-# 적용하면 정확히 hidden=256/latent=64가 나온다(서브에이전트 조사로 확인,
-# docs/metric_justification.md "SSF 원문 대조" 참고). NSL-KDD(121차원)
-# 기준으로는 SSF 공식이 오히려 더 작은 hidden=64/latent=32를 요구하지만,
+hidden_dim: 128
+# 2026-07-30 재검토로 정정: SSF 원 논문 공식(utils.py:28-36,
+# nearest_pow2=2**round(log2(input_dim)); hidden=nearest_pow2//2;
+# latent=nearest_pow2//4)을 UNSW-NB15(196차원)에 직접 재계산하면
+# nearest_pow2=256 -> hidden=128, latent=64다. 이전 기록은 nearest_pow2(256)
+# 자체를 hidden으로 잘못 대입한 계산 오류였다(latent=64는 맞았음). NSL-KDD
+# (121차원) 기준으로는 nearest_pow2=128 -> hidden=64/latent=32가 나오지만,
 # 두 데이터셋에 동일 아키텍처를 강제해야 하는 이 테스트베드 제약상 "더 큰
-# 쪽(UNSW-NB15)의 논문 공식값"을 공통 기본값으로 채택했다.
-normal_reference_size: 500  # 12.6절 재보정 기준 샘플 수 (테스트베드 기본값)
+# 쪽(UNSW-NB15)의 논문 공식값"을 공통 기본값으로 채택한다(기존 원칙 유지).
+normal_reference_size: 500  # 12.6절 재보정 기준 샘플 수 (테스트베드 기본값 —
+                            # 논문에 없는 개념. CADE 원 논문(cade/detect.py:
+                            # 151-158)은 median/MAD를 고정 참조 샘플이 아니라
+                            # 해당 클래스 학습 데이터 "전체"로 계산한다.
+                            # 이 테스트베드는 매 라운드 전체 데이터를 다시
+                            # 인코딩하는 계산 비용을 피하려고 고정 크기
+                            # 참조 표본으로 단순화했다.
 seed: 42                    # 고정값. 복수 seed 반복 실행은 이 프로젝트 범위 밖 (6절)
+
+labeling_budget:
+  mode: fixed_count
+  value: 200
+# 2026-07-30 재검토로 정정: 이전에는 fixed_ratio 0.1(전체의 10%)을 썼는데,
+# 이는 이 테스트베드가 임의로 만든 값이었다. SSF 원 논문(ssf.py:23
+# "--num_labeled_sample", 기본값 200)은 실제로 라운드당 "고정 개수" 200을
+# 라벨링 예산으로 쓴다 — 비율이 아니다. 데이터 규모가 큰 CICIDS2018에서
+# 비율 방식(10%)을 쓰면 라벨 예산이 수십만 개로 커져 SSF 원 논문의 설계
+# 의도(적은 라벨로 학습)에서 완전히 벗어난다. fixed_count=200으로 바꾸면
+# 데이터 규모와 무관하게 SSF 원 논문과 동일한 라벨링 압박을 유지한다.

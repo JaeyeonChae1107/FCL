@@ -17,5 +17,5 @@ triplet_margin: 2.0
 
 latent_dim: 30
 # CND_IDS.py:13 기본 latent 차원 (encoder: nInput→128→256→128→latent).
-# 단, 이 테스트베드는 10.1절 global_hparams.latent_dim=32를 모든 조합에
+# 단, 이 테스트베드는 10.1절 global_hparams.latent_dim=64를 모든 조합에
 # 동일 적용하므로, 이 값은 실제로는 global_hparams가 덮어쓴다(참고용 기록).

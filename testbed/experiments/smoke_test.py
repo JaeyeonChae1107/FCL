@@ -62,10 +62,11 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
     input_dim = dataset["input_dim"]
     hp = dict(global_hparams)
     hp["_input_dim"] = input_dim
-    # Track B(CND-IDS) 에폭 오버라이드 — grid_runner.py의 run_combo_full과
-    # 동일한 근거(configs/global_hparams.yaml 주석 참고).
+    # Track B(CND-IDS) 에폭/배치크기 오버라이드 — grid_runner.py의
+    # run_combo_full과 동일한 근거(configs/global_hparams.yaml 주석 참고).
     if combo["track"] == "B":
         hp["epochs_per_experience"] = global_hparams["epochs_per_experience_track_b"]
+        hp["batch_size"] = global_hparams["batch_size_track_b"]
 
     torch.manual_seed(hp.get("seed", 42))
     model = FCLAutoEncoder(input_dim=input_dim, hidden_dim=hp["hidden_dim"],
@@ -177,7 +178,7 @@ def run_all(dataset_name: str = "nsl-kdd", device: str = "cpu") -> List[Dict[str
     dataset = load_dataset(dataset_name, base_dir=_REPO_ROOT,
                             n_experiences=global_hparams["n_experiences"],
                             seed=global_hparams["seed"])
-    labeling_budget = {"mode": "fixed_ratio", "value": 0.1}
+    labeling_budget = global_hparams["labeling_budget"]
 
     results = []
     for combo in enumerate_valid_combos():

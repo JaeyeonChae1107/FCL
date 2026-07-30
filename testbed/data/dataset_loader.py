@@ -15,7 +15,13 @@
                실측으로 확인해(아래 함수 docstring 참고) 공식 소스로
                교체했다(사용자 지시). 공식 train/test 분리 파일이 없어 이
                데이터셋만 preserve_official_split을 강제로 False로 둔다
-               (아래 프로토콜 설명 참고).
+               (아래 프로토콜 설명 참고). 2026-07-30 재검토: CADE 원 논문의
+               IDS2018 전처리(`CADE/IDS_data_preprocess/clean_data.py`,
+               `gen_IDS_data.py`)를 근거로 완전 중복 행 제거, `Dst Port`
+               빈도 기반 범주화+원핫, `Protocol` 원핫을 추가했고,
+               `CICIDS2018_SUBSAMPLE_TARGET`(기본 20만 행, 다른 두 데이터셋과
+               같은 자릿수)으로 라벨 비율을 유지한 층화 서브샘플링을 적용한다
+               (`_dedup_rows`/`_bucket_port_frequency`/`_one_hot` 참고).
 
 라벨 극성: 0=정상, 1=공격으로 프로젝트 전체에서 통일한다(9.1절). 이 변환은
 이 모듈에서 한 번만 수행한다.
@@ -87,16 +93,25 @@ def _load_nslkdd_raw(base_dir: str):
     return X_train, y_train, X_test, y_test
 
 
-def _read_cicids2018_features(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+def _read_cicids2018_features(
+        df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """CICIDS2018(CSE-CIC-IDS2018) CSV 관례에 맞춘 피처/라벨 추출.
 
     - 라벨: 'Label' 컬럼(대소문자/공백 무관하게 탐색), 'Benign'이 아니면
       전부 공격(1)으로 이진화한다(9.1절 라벨 극성: 0=정상, 1=공격).
     - Flow ID/IP/Timestamp 등 식별자 컬럼은 일반화 가능한 피처가 아니므로
       제외한다(모델이 특정 IP/시간대를 외우는 걸 방지 — 표준 관행).
+    - 'Dst Port'/'Protocol'은 숫자로 보이지만 실제로는 범주형이라(포트
+      번호에 순서 의미가 없음) 나머지 연속형 피처와 분리해 반환한다 — CADE
+      원 논문의 IDS2018 전처리(`CADE/IDS_data_preprocess/gen_IDS_data.py:
+      184-215`, Dst Port 빈도 기반 범주화+원핫, Protocol 원핫)와 같은 이유다.
+      호출부(`_load_cicids2018_raw`)에서 병합된 전체 풀 기준으로 인코딩한다.
     - CICIDS2018 원본 CSV에는 알려진 결측치/Infinity/헤더 중복 행 문제가
       있어(공개적으로 보고된 이슈), 숫자로 변환 안 되는 값과 inf는 NaN
       처리 후 해당 행을 통째로 제거한다.
+
+    Returns:
+        (X_numeric, port_raw, protocol_raw, y) — 전부 같은 행 순서/길이.
     """
     df = df.copy()
     df.columns = [c.strip() for c in df.columns]
@@ -107,21 +122,107 @@ def _read_cicids2018_features(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]
             f"실제 컬럼: {list(df.columns)[:10]}...")
     y = (df[label_col].astype(str).str.strip().str.lower() != "benign").astype(int).to_numpy()
 
+    port_col = next((c for c in df.columns if c.lower() == "dst port"), None)
+    protocol_col = next((c for c in df.columns if c.lower() == "protocol"), None)
+
     id_like = {"flow id", "src ip", "source ip", "dst ip", "destination ip", "timestamp"}
     drop_cols = [c for c in df.columns if c.lower() in id_like] + [label_col]
+    if port_col:
+        drop_cols.append(port_col)
+    if protocol_col:
+        drop_cols.append(protocol_col)
     X_df = df.drop(columns=[c for c in drop_cols if c in df.columns])
 
     X_df = X_df.apply(pd.to_numeric, errors="coerce")
     X_df = X_df.replace([np.inf, -np.inf], np.nan)
-    valid_mask = ~X_df.isna().any(axis=1)
+    valid_mask = (~X_df.isna().any(axis=1)).to_numpy()
+
+    port_raw = pd.to_numeric(df[port_col], errors="coerce").fillna(-1).to_numpy() \
+        if port_col else np.full(len(df), -1.0)
+    protocol_raw = pd.to_numeric(df[protocol_col], errors="coerce").fillna(-1).to_numpy() \
+        if protocol_col else np.full(len(df), -1.0)
+
     X_df = X_df[valid_mask]
-    y = y[valid_mask.to_numpy()]
+    y = y[valid_mask]
+    port_raw = port_raw[valid_mask]
+    protocol_raw = protocol_raw[valid_mask]
 
     # 10일치 전부를 이어붙이면 수천만 행 규모라(실측: 10일 합쳐 약 1600만
     # 행) float64는 메모리를 불필요하게 두 배 쓴다 — 어차피 CLClient가 최종
     # 단계에서 torch.float32로 변환하므로 float32로 바로 저장한다(NSL-KDD/
     # UNSW-NB15는 행 수가 훨씬 적어 float64를 유지, 이 함수만 다르게 적용).
-    return X_df.to_numpy(dtype=np.float32), y
+    return X_df.to_numpy(dtype=np.float32), port_raw, protocol_raw, y
+
+
+def _dedup_rows(X: np.ndarray, port: np.ndarray, protocol: np.ndarray,
+                 y: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """완전히 동일한 트래픽 행(피처+포트+프로토콜+라벨 전부 일치)을 제거한다.
+
+    CADE 원 논문의 IDS2018 전처리(`CADE/IDS_data_preprocess/clean_data.py:8,
+    99` — "Duplicate traffic was removed")와 동일한 절차. 파일(하루) 단위로
+    적용한다 — 날짜가 다른 두 흐름이 우연히 완전히 같은 값일 가능성은
+    희박하고, 하루치(~160만 행) 단위로 처리하는 게 전체 병합 후 처리보다
+    훨씬 가볍다.
+    """
+    combined = np.concatenate(
+        [X, port.reshape(-1, 1), protocol.reshape(-1, 1), y.reshape(-1, 1).astype(np.float32)],
+        axis=1)
+    _, unique_idx = np.unique(combined, axis=0, return_index=True)
+    unique_idx = np.sort(unique_idx)
+    return X[unique_idx], port[unique_idx], protocol[unique_idx], y[unique_idx]
+
+
+def _bucket_port_frequency(port: np.ndarray) -> np.ndarray:
+    """Dst Port를 등장 빈도 상/중/하 3단계로 범주화한다.
+
+    포트 번호는 크기 순서에 의미가 없는 범주형 값이라(예: 80과 443이
+    "가깝다"는 뜻이 아님) 그대로 MinMaxScaler에 넣으면 잘못된 서수
+    관계를 학습에 주입한다 — CADE 원 논문(`gen_IDS_data.py:184-201`)도
+    같은 이유로 등장 빈도 기준 상/중/하 3단계 범주화 후 원-핫 인코딩한다.
+    CADE는 자신의 다운샘플링된 데이터 규모에 맞춘 절대 임계값(>=10000/
+    >=1000)을 썼지만, 이 테스트베드는 서브샘플링 크기가 다르므로 상대
+    빈도 분위수(상위 1%/상위 10%)로 재정의해 규모에 무관하게 만든다.
+    """
+    counts = pd.Series(port).value_counts()
+    high_cut = counts.quantile(0.99)
+    med_cut = counts.quantile(0.90)
+    freq = pd.Series(port).map(counts).to_numpy()
+    bucket = np.where(freq >= high_cut, 0, np.where(freq >= med_cut, 1, 2))
+    return bucket
+
+
+def _one_hot(values: np.ndarray, n_categories_cap: int = 16) -> np.ndarray:
+    """작은 카디널리티의 정수 범주형 배열을 원-핫으로 인코딩한다.
+
+    Protocol처럼 실제 고유값이 몇 개뿐인 경우를 위한 것이라, 예상외로
+    카디널리티가 크면(스키마 문제 등) 조용히 잘못된 거대 행렬을 만드는
+    대신 바로 에러를 낸다.
+    """
+    categories = np.unique(values)
+    if len(categories) > n_categories_cap:
+        raise ValueError(
+            f"원-핫 인코딩 대상 범주 수({len(categories)})가 예상보다 많습니다 "
+            f"({n_categories_cap} 초과) — 실제로 범주형이 맞는지 확인이 필요합니다.")
+    cat_to_idx = {c: i for i, c in enumerate(categories)}
+    onehot = np.zeros((len(values), len(categories)), dtype=np.float32)
+    idx = np.array([cat_to_idx[v] for v in values])
+    onehot[np.arange(len(values)), idx] = 1.0
+    return onehot
+
+
+# CICIDS2018 서브샘플링 목표 총 행수 — 테스트베드 기본값(특정 논문 수치가
+# 아님). NSL-KDD 전체 풀은 148,517행, UNSW-NB15는 257,673행(둘 다 실측,
+# dataset_loader 원본 train+test 파일 합계) — CICIDS2018 원본(중복 제거 전
+# 약 1600만 행)을 이 규모에 맞춰 층화(라벨 비율 유지) 랜덤 서브샘플링한다.
+# 이유: (1) experience당 행 수가 다른 두 데이터셋과 비슷해야 그리드/스모크
+# 테스트 소요 시간이 같은 자릿수가 되고, (2) `normal_reference_size=500`
+# (12.6절 고정값)이 대표성을 가지려면 전체 모집단 규모가 이 정도여야 한다
+# (500/256만은 지나치게 희박한 표본이지만 500/20만은 NSL-KDD의 500/12.5만,
+# UNSW-NB15의 500/17.5만과 같은 자릿수). CADE 원 논문처럼 특정 날짜/특정
+# 공격 유형만 골라 쓰지는 않는다 — 그러면 이 프로젝트가 CICIDS2018을 추가한
+# 목적(더 크고 다양한 3번째 데이터셋)이 무너지므로, 10일치·전체 공격 유형의
+# 비율은 그대로 유지한 채 규모만 줄인다.
+CICIDS2018_SUBSAMPLE_TARGET = 200_000
 
 
 # 공식 배포처(AWS Open Data Registry, 계정/자격증명 없이 익명 접근 가능 —
@@ -169,7 +270,7 @@ def _download_cicids2018_from_s3(dest_dir: str) -> List[str]:
     return sorted(csv_paths)
 
 
-def _load_cicids2018_raw(base_dir: str):
+def _load_cicids2018_raw(base_dir: str, seed: int = 42):
     """`<base_dir>/CICIDS2018/*.csv`에 수동으로 넣어둔 CSV가 있으면 그걸 쓰고,
     없으면 공식 AWS Open Data 버킷에서 10일치 전부를 자동으로 받아 그
     폴더에 저장한다(다음 실행부터는 이미 받은 파일로 인식해 재다운로드하지
@@ -226,15 +327,37 @@ def _load_cicids2018_raw(base_dir: str):
             print(f"CICIDS2018: {os.path.basename(path)}에만 있는 컬럼 "
                   f"{sorted(extra)} - 다른 파일엔 없어 전체 공통 컬럼에서 제외.")
 
-    X_parts, y_parts = [], []
+    X_parts, port_parts, protocol_parts, y_parts = [], [], [], []
     for path in csv_paths:
         print(f"CICIDS2018 로딩 중: {os.path.basename(path)}...")
         df = pd.read_csv(path, usecols=lambda c: c.strip() in common_cols, low_memory=False)
-        X, y = _read_cicids2018_features(df)
+        X, port, protocol, y = _read_cicids2018_features(df)
+        n_before = len(X)
+        X, port, protocol, y = _dedup_rows(X, port, protocol, y)
+        if len(X) != n_before:
+            print(f"CICIDS2018: {os.path.basename(path)} 중복 행 "
+                  f"{n_before - len(X)}개 제거 ({n_before} -> {len(X)})")
         X_parts.append(X)
+        port_parts.append(port)
+        protocol_parts.append(protocol)
         y_parts.append(y)
     X_full = np.concatenate(X_parts, axis=0)
+    port_full = np.concatenate(port_parts, axis=0)
+    protocol_full = np.concatenate(protocol_parts, axis=0)
     y_full = np.concatenate(y_parts, axis=0)
+
+    if len(X_full) > CICIDS2018_SUBSAMPLE_TARGET:
+        X_full, _, port_full, _, protocol_full, _, y_full, _ = train_test_split(
+            X_full, port_full, protocol_full, y_full,
+            train_size=CICIDS2018_SUBSAMPLE_TARGET, stratify=y_full, random_state=seed)
+        print(f"CICIDS2018: 라벨 비율을 유지한 채 {CICIDS2018_SUBSAMPLE_TARGET}행으로 "
+              f"서브샘플링 (dataset_loader.py의 CICIDS2018_SUBSAMPLE_TARGET 주석 참고).")
+
+    port_bucket = _bucket_port_frequency(port_full)
+    port_onehot = _one_hot(port_bucket, n_categories_cap=3)
+    protocol_onehot = _one_hot(protocol_full)
+    X_full = np.concatenate([port_onehot, protocol_onehot, X_full], axis=1).astype(np.float32)
+
     return X_full, y_full, X_full[:0], y_full[:0]
 
 
@@ -295,7 +418,7 @@ def load_dataset(name: str, base_dir: str, n_experiences: int = 5,
     elif name == "unsw-nb15":
         X_train, y_train, X_test, y_test = _load_unsw_raw(base_dir)
     elif name == "cicids2018":
-        X_train, y_train, X_test, y_test = _load_cicids2018_raw(base_dir)
+        X_train, y_train, X_test, y_test = _load_cicids2018_raw(base_dir, seed=seed)
         preserve_official_split = False
     else:
         raise ValueError(

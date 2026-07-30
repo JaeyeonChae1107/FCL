@@ -70,6 +70,7 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
     # 비교의 공정성은 그대로 유지된다.
     if combo["track"] == "B":
         hp["epochs_per_experience"] = global_hparams["epochs_per_experience_track_b"]
+        hp["batch_size"] = global_hparams["batch_size_track_b"]
     seed = hp.get("seed", 42)
 
     torch.manual_seed(seed)
@@ -205,7 +206,7 @@ def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
     all_combos = enumerate_valid_combos()
     total_combos = len(all_combos)
 
-    labeling_budget = {"mode": "fixed_ratio", "value": 0.1}
+    labeling_budget = global_hparams["labeling_budget"]
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
     all_results = []
