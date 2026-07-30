@@ -488,15 +488,26 @@ CICIDS2018을 GPU에서 실제로 돌리는 과정에서 스모크 테스트가 
    `hidden=128`(`latent=64`는 원래 맞았음). `global_hparams.yaml`의
    `hidden_dim`을 128로 정정. 이 값은 Track A/B 모든 조합·모든 데이터셋의
    공유 아키텍처에 쓰이므로 영향 범위가 가장 크다.
-2. **`labeling_budget` 방식 오류**: 이전에는 `{mode: fixed_ratio,
-   value: 0.1}`(전체의 10%)를 썼는데, 이건 이 테스트베드가 임의로 만든
-   값이었다. SSF 원 논문(`ssf.py:23`, `--num_labeled_sample` 기본값 200)은
-   라운드당 고정 개수 200을 라벨링 예산으로 쓴다. 비율 방식은 CICIDS2018처럼
-   experience당 행 수가 많은 데이터셋에서 라벨 예산이 수십만 개로 불어나
-   SSF 원 논문의 설계 의도(적은 라벨로 학습)를 벗어난다 — CICIDS2018에서
-   관찰된 이상 현상의 근본 원인 중 하나. `global_hparams.yaml`에
-   `labeling_budget: {mode: fixed_count, value: 200}`로 옮기고,
-   `grid_runner.py`/`smoke_test.py`가 하드코딩 대신 이 값을 읽도록 수정.
+2. **`labeling_budget`을 fixed_count=200으로 바꿨다가 실측 회귀로 다시
+   되돌림**: 처음에는 `{mode: fixed_ratio, value: 0.1}`(전체의 10%)이
+   "이 테스트베드가 임의로 만든 값"이라 판단해, SSF 원 논문(`ssf.py:23`,
+   `--num_labeled_sample` 기본값 200)의 고정 개수 200으로 바꿨다. 그런데
+   SSF의 "200"은 이 테스트베드가 재현하지 않기로 이미 결정한 SSF만의 구조
+   (매 라운드 계속 불어나는 누적 데이터셋 `x_train_this_epoch`,
+   `ssf.py:254`)에 매 라운드 "새로 추가되는 증분"일 뿐이다 — SSF는
+   NSL-KDD 기준 ~2.5만 개짜리 누적 풀로 시작해 거기에 200개씩만 보태며
+   그 풀 전체를 매번 재학습한다. 이 테스트베드는 그 누적 구조를 안 쓰므로
+   (13절 step 3~5, "발견했지만 코드는 바꾸지 않고 문서로만 남긴 것" 3번
+   참고), "200"을 라운드당 전체 학습 데이터 수로 그대로 쓰면 SSF의 실제
+   규모(누적 풀 전체)와 전혀 다른, 훨씬 작은 양이 된다. 실측 확인:
+   `A_dd=none_ss=ssf_mm=none_af=none_as=cade_mad`(NSL-KDD)에서
+   fixed_count=200은 f1=0.236(6초), fixed_ratio=0.1은 f1=0.675(33초) —
+   `ss=random`은 k=200에서도 별문제 없지만 `SSFSampleSelector`는 라운드
+   데이터의 극히 일부(0.1~0.7% 수준)만 뽑아야 하는 상황에서 KL-마스크
+   기반 선택이 균등 목표 분포를 맞추려다 오히려 희귀 구간(극단값)에
+   편중된 비대표 표본을 뽑는 부작용까지 겹쳐 급격히 나빠졌다. 
+   `fixed_ratio: 0.1`로 되돌리고, 이 경위를 `global_hparams.yaml`
+   주석에 남겼다.
 3. **Track B `batch_size` 미분리**: CND-IDS 원 논문 실제 값(`CND_IDS.py:103`,
    `batch_size = 64`)이 Track A(SSF 근거, 128)와 다른데 지금까지 전 트랙에
    128을 그대로 적용했다. `epochs_per_experience_track_b`와 같은 논리로

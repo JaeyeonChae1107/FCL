@@ -24,8 +24,8 @@ encoder_epochs: 5
 # experience(5회)마다 다시 호출되는 continual 재학습 구조다. 원본 그대로
 # 250 epoch을 매 experience마다 반복하면 5 experience 기준 1250 epoch로
 # 과도하고, 매번 새로 선택된 작은 라벨 예산 서브셋(전역 labeling_budget=
-# fixed_count 200, 데이터 규모와 무관하게 항상 200개)에 반복 과적합할
-# 위험도 있다. 따라서 매 라운드 재학습이라는 구조 차이를 반영해
+# fixed_ratio 0.1, 라운드 데이터의 10%)에 반복 과적합할 위험도 있다.
+# 따라서 매 라운드 재학습이라는 구조 차이를 반영해
 # 5로 낮췄다 — 이는 "속도를 위한 임의 축소"가 아니라 one-shot vs continual
 # 재학습이라는 설계 차이에 따른 의도적 조정이다.
 
