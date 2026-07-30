@@ -18,7 +18,7 @@ from testbed.base import FCLAutoEncoder
 from testbed.common.compatibility import enumerate_valid_combos
 from testbed.common.result_schema import make_combo_id
 from testbed.components.cndids.cndids_anti_forgetting import CNDIDSAntiForgetting
-from testbed.data.dataset_loader import extract_normal_reference, load_dataset
+from testbed.data.dataset_loader import load_dataset
 from testbed.pipeline import CLClient
 
 SMOKE_N_EXPERIENCES = 2
@@ -75,10 +75,6 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
 
     experiences = dataset["experiences"][:SMOKE_N_EXPERIENCES]
     all_test_splits = [(e["test_X"], e["test_y"]) for e in experiences]
-
-    ref_size = min(hp.get("normal_reference_size", 500), len(experiences[0]["train_X"]))
-    normal_ref = extract_normal_reference(experiences, size=ref_size, seed=hp.get("seed", 42))
-    client.set_normal_reference(normal_ref)
 
     batch_size = hp["batch_size"]
     epochs = hp["epochs_per_experience"]

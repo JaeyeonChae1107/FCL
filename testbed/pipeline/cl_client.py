@@ -90,7 +90,19 @@ class CLClient:
         self.batch_size = global_hparams["batch_size"]
         self.epochs_per_experience = global_hparams["epochs_per_experience"]
 
-        self._normal_reference_raw: Optional[torch.Tensor] = None
+        # 2026-07-30 재설계: 이전에는 experience 0에서 한 번 뽑은 고정
+        # 정상 참조 표본(_normal_reference_raw)을 실험 내내 재사용했다(논문에
+        # 없는 개념, docs/metric_justification.md 참고). CADE 원 논문의
+        # median/MAD 계산은 "그 시점에 라벨이 있는 정상 데이터 전체"를 쓰지만,
+        # CADE 자체에는 이 테스트베드처럼 반복되는 라운드 개념이 없어 "매
+        # 라운드 뭘 기준으로 재보정할지"는 애초에 답이 없는 질문이었다. 별도
+        # 고정 표본을 새로 만드는 대신, 이미 라벨 예산으로 선택된 이번 라운드
+        # 데이터(selected_data) 중 label=0인 것만 걸러 쓰기로 했다 —
+        # normal_reference_size라는 별도 파라미터가 필요 없어지고,
+        # labeling_budget 비율에 자동으로 비례한다. 이번 라운드에 정상 라벨
+        # 선택 샘플이 하나도 없는 극단적 경우를 위해 마지막으로 성공한
+        # 재보정 결과(self._s_ref)를 캐시해 재사용한다(run_experience 참고).
+        self._s_ref: Optional[torch.Tensor] = None
         self._round = 0
 
     def forward_batched(self, x: torch.Tensor
@@ -114,11 +126,6 @@ class CLClient:
             x_hats.append(x_hat)
             logits.append(logit)
         return torch.cat(zs, dim=0), torch.cat(x_hats, dim=0), torch.cat(logits, dim=0)
-
-    def set_normal_reference(self, normal_data: torch.Tensor) -> None:
-        """12.6절 — experience 0의 train split에서 뽑은 정상(label=0) 참조
-        데이터(고정 크기, 실험 내내 불변). dataset_loader가 준비해 1회 주입한다."""
-        self._normal_reference_raw = normal_data
 
     @staticmethod
     def _label_budget_int(n: int, labeling_budget: Dict[str, Any]) -> int:
@@ -171,6 +178,12 @@ class CLClient:
             sel_idx = list(range(min(label_budget_int, len(new_data))))
         selected_data = new_data[sel_idx]
         selected_labels = new_labels[sel_idx]
+        # 이번 라운드 라벨 예산 안에서 실제로 "정상(label=0)"이라고 알려진
+        # 서브셋 — CADE-MAD/PCA 재보정(step 6)과 CND-IDS 클러스터링(아래)
+        # 양쪽에서 "정상 참조"로 쓴다. 별도로 고정된 참조 표본을 만들지 않고
+        # 라벨 예산 안의 데이터만 쓰므로 labeling_budget 비율에 자동으로
+        # 비례한다(docs/metric_justification.md 참고).
+        normal_subset = selected_data[selected_labels == 0]
 
         if self.drift_detector.uses_shared_representation:
             self.model.eval()
@@ -182,10 +195,13 @@ class CLClient:
 
         # CND-IDS 전용 훅 — CND_IDS.py:fit() 진입부와 동일하게, 미니배치 학습이
         # 시작되기 전 experience(라운드)당 한 번만 clustering을 수행한다
-        # (components/cndids/cndids_anti_forgetting.py 참고).
-        if hasattr(self.anti_forgetting, "on_experience_start"):
-            self.anti_forgetting.on_experience_start(
-                selected_data, self._normal_reference_raw.to(self.device))
+        # (components/cndids/cndids_anti_forgetting.py 참고). 이번 라운드에
+        # 정상 라벨 선택 샘플이 하나도 없으면(현실적인 NIDS 데이터에서는
+        # 극히 드묾) 건너뛴다 — 그러면 이전 라운드에 학습된 K-Means/클러스터
+        # 상태가 그대로 유지되고(첫 라운드부터 그런 경우면
+        # CNDIDSAntiForgetting의 기존 폴백대로 전부 "정상"으로 간주).
+        if hasattr(self.anti_forgetting, "on_experience_start") and len(normal_subset) > 0:
+            self.anti_forgetting.on_experience_start(selected_data, normal_subset)
 
         # ---- Step 4: 모델 학습 (selected_data만, replay_batch는 "이전" 버퍼) ----
         self.model.train()
@@ -220,13 +236,19 @@ class CLClient:
         self.memory_manager.update(selected_data, selected_labels, drift_detected)
 
         # ---- Step 6: Anomaly Scorer 재보정 ----
-        self.model.eval()
-        with torch.no_grad():
-            current_normal_encoded, _, _ = self.forward_batched(
-                self._normal_reference_raw.to(self.device))
-        current_normal_encoded = current_normal_encoded.detach()
-        self.anomaly_scorer.refit_on_update(current_normal_encoded)
-        s_ref = self.anomaly_scorer.score(current_normal_encoded).detach()
+        # normal_subset이 비어있으면(이번 라운드 라벨 예산에 정상 샘플이 하나도
+        # 없었던 경우 — 현실적인 NIDS 데이터에서는 극히 드묾) 재보정을
+        # 건너뛰고 마지막으로 성공한 self._s_ref/scorer 내부 상태를 그대로
+        # 쓴다. score()를 빈 텐서에 호출하면 Track A의 compute_threshold가
+        # median()을 빈 텐서에 호출해 크래시하므로, 애초에 빈 입력으로
+        # score()/재보정을 시도하지 않는다.
+        if len(normal_subset) > 0:
+            self.model.eval()
+            with torch.no_grad():
+                current_normal_encoded, _, _ = self.forward_batched(normal_subset)
+            current_normal_encoded = current_normal_encoded.detach()
+            self.anomaly_scorer.refit_on_update(current_normal_encoded)
+            self._s_ref = self.anomaly_scorer.score(current_normal_encoded).detach()
 
         # ---- Step 7: 평가 (experience 0..T-1 전부) ----
         eval_scores: List[torch.Tensor] = []
@@ -239,9 +261,13 @@ class CLClient:
                 eval_scores.append(scores.cpu())
                 eval_labels.append(test_y.cpu())
 
-        if self.track == "A":
-            threshold = self.anomaly_scorer.compute_threshold(s_ref, None)
+        if self.track == "A" and self._s_ref is not None:
+            threshold = self.anomaly_scorer.compute_threshold(self._s_ref, None)
         else:
+            # Track B는 원래도 pooled eval score 방식. Track A인데
+            # self._s_ref가 여태 한 번도 채워지지 않은 극단적 예외 상황
+            # (지금까지 모든 라운드에서 정상 라벨 선택 샘플이 없었던 경우)
+            # 에도 크래시하지 않도록 같은 폴백을 쓴다.
             all_scores = torch.cat(eval_scores)
             all_labels = torch.cat(eval_labels)
             threshold = self.anomaly_scorer.compute_threshold(all_scores, all_labels)

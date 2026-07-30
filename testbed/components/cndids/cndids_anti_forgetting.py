@@ -33,9 +33,10 @@ CND-IDS 원 논문 근거 (CND-IDS/FeatureExtractors/CND_IDS.py:161-166):
     따라 Track B도 label_budget(기본 10%)만큼 선택된 데이터(수천 건)에만
     접근하므로, 그 스케일에 맞춰 후보를 줄였다. "여러 K를 elbow로 선택한다"는
     메커니즘 자체는 동일하다.
-  - "알려진 정상 참조 데이터"로 이 테스트베드에 이미 있는
-    `_normal_reference_raw`(12.6절, experience 0의 정상 500개)를 그대로 쓴다 —
-    CND-IDS의 `datastream.init_normal`과 같은 역할이다.
+  - "알려진 정상 참조 데이터"로, 이번 라운드 라벨 예산 안에서 이미 선택된
+    데이터 중 label=0인 것만 걸러 쓴다(`cl_client.py`의 `normal_subset`,
+    2026-07-30 재설계 — 별도 고정 표본을 만들지 않는다) — CND-IDS의
+    `datastream.init_normal`과 같은 역할이다.
   - 클러스터링은 experience(라운드)당 한 번만 수행하고(`on_experience_start`),
     이후 각 미니배치에서는 이미 학습된 K-Means로 predict만 한다 — 원본이
     `fit()` 진입 시 한 번 클러스터링하고 그 결과를 epoch 전체에서 재사용하는
@@ -134,15 +135,17 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         self.last_pseudo_label_ratio: Optional[float] = None
 
     def on_experience_start(self, selected_data: torch.Tensor,
-                             normal_reference_raw: torch.Tensor) -> None:
+                             normal_subset: torch.Tensor) -> None:
         """CND-IDS CND_IDS.py:fit() 진입부와 동일 — experience(라운드) 시작 시
         원본 입력 공간에서 K-Means를 한 번 학습하고, 정상 참조 데이터가 속하는
         클러스터 ID 집합을 구해둔다. CLClient가 학습 루프(step 4) 이전에
-        호출한다."""
+        호출한다. `normal_subset`은 이번 라운드 라벨 예산 안에서 선택된
+        데이터 중 label=0인 것만 걸러낸 것이다(비어있지 않을 때만 호출됨 —
+        cl_client.py 참고)."""
         data_np = selected_data.detach().cpu().numpy()
         self._kmeans = _elbow_kmeans_fit(data_np, _CLUSTER_K_CANDIDATES)
 
-        ref_np = normal_reference_raw.detach().cpu().numpy()
+        ref_np = normal_subset.detach().cpu().numpy()
         ref_clusters = self._kmeans.predict(ref_np)
         self._normal_cluster_ids = set(ref_clusters.tolist())
 

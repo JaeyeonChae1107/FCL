@@ -29,7 +29,7 @@ from testbed.common.metrics import (
     recall_score,
 )
 from testbed.common.result_schema import make_combo_id, validate_result
-from testbed.data.dataset_loader import extract_normal_reference, load_dataset
+from testbed.data.dataset_loader import load_dataset
 from testbed.pipeline import CLClient
 from testbed.experiments.smoke_test import _load_configs, _REPO_ROOT, _TESTBED_ROOT
 
@@ -80,9 +80,6 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
 
     experiences = dataset["experiences"]
     all_test_splits = [(e["test_X"], e["test_y"]) for e in experiences]
-    ref_size = min(hp.get("normal_reference_size", 500), len(experiences[0]["train_X"]))
-    normal_ref = extract_normal_reference(experiences, size=ref_size, seed=seed)
-    client.set_normal_reference(normal_ref)
 
     f1_rows: List[List[float]] = []
     total_selected = 0

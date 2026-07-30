@@ -214,14 +214,13 @@ def _one_hot(values: np.ndarray, n_categories_cap: int = 16) -> np.ndarray:
 # 아님). NSL-KDD 전체 풀은 148,517행, UNSW-NB15는 257,673행(둘 다 실측,
 # dataset_loader 원본 train+test 파일 합계) — CICIDS2018 원본(중복 제거 전
 # 약 1600만 행)을 이 규모에 맞춰 층화(라벨 비율 유지) 랜덤 서브샘플링한다.
-# 이유: (1) experience당 행 수가 다른 두 데이터셋과 비슷해야 그리드/스모크
-# 테스트 소요 시간이 같은 자릿수가 되고, (2) `normal_reference_size=500`
-# (12.6절 고정값)이 대표성을 가지려면 전체 모집단 규모가 이 정도여야 한다
-# (500/256만은 지나치게 희박한 표본이지만 500/20만은 NSL-KDD의 500/12.5만,
-# UNSW-NB15의 500/17.5만과 같은 자릿수). CADE 원 논문처럼 특정 날짜/특정
-# 공격 유형만 골라 쓰지는 않는다 — 그러면 이 프로젝트가 CICIDS2018을 추가한
-# 목적(더 크고 다양한 3번째 데이터셋)이 무너지므로, 10일치·전체 공격 유형의
-# 비율은 그대로 유지한 채 규모만 줄인다.
+# 이유: experience당 행 수가 다른 두 데이터셋과 비슷해야 그리드/스모크 테스트
+# 소요 시간이 같은 자릿수가 된다(정상 참조 표본 대표성 문제는 2026-07-30
+# 이후 normal_reference를 매 라운드 selected_data에서 직접 뽑는 방식으로
+# 바뀌면서 더 이상 이 서브샘플링에 의존하지 않는다 — cl_client.py 참고).
+# CADE 원 논문처럼 특정 날짜/특정 공격 유형만 골라 쓰지는 않는다 — 그러면
+# 이 프로젝트가 CICIDS2018을 추가한 목적(더 크고 다양한 3번째 데이터셋)이
+# 무너지므로, 10일치·전체 공격 유형의 비율은 그대로 유지한 채 규모만 줄인다.
 CICIDS2018_SUBSAMPLE_TARGET = 200_000
 
 
@@ -475,17 +474,3 @@ def load_dataset(name: str, base_dir: str, n_experiences: int = 5,
         input_dim = df_X.shape[1]
 
     return {"input_dim": input_dim, "experiences": experiences}
-
-
-def extract_normal_reference(experiences: List[Dict], size: int = 500,
-                              seed: int = 42) -> torch.Tensor:
-    """PRD 12.6절 — experience 0의 train split에서 label=0인 샘플을 고정
-    크기로 한 번만 추출한다. 이 원본은 실험 내내 바뀌지 않는다(test split에서는
-    뽑지 않는다 — test split은 평가 전용으로만 쓰여야 한다)."""
-    train_X = experiences[0]["train_X"]
-    train_y = experiences[0]["train_y"]
-    normal_idx = (train_y == 0).nonzero(as_tuple=True)[0]
-    g = torch.Generator().manual_seed(seed)
-    perm = normal_idx[torch.randperm(len(normal_idx), generator=g)]
-    k = min(size, len(perm))
-    return train_X[perm[:k]]

@@ -23,6 +23,8 @@ class PCAScorer(BaseAnomalyScorer):
         self._pca = None
 
     def fit(self, normal_data: torch.Tensor) -> None:
+        if len(normal_data) == 0:
+            return
         from sklearn.decomposition import PCA
 
         X = normal_data.detach().cpu().numpy()

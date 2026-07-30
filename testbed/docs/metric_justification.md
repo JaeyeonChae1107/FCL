@@ -666,3 +666,63 @@ basis.T`가 참된 직교 사영행렬이 아니게 될 수 있다 — 그래서
 - `common/metrics.py`, `common/result_schema.py`, `common/compatibility.py`,
   `experiments/leaderboard_builder.py`, `pipeline/common_baselines.py`,
   `components/novelty_baselines/*.py` — 전부 재검토, 문제 없음.
+
+## `normal_reference` 재설계 — 별도 고정 참조 표본 제거 (2026-07-30)
+
+### 문제 제기와 근거
+
+사용자가 "CADE 원 논문을 그대로 쓰면 될 텐데 왜 `normal_reference`라는,
+논문에 없는 개념을 따로 만들었나"라고 질문했다. 확인 결과: CADE 원 논문의
+median/MAD 계산(`cade/detect.py:151-158`)은 실제로 "그 시점에 라벨이 있는
+정상 데이터 전체"로 계산하지만, **CADE 자체에는 이 테스트베드처럼 반복되는
+라운드(5개 experience) 개념이 없다** — CADE는 모델을 한 번 학습시키고
+`detect()`를 딱 한 번 돌리는 정적(static) 방법이다. "매 라운드 뭘 기준으로
+재보정할지"는 CADE 원문에 애초에 답이 없는 질문이었고, 이전의 "experience
+0에서 한 번 뽑은 고정 500개 표본을 실험 내내 재사용"하는 방식은 그 답 없는
+질문에 대해 이 테스트베드가 임의로 만든 답이었다(그리고 `normal_reference_
+size=500`이라는 숫자 자체도 데이터 규모와 무관한 고정값이라, CICIDS2018처럼
+큰 데이터셋에서 대표성 문제를 일으켰던 원인이기도 했다).
+
+### 새 설계
+
+별도 고정 표본을 만드는 대신, **이번 라운드에 이미 라벨 예산
+(`labeling_budget`)으로 선택된 `selected_data` 중 label=0인 것만 걸러
+(`normal_subset`) 정상 참조로 쓴다** (`pipeline/cl_client.py`). 이러면:
+- `normal_reference_size`라는 별도 파라미터 자체가 필요 없어진다.
+- `labeling_budget` 비율에 자동으로 비례해 데이터 규모와 무관하게 대표성이
+  유지된다.
+- CADE-MAD 재보정(step 6)뿐 아니라 CND-IDS의 "알려진 정상 참조"
+  클러스터링(step 3, `on_experience_start`)도 같은 `normal_subset`을 쓴다
+  (이전엔 이 두 곳이 서로 다른 근거 없이 같은 고정 표본을 재사용하고
+  있었다).
+
+### 안전장치 (사용자 지시로 시간을 들여 꼼꼼히 검증)
+
+이번 라운드의 라벨 예산 선택분에 정상 라벨 샘플이 하나도 없는 극단적
+경우(현실적인 NIDS 데이터에서는 매우 드묾)를 위해:
+- `PCAScorer.fit()`에 빈 입력 가드를 새로 추가했다(이전엔 없어서 크래시
+  위험이 있었다 — `CADEMADScorer.fit()`은 이미 가드가 있었음).
+- `CLClient` 쪽에서 `normal_subset`이 비어있으면 재보정 자체를 건너뛰고
+  마지막으로 성공한 `self._s_ref`/scorer 내부 상태를 그대로 쓴다(빈 텐서로
+  `score()`를 호출하면 Track A의 `compute_threshold`가 `median()`을 빈
+  텐서에 호출해 크래시하는 경로가 있었다 — 발견 즉시 수정).
+- CND-IDS의 `on_experience_start`도 `normal_subset`이 비어있으면 건너뛴다
+  (이전 라운드의 K-Means 상태 유지, 한 번도 없었으면 기존 폴백대로 전부
+  "정상" 간주).
+- 인위적으로 모든 라운드의 라벨을 전부 공격(1)으로 강제한 극단 테스트로
+  Track A/B 양쪽 다 크래시 없이 동작함을 직접 확인했다.
+
+### 검증 (전부 이번 세션에서 직접 실행, GPM/labeling_budget 사고 이후 사용자
+지시로 반영 전 필수)
+
+- `pytest` 전체 13/13 통과(`test_refit_receives_current_encoder_output_
+  not_stale_cache`는 `normal_subset` 크기가 라운드마다 달라질 수 있어
+  shape 비교를 먼저 하도록 수정).
+- 스모크 테스트(93개 조합) × NSL-KDD/UNSW-NB15 = **186/186 전부 통과**,
+  실패 0건.
+- NSL-KDD 전체 그리드(5-experience, 93개 조합 전부)를 실제로 돌려 F1을
+  기존 정상 기준값과 직접 대조 — 예:
+  `A_dd=none_ss=random_mm=none_af=none_as=cade_mad` 이전 f1=0.772 → 지금
+  f1=0.771, `B_dd=none_ss=random_mm=none_af=cndids_as=pca` 이전 f1=0.894
+  → 지금 f1=0.892 — 전부 오차 범위 내로 일치. 93개 조합 F1이 0.57~0.90에서
+  정상 분포, 붕괴/이상치 없음.

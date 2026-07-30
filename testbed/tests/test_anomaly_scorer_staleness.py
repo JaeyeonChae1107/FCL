@@ -19,8 +19,6 @@ def _make_client(combo):
     }
     model = FCLAutoEncoder(input_dim=8, hidden_dim=16, latent_dim=4)
     client = CLClient(model, combo, global_hparams, component_hparams={})
-    normal_ref = torch.randn(20, 8)
-    client.set_normal_reference(normal_ref)
     return client
 
 
@@ -89,8 +87,13 @@ def test_refit_receives_current_encoder_output_not_stale_cache():
     _run_n_experiences(client, n=3)
 
     assert len(seen_inputs) == 3
-    # 모델이 매 라운드 갱신되므로, 같은 정상 참조 원본이라도 인코딩 결과는
-    # 최소 한 쌍 이상 달라야 한다(완전히 동일하면 재인코딩이 안 된 것).
-    all_identical = all(
+    # 2026-07-30 재설계: normal_subset이 매 라운드 새로 선택된 데이터에서
+    # 뽑히므로 이제 크기 자체가 라운드마다 다를 수 있다(이전엔 고정 크기
+    # 참조 표본을 재인코딩만 했음) — 크기가 다르면 그 자체로 "캐시된 옛 값을
+    # 재사용하지 않는다"는 증거이므로 shape부터 비교한다. 크기가 우연히
+    # 같더라도(모델이 매 라운드 갱신되므로) 인코딩 결과 값 자체는 달라야
+    # 한다.
+    shapes = [tuple(t.shape) for t in seen_inputs]
+    all_identical = len(set(shapes)) == 1 and all(
         torch.allclose(seen_inputs[0], seen_inputs[i]) for i in range(1, len(seen_inputs)))
     assert not all_identical
