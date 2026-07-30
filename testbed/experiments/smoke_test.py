@@ -126,12 +126,20 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
             warnings.append(
                 f"exp{exp_idx}: 15.2 경고 - 다수 클래스 비율 {majority_ratio:.4f} >= 0.99")
 
-        score_range = (all_scores.max() - all_scores.min()).item()
+        # min-max range는 극단치 하나에도 확 벌어진다 — CADE-MAD처럼
+        # median/MAD 정규화 거리 기반 스코어는 원래 설계상 대다수가 낮은
+        # 값에 뭉치고 진짜 이상치 몇 개만 매우 큰 값을 내는 게 정상 동작
+        # (2026-07-30 CICIDS2018 전체 데이터 실행에서 실측 확인: 정상
+        # 조합인데도 min-max range 기준으로 오탐이 남 — 근거는
+        # docs/metric_justification.md 참고). 1~99 percentile 기반 범위로
+        # 바꿔 소수 극단치에 흔들리지 않게 한다.
+        q01, q99 = torch.quantile(all_scores, torch.tensor([0.01, 0.99])).tolist()
+        robust_range = q99 - q01
         score_std = all_scores.std().item()
-        if score_range > 0 and score_std < score_range * 0.01:
+        if robust_range > 0 and score_std < robust_range * 0.01:
             failures.append(
                 f"exp{exp_idx}: 15.2 score 분포가 사실상 상수 출력 "
-                f"(std={score_std:.4e}, range={score_range:.4e})")
+                f"(std={score_std:.4e}, robust_range(1~99%)={robust_range:.4e})")
 
         s_min, s_max = all_scores.min().item(), all_scores.max().item()
         if not (s_min <= threshold <= s_max):

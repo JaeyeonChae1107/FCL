@@ -45,6 +45,16 @@ Learning", ICLR 2021)을 근거로 이 테스트베드의 BaseAntiForgetting 계
 레지스트리 키는 "gpm" (PRD 4.1절 — 폴더는 components/spider_gpm/).
 GPM은 명시적 replay/정규화 항 없이 gradient projection만으로 이전 태스크를
 보호하므로(원 논문 설계), compute_loss는 task loss만 계산한다.
+
+**2026-07-30 CICIDS2018 전체 데이터 실행 중 CUDA OOM으로 발견한 버그**:
+`compute_loss()`가 매 미니배치 스텝마다 그 배치를 `_pending_data`에 계속
+누적했는데, `epochs_per_experience`(Track A 200)만큼 반복되는 각 epoch은
+사실 같은 `selected_data`를 다시 섞어 도는 것뿐이라 200배 중복 누적이었다.
+NSL-KDD/UNSW-NB15 규모에서는 문제없었지만 CICIDS2018 전체(선택 샘플 약
+19만개) × 200 epoch에서 약 3860만 행(~11.8GB)까지 쌓여 실제로 CUDA OOM이
+났다. `activation_sample_size`(기본 2000)로 상한을 둬서, experience당
+최대 그만큼만 모으고 이후로는 더 안 쌓도록 고쳤다 — GPM 논문의 실제 취지
+(활성화의 "대표 표본"으로 SVD 기저 계산)와도 일치한다.
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -60,17 +70,32 @@ from testbed.base.models import BaseCLModel
 class GPMAntiForgetting(BaseAntiForgetting):
     backbone_type = "classifier"
 
-    def __init__(self, activation_threshold: float = 0.97):
+    def __init__(self, activation_threshold: float = 0.97,
+                 activation_sample_size: int = 2000):
         self.activation_threshold = activation_threshold
+        # 2026-07-30 추가: on_task_end에서 activation SVD 기저를 계산할 때 쓸
+        # "대표 표본" 상한. 이전에는 compute_loss()가 매 미니배치 스텝마다
+        # (epochs_per_experience=200 전체에 걸쳐) 그 배치를 그냥 계속
+        # 누적했다 — 매 epoch은 같은 selected_data를 다시 섞어 도는 것뿐이라
+        # 200배 중복 누적이었다. NSL-KDD/UNSW-NB15 규모(선택 샘플 2500~3500개)
+        # 에서는 누적해도 수백MB라 안 터졌지만, CICIDS2018 전체 데이터(선택
+        # 샘플 약 19만개) × 200 epoch에서는 약 3860만 행(~11.8GB)까지 쌓여
+        # CUDA OOM으로 실측 확인됐다. GPM 논문의 실제 취지(활성화의 "대표
+        # 표본"으로 SVD 기저 계산)에 맞춰, 한 번의 experience당 최대
+        # activation_sample_size개까지만 모으고 그 이후로는 더 안 쌓는다.
+        self.activation_sample_size = activation_sample_size
         self._basis: Dict[str, torch.Tensor] = {}
         self._pending_data: List[torch.Tensor] = []
+        self._pending_count = 0
 
     def compute_loss(self, model: BaseCLModel,
                       new_batch: Tuple[torch.Tensor, torch.Tensor],
                       replay_batch: Optional[Tuple[torch.Tensor, torch.Tensor]]
                       ) -> torch.Tensor:
         data, labels = new_batch
-        self._pending_data.append(data.detach())
+        if self._pending_count < self.activation_sample_size:
+            self._pending_data.append(data.detach())
+            self._pending_count += len(data)
         _, _, logit = model(data)
         loss = F.binary_cross_entropy_with_logits(logit.squeeze(-1), labels.float())
         return loss
@@ -91,6 +116,7 @@ class GPMAntiForgetting(BaseAntiForgetting):
         all_data = torch.cat(self._pending_data, dim=0)
         self._update_basis(model, all_data)
         self._pending_data = []
+        self._pending_count = 0
 
     def _update_basis(self, model: BaseCLModel, data: torch.Tensor) -> None:
         activations: Dict[str, torch.Tensor] = {}
