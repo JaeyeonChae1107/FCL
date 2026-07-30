@@ -534,3 +534,117 @@ global_hparams 오버라이드로 hidden=128/latent=64 적용)와 구조 자체�
 다르다. Track A 전체(SSF/CADE/GPM)에 통일된 아키텍처를 강제한다는 기존
 설계 원칙과 CADE 고유 아키텍처 재현 사이에 트레이드오프가 있어 사용자
 판단이 필요한 채로 남겨뒀다.
+
+## 전체 코드베이스 최종 라인별 재검토 (2026-07-30, 참조 논문 코드 직접 대조)
+
+이전 검토들이 "내부 정합성"에 집중했던 것과 달리, 이번에는 `base/`,
+`common/`, `components/` 전 파일, `pipeline/cl_client.py` 전체, `experiments/`,
+`tests/`를 SSF/CADE/CND-IDS 원본 저장소 코드, 그리고 GPM 논문(SPIDER 저장소는
+여전히 코드 없음)의 **공식 GitHub 저장소**(`github.com/sahagobinda/GPM`,
+`main_pmnist.py` — 이번에 WebFetch로 처음 실제 확인)와 한 줄씩 대조했다.
+
+### 실제로 고친 것: GPM이 공식 코드와 다르게 구현되어 있었음
+
+`components/spider_gpm/gpm_anti_forgetting.py`의 이전 기록은 "GPM 원 논문
+Algorithm 1"이라고 표현했지만, 공식 코드(`main_pmnist.py`)와 대조한 결과
+실제로는 두 지점에서 달랐다 — 파일 상단 docstring에 대조 내역을 남기고 아래
+두 가지를 공식 코드와 동일하게 수정했다:
+1. **평균 중심화(centering)**: 이전 구현은 SVD 전에 activation에서
+   평균을 뺐다(`centered = activation - activation.mean(...)`). 공식 코드는
+   원본 activation에 그대로 SVD를 적용한다(`np.linalg.svd(activation, ...)`,
+   중심화 없음). 제거했다.
+2. **기저 개수 off-by-one**: 이전 구현은
+   `k = sum(cumulative < threshold) + 1`였다. 공식 코드는
+   `r = sum(cumsum(energy_ratio) < threshold)`로 `+1`이 없다(`U[:,0:r]`).
+   `+1`을 제거했다.
+
+**의도적으로 공식 코드를 따르지 않고 유지한 것**: 공식 코드는 태스크마다
+새 기저를 `np.hstack`으로 이어붙이기만 하고, 차원이 넘치면 그냥 앞부분만
+잘라낼 뿐 QR 재직교화를 하지 않는다. 이 테스트베드는 5개 experience에 걸쳐
+기저가 계속 누적되므로, 서로 다른 태스크의 SVD 결과를 그대로 이어붙이기만
+하면(태스크 간 직교성이 보장되지 않아) `basis @ basis.T`가 참된 직교
+사영행렬이 아니게 될 수 있다 — 그래서 QR 재직교화만은 공식 코드와 다르게
+유지한다(이전 기록이 이걸 "원 논문 그대로"라고 잘못 표현했던 것만 정정).
+
+### 발견했지만 코드는 바꾸지 않고 문서로만 남긴 것 (근본적인 다중 논문 통합 트레이드오프)
+
+이 항목들은 전부 "이 테스트베드가 SSF/CADE/CND-IDS/GPM 네 가지 서로 다른
+아키텍처를 **하나의 공유 백본**으로 통합해야 한다"는 근본 제약에서 나오는
+필연적 단순화다. 어느 한쪽에 맞추면 다른 쪽에서 어긋나므로, "고친다"가
+성립하지 않는다 — 대신 정확히 무엇이 다른지 여기 기록한다.
+
+1. **분류기가 z에서 바로 나온다 vs SSF는 decode(x_hat)에서 나온다**:
+   SSF의 실제 `AE_classifier.forward()`(`utils.py:59-61`)는
+   `classify = self.classifier(decode)`다 — 분류기가 **재구성 x_hat**을
+   입력으로 받고, `nn.Sequential(ReLU, Linear(input_dim,1), Sigmoid)`로
+   확률을 낸다. 이 테스트베드의 `FCLAutoEncoder.classifier`는
+   `nn.Linear(latent_dim,1)`이고 **z(잠재표현)을 직접** 입력받으며 Sigmoid도
+   없다(raw logit). CADE는 애초에 분류기와 CAE가 완전히 분리된 별도 모델
+   (`cade/classifier.py`의 MLPClassifier는 raw feature나 별도 관리되는
+   피처를 입력받지, CAE의 z를 공유하지 않음)이고, CND-IDS는 지도 분류기
+   헤드 자체가 없다(pseudo-label + metric learning). 즉 SSF·CADE·CND-IDS
+   세 논문의 "분류기가 뭘 입력받는가"가 전부 다르므로, 하나의 공유
+   backbone에서 어느 한쪽을 그대로 반영하면 나머지 둘과 어긋난다 —
+   가장 단순한 절충(z에서 바로 선형 분류)을 택했다. 이로 인해
+   `SSFAntiForgetting`의 LwF distillation도 SSF 원본처럼 sigmoid 확률
+   간 MSE가 아니라 raw logit 간 MSE가 된다(스케일이 다름, 학습에 미치는
+   영향의 절대 크기는 다르지만 방향은 동일).
+2. **공유 아키텍처의 깊이(은닉층 1개)가 CADE·CND-IDS의 실제 깊이보다 얕음**:
+   CADE의 IDS 전용 실행 설정은 은닉층 2개(`64-32-16`), CND-IDS의 실제
+   인코더는 은닉층 3개(`nInput→128→256→128→nLatent`,
+   `CND_IDS.py:16-23`)다. 이 테스트베드의 공유 `FCLAutoEncoder`는 SSF
+   공식(`utils.py:28-36`)을 따라 은닉층 1개다. `hidden_dim`/`latent_dim`의
+   **폭**을 SSF 공식에 고정한 것과 같은 논리로, **깊이**도 SSF를 기준으로
+   삼았다 — CADE·CND-IDS 양쪽 모두보다 얕지만, 그 둘조차 서로 깊이가
+   다르므로(2개 vs 3개) 어느 하나를 "더 정확한 기준"으로 세울 근거가
+   없었다.
+3. **`CLClient` Step 3~5의 "selected_data만 학습 + memory_manager는 보조
+   replay"라는 구조 자체가 SSF 원본과 다름**: SSF 원본은 `x_train_this_epoch`
+   라는 하나의 누적 데이터셋에 매 라운드 대표 샘플을 계속 이어붙여
+   (`x_train_this_epoch = torch.cat([x_train_this_epoch, ...])`, `utils.py:254`)
+   그 전체를 매번 재학습한다 — "새 데이터"와 "리플레이"를 분리하지 않는다.
+   이 테스트베드의 `BaseAntiForgetting.compute_loss(model, new_batch,
+   replay_batch)` 인터페이스는 SSF뿐 아니라 CADE/CND-IDS/GPM의 서로 다른
+   망각방지 메커니즘(distillation, gradient projection, 결합 손실)을 전부
+   하나의 계약으로 담아야 해서 나온 이 테스트베드 고유의 통합 설계다 —
+   PRD 13절 8단계 자체가 이 설계를 전제하므로, 이번 검토에서 되돌리지
+   않았다.
+
+### 발견했지만 의도적으로 그대로 둔 것 (원 논문 자체의 버그로 보임)
+
+**CND-IDS의 LwF 손실이 실제로는 이중 가중치(0.01)로 적용된다**:
+`CND_IDS.py:59-70`의 `LwFloss()`는 내부에서 이미
+`self.reg_strength * criterion(...)`(reg_strength=0.1)를 계산해 반환하는데,
+호출부(`CND_IDS.py:159`)가 다시 `* self.LwF_strength`(0.1)를 곱한다 —
+최종 가중치가 `0.1 * 0.1 = 0.01`이지, 설정값이 시사하는 `0.1`이 아니다.
+이건 원 논문 저장소 자체의 변수 이름 혼동(reg_strength를 LwFloss 내부에
+잘못 넣은 것으로 보임)으로 보이는 버그다. 이 테스트베드의
+`CNDIDSAntiForgetting`은 `lambda_cl`(0.1)을 한 번만 곱한다 — 원 저장소의
+문자 그대로의 버그를 재현하는 대신, 설정값이 원래 의도한 가중치를 그대로
+쓰기로 한다(재현이 아니라 "실제로 의도된 메커니즘"을 재조합한다는 0절
+원칙에 부합).
+
+### 검토했지만 문제없음을 확인한 것 (재확인 완료, 변경 없음)
+
+- SSF `kl_max_iter=100`(`utils.py:109,147`), `drift_threshold=0.05`
+  (`ssf.py:49`), `lwf_lambda=0.5`(`ssf.py:45`) — 전부 정확히 일치.
+- SSF `bs=128`(`ssf.py:48`) — Track A `batch_size=128`과 정확히 일치(우연이
+  아니라 SSF가 Track A 아키텍처의 근거 논문이기 때문).
+- CADE `t_mad=3.5`, `margin=10.0`, `cae-lambda-1=0.1`, `cae-lr=0.001`,
+  `cae-epochs=250`(원본, 이 테스트베드는 continual 재학습 구조 차이로
+  의도적으로 5로 축소, 근거는 `cade.yaml` 참고) — 전부 확인.
+- CND-IDS `reg_strength=0.1`, `LwF_strength=0.1`, `TripletMarginLoss(margin=2)`,
+  `nLatent=30`(참고용, global_hparams가 덮어씀), `train_epochs=20`,
+  `batch_size=64`(Track B 전용으로 이번에 반영) — 전부 확인.
+- `SSFMemoryManager`/`SPIDERMemoryManager`/`CNDIDSMemoryManager`의
+  `max_size=1000`(공통 고정값)은 SSF 원 논문의 실제 메모리 크기 공식
+  (`ssf.py:104`, `memory = x_train.shape[0]*(1-percent)` — NSL-KDD 기준
+  약 2.5만, UNSW-NB15 기준 약 3.5만)과 다르다. 하지만 `memory_manager`
+  슬롯 자체가 SSF/SPIDER/CND-IDS 메커니즘을 **같은 용량 예산 안에서
+  비교**하는 축이라, 어느 한쪽만 자기 논문의 실제 용량으로 키우면 그
+  비교 축 자체의 공정성이 깨진다(hidden_dim/batch_size를 Track 전체에
+  통일한 것과 같은 논리) — 그래서 세 매니저 모두 공통 테스트베드
+  기본값(1000)을 그대로 유지하기로 했다.
+- `common/metrics.py`, `common/result_schema.py`, `common/compatibility.py`,
+  `experiments/leaderboard_builder.py`, `pipeline/common_baselines.py`,
+  `components/novelty_baselines/*.py` — 전부 재검토, 문제 없음.
