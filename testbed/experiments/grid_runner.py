@@ -227,6 +227,17 @@ def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
                                 n_experiences=global_hparams["n_experiences"],
                                 seed=global_hparams["seed"])
         for combo in combos:
+            combo_id = make_combo_id(combo)
+            out_path = os.path.join(RESULTS_DIR, f"{combo_id}__{dataset_name}.json")
+            if os.path.exists(out_path):
+                # 이전 실행이 중간에 끊긴 뒤 이어서 돌릴 때(사용자 지시,
+                # CICIDS2018처럼 조합당 25~50분+ 걸리는 경우 재계산 낭비를
+                # 막기 위함) — 이미 결과 파일이 있는 조합은 다시 계산하지
+                # 않고 건너뛴다. 결과 유효성 자체는 validate_result()를 통과해
+                # 저장된 파일이므로 이미 보장되어 있다.
+                print(f"[{dataset_name}] {combo_id} 이미 결과 있음, 건너뜀")
+                continue
+
             t0 = time.time()
             result = run_combo_full(
                 combo, dataset_name, dataset, global_hparams, component_hparams,
@@ -235,7 +246,6 @@ def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
             print(f"[{dataset_name}] {result['combo_id']} f1={result['f1']:.3f} "
                   f"pr_auc={result['pr_auc']:.3f} bwt={result['bwt']:.3f} ({elapsed:.1f}s)")
 
-            out_path = os.path.join(RESULTS_DIR, f"{result['combo_id']}__{dataset_name}.json")
             with io.open(out_path, "w", encoding="utf-8") as f:
                 json.dump(result, f, ensure_ascii=False, indent=2)
             all_results.append(result)
