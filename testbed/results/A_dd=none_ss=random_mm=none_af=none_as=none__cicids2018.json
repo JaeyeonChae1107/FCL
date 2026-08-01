@@ -52,9 +52,9 @@
   ],
   "roc_auc": 0.974832112886665,
   "labeling_cost": 0.09999998965264016,
-  "training_time_sec": 1547.6896159648895,
+  "training_time_sec": 1920.53258395195,
   "memory_footprint": 0,
-  "avg_inference_latency_ms": 0.0012448398779805957,
+  "avg_inference_latency_ms": 0.0014700979109825013,
   "best_f1_reference": 0.9358678370385997,
   "seed": 42
 }
