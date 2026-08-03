@@ -194,7 +194,8 @@ def load_smoke_passed_combo_ids(smoke_results_path: str) -> Optional[Dict[str, s
 
 def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
              smoke_results_path: Optional[str] = None,
-             device: str = "cpu") -> List[Dict[str, Any]]:
+             device: str = "cpu",
+             shard: Optional[tuple] = None) -> List[Dict[str, Any]]:
     global_hparams, component_hparams = _load_configs()
     if smoke_results_path is None:
         smoke_results_path = os.path.join(_TESTBED_ROOT, "experiments", "smoke_test_results.json")
@@ -217,6 +218,17 @@ def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
             combos = all_combos
             print(f"경고: 스모크 테스트 결과 파일이 없어 [{dataset_name}] "
                   f"{total_combos}개 조합 전체를 실행합니다.")
+
+        if shard is not None:
+            shard_idx, n_shards = shard
+            # 스모크 통과 필터링(위 list comprehension)은 all_combos 순서를
+            # 그대로 보존하므로, 동일한 --datasets/smoke_results_path로
+            # 여러 프로세스를 띄우면 각 프로세스가 보는 combos 리스트와
+            # 인덱스가 항상 동일하다 — 그래서 인덱스 기반 분할만으로
+            # 락(lock) 파일 등 별도 동기화 없이 겹치지 않는 분배가 된다
+            # (사용자 지시: 여러 GPU/터미널에서 동시 실행 가능하게 분할).
+            combos = [c for i, c in enumerate(combos) if i % n_shards == shard_idx]
+            print(f"[{dataset_name}] shard {shard_idx}/{n_shards} 담당 조합 {len(combos)}개")
 
         # 두 데이터셋 모두 동일한 프로토콜(원본 train/test 파일 분리 유지,
         # 각 파일 내부는 고정 seed로 섞은 뒤 분할)을 쓴다 — dataset_loader.py의
@@ -265,6 +277,19 @@ if __name__ == "__main__":
         "--datasets", default="nsl-kdd,unsw-nb15",
         help="쉼표로 구분한 데이터셋 이름 목록 (nsl-kdd, unsw-nb15, cicids2018 중). "
              "예: --datasets nsl-kdd,unsw-nb15,cicids2018")
+    parser.add_argument(
+        "--shard", default=None,
+        help="'i/n' 형식으로 조합을 n등분해 i번째 몫만 실행한다(0-indexed). "
+             "여러 GPU/터미널에서 동시에 실행할 때 조합이 겹치지 않게 나누는 "
+             "용도. 예: 3개 프로세스를 동시에 돌리려면 각각 "
+             "--shard 0/3, --shard 1/3, --shard 2/3 로 실행. 모든 프로세스가 "
+             "동일한 --datasets/--smoke-results 를 써야 동일하게 나뉜다.")
     args = parser.parse_args()
     dataset_list = [d.strip() for d in args.datasets.split(",") if d.strip()]
-    run_grid(datasets=dataset_list, device=args.device)
+    shard_arg = None
+    if args.shard is not None:
+        shard_idx_str, n_shards_str = args.shard.split("/")
+        shard_idx, n_shards = int(shard_idx_str), int(n_shards_str)
+        assert 0 <= shard_idx < n_shards, "--shard 는 0 <= i < n 이어야 함"
+        shard_arg = (shard_idx, n_shards)
+    run_grid(datasets=dataset_list, device=args.device, shard=shard_arg)
