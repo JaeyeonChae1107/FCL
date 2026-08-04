@@ -54,6 +54,7 @@ label 생성에 공격 라벨을 쓰지 않으므로 이 원칙과 실제로 상
 """
 
 import copy
+import math
 from typing import List, Optional, Set, Tuple
 
 import numpy as np
@@ -64,8 +65,45 @@ from testbed.base.anti_forgetting import BaseAntiForgetting
 from testbed.base.models import BaseCLModel
 
 # CND-IDS 원본(modules/K_Means.py:18)은 [100,300,500,1000,2000]. label_budget
-# 적용으로 데이터 스케일이 훨씬 작아졌으므로(9.2절) 비례해 축소했다.
-_CLUSTER_K_CANDIDATES = [5, 10, 20, 30, 50, 80]
+# 적용으로 데이터 스케일이 작아진 NSL-KDD/UNSW-NB15 기준으로 비례 축소해
+# [5,10,20,30,50,80]으로 고정했었다.
+#
+# **실측으로 발견된 버그(2026-08-04)**: 이 고정값은 "라운드당 선택 데이터가
+# 수천 건"이라는 가정(주석에 명시)에서 나온 것인데, CICIDS2018 전체 데이터
+# (~1200만 행)를 쓰면 라운드당 선택 데이터가 약 24만 건으로 그 가정을
+# 100배 가까이 벗어난다(실측: NSL-KDD 2,519건, UNSW-NB15 3,507건 vs
+# CICIDS2018 ~240,000건, testbed/data/dataset_loader.py 기준). K를 80까지만
+# 써도 클러스터 하나에 수천 건이 뭉치고, "정상 라벨이 하나라도 속한 클러스터 =
+# 정상 클러스터"라는 CND-IDS의 pseudo-labeling 기준(on_experience_start)이
+# 사실상 거의 모든 클러스터를 "정상"으로 덮어버린다 — 그 결과
+# _pseudo_labels_for_batch가 거의 전부 0(정상)을 반환하고, _metric_loss의
+# "같은 pseudo-label 쌍은 거리를 줄여라" 항이 "거의 모든 샘플을 한 점으로
+# 모아라"가 되어 인코더가 붕괴한다(CICIDS2018 Track B 3개 조합 모두
+# roc_auc≈0.5, memory_manager 선택과 무관하게 완전히 동일한 결과 — 실측
+# 확인, docs/metric_justification.md 참고).
+#
+# 고정 K 리스트 대신 n(실제 선택 데이터 크기)에 비례해 K를 계산하되,
+# **sqrt(n) 스케일링**을 쓴다(K ~ sqrt(n/2)는 K-means에서 흔히 쓰는 경험적
+# 기준). n에 선형으로 비례시키면(예: n=240,000에서 K가 최대 7621까지 커짐)
+# 로컬 벤치마크(합성 데이터, n=240,000·80차원)에서 K=80 KMeans 한 번조차
+# 5분을 넘겨 완료되지 않는 것을 실측으로 확인했다 — CICIDS2018 Track B
+# 조합은 라운드마다 이 elbow 탐색(후보 6개)을 반복해야 하므로 선형
+# 스케일링은 실행이 사실상 불가능한 수준으로 느려질 위험이 크다. sqrt
+# 스케일링은 NSL-KDD 기준점(n_ref=2519)에서 기존 [5,10,20,30,50,80]과
+# 정확히 같은 값을 내면서(회귀 없음), CICIDS2018 규모(n≈240,000)에서는
+# 최대 K가 약 780 정도로 억제되어(선형 스케일링의 7621 대비 계산량이
+# 훨씬 적음) 여전히 원래 붕괴 원인(K=80으로는 클러스터당 수천 건이 뭉쳐
+# "정상 라벨이 하나라도 속하면 정상 클러스터" 기준이 사실상 전체를
+# 뒤덮던 문제)을 완화하기에 충분한 해상도 개선을 제공한다.
+_CLUSTER_K_REF_N = 2519
+_CLUSTER_K_REF_CANDIDATES = (5, 10, 20, 30, 50, 80)
+_CLUSTER_K_REF_RATIOS = tuple(k / math.sqrt(_CLUSTER_K_REF_N) for k in _CLUSTER_K_REF_CANDIDATES)
+
+
+def _cluster_k_candidates(n: int) -> List[int]:
+    sqrt_n = math.sqrt(n)
+    scaled = {max(2, round(ratio * sqrt_n)) for ratio in _CLUSTER_K_REF_RATIOS}
+    return sorted(scaled)
 
 
 def _elbow_kmeans_fit(data_np: np.ndarray, candidates: List[int], seed: int = 42):
@@ -143,7 +181,7 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         데이터 중 label=0인 것만 걸러낸 것이다(비어있지 않을 때만 호출됨 —
         cl_client.py 참고)."""
         data_np = selected_data.detach().cpu().numpy()
-        self._kmeans = _elbow_kmeans_fit(data_np, _CLUSTER_K_CANDIDATES)
+        self._kmeans = _elbow_kmeans_fit(data_np, _cluster_k_candidates(len(data_np)))
 
         ref_np = normal_subset.detach().cpu().numpy()
         ref_clusters = self._kmeans.predict(ref_np)
