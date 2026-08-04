@@ -171,18 +171,35 @@ class CLClient:
             drift_detected = self.drift_detector.detect(new_data, buf_raw)
 
         # ---- Step 3: 샘플 선택과 라벨 예산 확정 ----
-        label_budget_int = self._label_budget_int(len(new_data), labeling_budget)
-        sel_idx = self.sample_selector.select(
-            new_data, new_labels, label_budget_int, drift_score)
-        if len(sel_idx) == 0:
-            sel_idx = list(range(min(label_budget_int, len(new_data))))
-        selected_data = new_data[sel_idx]
-        selected_labels = new_labels[sel_idx]
-        # 이번 라운드 라벨 예산 안에서 실제로 "정상(label=0)"이라고 알려진
+        if self.track == "B":
+            # CND-IDS 원 논문(Fuhrman et al., Algorithm 1: "Get Xtrain from
+            # experience data Ei" -> "Fit CFE to Xtrain")은 label_budget
+            # 개념 없이 experience 전체를 그대로 학습에 쓴다.
+            # CNDIDSAntiForgetting.compute_loss()도 selected_labels를 전혀
+            # 쓰지 않는 라벨-프리 설계다(12.5절, "라벨-프리 준수" 참고) —
+            # 즉 Track B는 애초에 라벨을 한 개도 소비하지 않으므로,
+            # "라벨링 비용 절약"을 명목으로 한 label_budget 제한을 적용하면
+            # 아낀 라벨 비용 없이 원 논문 대비 데이터만 1/10로 줄어드는
+            # 결과가 된다(실측 확인 후 사용자 결정,
+            # docs/metric_justification.md 참고). Track B는 label_budget
+            # 게이트를 건너뛰고 new_data 전체를 그대로 쓴다.
+            label_budget_int = len(new_data)
+            selected_data = new_data
+            selected_labels = new_labels
+        else:
+            label_budget_int = self._label_budget_int(len(new_data), labeling_budget)
+            sel_idx = self.sample_selector.select(
+                new_data, new_labels, label_budget_int, drift_score)
+            if len(sel_idx) == 0:
+                sel_idx = list(range(min(label_budget_int, len(new_data))))
+            selected_data = new_data[sel_idx]
+            selected_labels = new_labels[sel_idx]
+        # selected_data(Track A는 라벨 예산 안의 데이터, Track B는 위에서
+        # 정한 대로 experience 전체) 중 실제로 "정상(label=0)"이라고 알려진
         # 서브셋 — CADE-MAD/PCA 재보정(step 6)과 CND-IDS 클러스터링(아래)
         # 양쪽에서 "정상 참조"로 쓴다. 별도로 고정된 참조 표본을 만들지 않고
-        # 라벨 예산 안의 데이터만 쓰므로 labeling_budget 비율에 자동으로
-        # 비례한다(docs/metric_justification.md 참고).
+        # selected_data에서 바로 걸러내므로 데이터 규모에 자동으로 비례한다
+        # (docs/metric_justification.md 참고).
         normal_subset = selected_data[selected_labels == 0]
 
         if self.drift_detector.uses_shared_representation:

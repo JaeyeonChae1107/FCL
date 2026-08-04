@@ -142,7 +142,11 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
     n_inference_samples = sum(len(tx) for tx, _ in all_test_splits)
     avg_inference_latency_ms = (inference_time / max(n_inference_samples, 1)) * 1000.0
 
-    labeling_cost = total_selected / max(total_available, 1)
+    # Track B(CND-IDS)는 compute_loss()가 라벨을 전혀 쓰지 않는 라벨-프리
+    # 설계라(cndids_anti_forgetting.py 참고), 이제 experience 전체를 그대로
+    # 학습에 쓰더라도(cl_client.py Step 3) 그건 "라벨링 비용"이 아니다 —
+    # 실제로 소비한 라벨 수는 항상 0이므로 그 값을 그대로 반영한다.
+    labeling_cost = 0.0 if combo["track"] == "B" else total_selected / max(total_available, 1)
     memory_footprint = client.memory_manager.size()
 
     result = {
@@ -195,7 +199,8 @@ def load_smoke_passed_combo_ids(smoke_results_path: str) -> Optional[Dict[str, s
 def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
              smoke_results_path: Optional[str] = None,
              device: str = "cpu",
-             shard: Optional[tuple] = None) -> List[Dict[str, Any]]:
+             shard: Optional[tuple] = None,
+             track: Optional[str] = None) -> List[Dict[str, Any]]:
     global_hparams, component_hparams = _load_configs()
     if smoke_results_path is None:
         smoke_results_path = os.path.join(_TESTBED_ROOT, "experiments", "smoke_test_results.json")
@@ -218,6 +223,15 @@ def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
             combos = all_combos
             print(f"경고: 스모크 테스트 결과 파일이 없어 [{dataset_name}] "
                   f"{total_combos}개 조합 전체를 실행합니다.")
+
+        if track is not None:
+            # 특정 Track(예: labeling_budget 처리 방식이 바뀐 Track B)만
+            # 재계산이 필요할 때, 다른 Track의 기존 결과 파일 존재 여부와
+            # 무관하게 확실히 그 Track만 실행되도록 명시적으로 필터링한다
+            # (skip 로직이 우연히 같은 효과를 내더라도, 결과 파일이 하나라도
+            # 빠져 있으면 의도치 않게 다른 Track까지 재계산될 위험을 없앤다).
+            combos = [c for c in combos if c["track"] == track]
+            print(f"[{dataset_name}] Track {track}만 실행 대상 {len(combos)}개")
 
         if shard is not None:
             shard_idx, n_shards = shard
@@ -284,6 +298,12 @@ if __name__ == "__main__":
              "용도. 예: 3개 프로세스를 동시에 돌리려면 각각 "
              "--shard 0/3, --shard 1/3, --shard 2/3 로 실행. 모든 프로세스가 "
              "동일한 --datasets/--smoke-results 를 써야 동일하게 나뉜다.")
+    parser.add_argument(
+        "--track", default=None, choices=["A", "B"],
+        help="'A' 또는 'B'를 주면 그 Track에 속한 조합만 실행한다. 특정 "
+             "Track만 코드가 바뀌어 재계산이 필요할 때(예: Track B), 다른 "
+             "Track의 결과 파일이 우연히 없어도 실행되지 않도록 명시적으로 "
+             "막아준다. 생략하면 두 Track 다 대상이 된다(기존 동작).")
     args = parser.parse_args()
     dataset_list = [d.strip() for d in args.datasets.split(",") if d.strip()]
     shard_arg = None
@@ -292,4 +312,4 @@ if __name__ == "__main__":
         shard_idx, n_shards = int(shard_idx_str), int(n_shards_str)
         assert 0 <= shard_idx < n_shards, "--shard 는 0 <= i < n 이어야 함"
         shard_arg = (shard_idx, n_shards)
-    run_grid(datasets=dataset_list, device=args.device, shard=shard_arg)
+    run_grid(datasets=dataset_list, device=args.device, shard=shard_arg, track=args.track)
