@@ -168,6 +168,10 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         self._teacher: Optional[BaseCLModel] = None
         self._kmeans = None
         self._normal_cluster_ids: Set[int] = set()
+        # _pseudo_labels_for_batch()가 매 미니배치마다 다시 계산할 수 있도록
+        # 캐시해두는 값들 — on_experience_start()에서 한 번만 채운다.
+        self._centers: Optional[torch.Tensor] = None
+        self._is_normal_cluster: Optional[torch.Tensor] = None
         # PRD 15.4절 — Track B pseudo-label 균형 확인(경고 전용)을 위해 마지막
         # compute_loss 호출에서 생성된 pseudo-label의 다수 클래스 비율을 기록한다.
         self.last_pseudo_label_ratio: Optional[float] = None
@@ -187,15 +191,37 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         ref_clusters = self._kmeans.predict(ref_np)
         self._normal_cluster_ids = set(ref_clusters.tolist())
 
+        # 실측 발견(2026-08-05): 클러스터 배정을 매 미니배치마다
+        # sklearn.predict()로 다시 계산하면(CPU 왕복 + 호출 오버헤드) 라운드당
+        # 수만~수십만 번 호출이 반복되어 CICIDS2018 규모에서 감당 불가능할
+        # 정도로 느려진다(K-means 스케일링 수정과 label_budget 제거가 겹치며
+        # 처음으로 드러남). KMeans.predict()는 정의상 "유클리드 거리로 가장
+        # 가까운 클러스터 중심 찾기"이므로, 중심점(cluster_centers_)만 라운드당
+        # 한 번 GPU 텐서로 캐시해두면 torch.cdist(...).argmin(dim=1)로
+        # 수학적으로 동일한 결과를 GPU에서 직접 계산할 수 있다(로컬에서
+        # sklearn.predict() 대 이 방식을 float32/float64 양쪽으로 대조해 완전히
+        # 일치함을 확인함, docs/metric_justification.md 참고). elbow 탐색·
+        # 최종 fit 자체는 원본과 동일하게 sklearn/CPU를 그대로 쓴다 — 반복
+        # 호출되는 predict()만 대체한다.
+        device = selected_data.device
+        self._centers = torch.tensor(
+            self._kmeans.cluster_centers_, dtype=selected_data.dtype, device=device)
+        n_clusters = self._centers.shape[0]
+        is_normal = torch.zeros(n_clusters, dtype=torch.bool, device=device)
+        normal_idx = [c for c in self._normal_cluster_ids if 0 <= c < n_clusters]
+        if normal_idx:
+            is_normal[torch.tensor(normal_idx, dtype=torch.long, device=device)] = True
+        self._is_normal_cluster = is_normal
+
     def _pseudo_labels_for_batch(self, data: torch.Tensor) -> torch.Tensor:
-        if self._kmeans is None:
+        if self._centers is None:
             # on_experience_start이 호출되지 않은 경우(단위 테스트 등)의 안전
             # 폴백 — 전부 "정상"으로 간주(원본의 "정상 참조와 다른 클러스터가
             # 없으면 전부 정상" 극단 상황과 동일하게 처리).
             return torch.zeros(len(data), dtype=torch.long, device=data.device)
-        cluster_ids = self._kmeans.predict(data.detach().cpu().numpy())
-        pseudo = [0 if c in self._normal_cluster_ids else 1 for c in cluster_ids]
-        return torch.tensor(pseudo, dtype=torch.long, device=data.device)
+        cluster_ids = torch.cdist(data, self._centers).argmin(dim=1)
+        pseudo = (~self._is_normal_cluster[cluster_ids]).long()
+        return pseudo
 
     def compute_loss(self, model: BaseCLModel,
                       new_batch: Tuple[torch.Tensor, torch.Tensor],

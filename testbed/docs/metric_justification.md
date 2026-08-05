@@ -846,3 +846,56 @@ n=240,000·80차원)에서 K=80 하나조차 5분 넘게 끝나지 않는 것을
 K-means elbow 탐색 자체의 소요 시간이 늘 수 있으므로, CICIDS2018 Track B
 조합의 실행 시간이 비정상적으로(예: 몇 시간 이상) 길어지지 않는지도
 같이 확인해야 한다.
+
+## Track B가 label_budget 없이 experience 전체를 쓰도록 수정 (2026-08-05)
+
+**문제 제기**: CND-IDS 원 논문(Fuhrman et al., DAC 2025) Algorithm 1은
+`labeling_budget` 개념 없이 매 라운드 experience 전체(Xtrain)를 그대로
+학습에 쓴다. `CNDIDSAntiForgetting.compute_loss()`도 `selected_labels`를
+전혀 쓰지 않는 라벨-프리 설계인데(12.5절), 이 테스트베드는 Track A/B
+구분 없이 모든 조합에 `labeling_budget`(10%) 게이트를 강제하고 있었다 —
+Track B는 라벨을 애초에 하나도 안 쓰는데, "라벨링 비용 절약"을 명목으로
+데이터만 1/10로 줄어드는 상태였다(사용자 문제 제기 후 확인·수정 결정).
+
+**수정**: `cl_client.py` Step 3에서 `track=="B"`일 때 `sample_selector`/
+`label_budget` 게이트를 건너뛰고 `new_data` 전체를 그대로 쓰도록 분기
+추가. Track A 코드 경로는 들여쓰기만 바뀌고 글자 하나 안 바뀜 — 같은
+NSL-KDD Track A 조합을 수정 전/후 코드로 로컬에서 각각 실행해 소수점
+10자리까지 동일한 결과(`git stash`로 전/후 코드를 오가며 비교)로 직접
+검증했다. `grid_runner.py`의 `labeling_cost`도 Track B는 실제 라벨
+소비량(항상 0)을 반영하도록 수정.
+
+## CND-IDS pseudo-labeling을 매 미니배치 sklearn 호출 대신 캐시된 GPU 텐서 연산으로 교체 (2026-08-05)
+
+**문제**: 위 수정으로 Track B가 라운드 전체 데이터를 쓰게 되면서,
+`_pseudo_labels_for_batch()`가 매 미니배치마다 `KMeans.predict()`를
+CPU(sklearn)에서 새로 호출하는 기존 구조의 비용이 감당 불가능한 수준으로
+커졌다(CICIDS2018 기준 라운드당 최대 약 75만 번 호출 추정). 원본
+`CND_IDS.py:fit()`을 다시 대조한 결과, **원본은 라운드 시작 시 전체
+데이터에 대해 `cluster_labels = self.labeler.fit_transform(x)`를 단
+한 번만 호출**하고 그 결과를 라운드 내내 재사용한다 — 매 배치 재계산은
+이 테스트베드 구현에서 생긴 비효율이었다(K 스케일링 수정과 label_budget
+제거가 겹치며 처음 드러남).
+
+**수정**: `KMeans.predict()`는 정의상 "유클리드 거리로 가장 가까운
+클러스터 중심 찾기"이므로, `on_experience_start()`에서 클러스터 중심
+(`cluster_centers_`)과 "정상 클러스터 여부" 불리언 벡터를 GPU 텐서로
+캐시해두고, `_pseudo_labels_for_batch()`는 `torch.cdist(data,
+centers).argmin(dim=1)`로 직접 계산한다. `cl_client.py`는 전혀 건드리지
+않았다(Track A는 이 파일 자체를 안 쓰므로 영향 불가능). 클러스터링을
+실제로 학습(elbow 탐색 + 최종 fit)하는 부분은 원본과 동일하게
+sklearn/CPU를 그대로 쓴다 — 반복 호출되는 predict()만 대체했다.
+
+**검증(둘 다 실측 완료)**:
+1. 합성 데이터(5,000 샘플 · 37클러스터)로 sklearn `predict()`와
+   `torch.cdist(...).argmin(dim=1)`를 float32/float64 양쪽으로 대조 —
+   **5,000개 전부 100% 일치**.
+2. `git stash`로 이 수정 전/후 코드를 오가며 실제 Track B 조합
+   (`B_dd=none_ss=random_mm=none_af=cndids_as=pca`, NSL-KDD, label_budget
+   제거 반영된 상태)을 각각 끝까지 실행 — f1/precision/recall/pr_auc/bwt
+   **소수점 10자리까지 완전히 동일**(`f1=0.7254635911` 등).
+
+**남은 확인 사항**: 이 수정 자체는 결과를 안 바꾸므로 기존 Track B
+결과와 재계산 결과가 (플랫폼 차이로 인한 부동소수점 오차 범위 내에서)
+같아야 하지만, GPU 서버에서 실제로 CICIDS2018 규모까지 실행 시간이
+감당 가능한 수준으로 줄었는지는 아직 확인 전이다.
