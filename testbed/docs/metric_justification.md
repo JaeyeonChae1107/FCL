@@ -899,3 +899,157 @@ sklearn/CPU를 그대로 쓴다 — 반복 호출되는 predict()만 대체했�
 결과와 재계산 결과가 (플랫폼 차이로 인한 부동소수점 오차 범위 내에서)
 같아야 하지만, GPU 서버에서 실제로 CICIDS2018 규모까지 실행 시간이
 감당 가능한 수준으로 줄었는지는 아직 확인 전이다.
+
+## 공유 백본 hidden_dim/latent_dim을 데이터셋별 SSF 공식으로 전환 (2026-08-11)
+
+**문제 제기**: `FCLAutoEncoder`의 `hidden_dim=128`/`latent_dim=64`가 UNSW-NB15
+(196차원)에서 SSF 공식으로 한 번 계산한 값을 3개 데이터셋 전부에 고정
+적용하고 있었다. SSF 원 논문 저장소(`ssf.py:51-54,116-120`)는 이 공식
+(`nearest_pow2=2**round(log2(input_dim))`; `hidden=nearest_pow2//2`;
+`latent=nearest_pow2//4`)을 데이터셋을 로드할 때마다 매번 새로 계산한다 —
+이 테스트베드의 기존 주석은 NSL-KDD엔 이미 이 값이 틀렸다는 걸(공식대로면
+hidden=64/latent=32) 스스로 인정하고 있었다.
+
+**수정**: `base/models.py`에 `ssf_backbone_dims(input_dim)` 함수 추가.
+`experiments/grid_runner.py`/`experiments/smoke_test.py`가 매 데이터셋의
+`input_dim`으로 이 함수를 호출해 `hp["hidden_dim"]`/`hp["latent_dim"]`을
+그 자리에서 계산하도록 수정 — `global_hparams.yaml`의 고정값 필드는 제거.
+`pipeline/cl_client.py`가 이 값을 `merged_component_kwargs`에 그대로 주입하는
+기존 구조 덕분에 CADE 사설 encoder를 포함한 모든 "encoder-like" 컴포넌트가
+동일 데이터셋에서는 여전히 통일된 크기를 공유한다(추가 코드 불필요, 기존
+설계가 이미 이렇게 되어 있었음 — `cl_client.py:48-62` 확인).
+
+- NSL-KDD(121차원): `hidden=64, latent=32` (기존 128/64에서 축소)
+- UNSW-NB15(196차원): `hidden=128, latent=64` (기존과 동일값 — 원래 이 값을
+  기준으로 절충했던 것이므로 무변화)
+- CICIDS2018: 로컬에 원본 데이터가 없어 실제 input_dim을 미리 확인할 수
+  없음(2026-07-30 원-핫 인코딩 수정 이후 값 미기록) — GPU 서버에서 실제
+  실행 시 로그로 자동 확인됨.
+
+**검증**: `pytest testbed/tests/`(13개 전부 통과, 회귀 없음) +
+`python -m testbed.experiments.smoke_test --datasets nsl-kdd,unsw-nb15`로
+93개 조합이 새 차원에서 에러 없이 도는지 확인(결과는 아래 별도 기록).
+
+## CND-IDS K-means 후보를 원 논문 고정 리스트로 복귀 + fit 성능 최적화 (2026-08-11)
+
+**재검토 배경**: 2026-08-04에 도입한 sqrt(n) 스케일링(`_cluster_k_candidates`)은
+CND-IDS 원문을 다시 정밀 대조하지 않고 내가 고안한 공식이었다. 원문
+(`K_Means.py:11-36`)을 재확인한 결과 `[100,300,500,1000,2000]`을 7개 평가
+데이터셋 전부에 데이터셋 무관 고정값으로 쓴다 — 스케일링 공식 자체가
+없다. 테스트베드가 이 리스트를 `[5,10,20,30,50,80]`으로 축소했던 이유는
+당시 Track B에 적용되던 label_budget 서브샘플링(~10%)을 보정하기
+위해서였는데(코드 주석에 명시), 그 서브샘플링은 2026-08-05에 이미
+제거됐다 — 즉 축소해야 했던 이유 자체가 사라진 상태였다.
+
+**수정**: `_cluster_k_candidates(n)`을 제거하고 `_CLUSTER_K_CANDIDATES =
+(100, 300, 500, 1000, 2000)` 고정값으로 복귀. `_elbow_kmeans_fit`에
+`fit_sample_size` 매개변수 추가 — 데이터가 이 값보다 크면 무작위
+부분표본에서만 elbow 탐색·최종 fit을 수행하고(GPM의 `activation_sample_size`와
+동일 패턴), 실제 pseudo-label 배정은 이미 검증된 GPU 벡터화 predict로
+전체 데이터에 적용한다. `cluster_fit_sample_size: 10000`을
+`component_hparams/cndids.yaml`에 추가.
+
+**성능 실측(합성 데이터, N=200,000·80차원, K=2000)**:
+| cap | elbow(6 fits) | 최종 fit | 합계/round | ×5 experience |
+|---|---|---|---|---|
+| 10,000 | 56.8s | 93.7s | 150.5s | **약 12.5분/콤보** |
+| 20,000 | 100.4s | 176.8s | 277.3s | 약 23.1분/콤보 |
+
+cap=10,000 채택 — CICIDS2018 규모(~24만 건/round)에서도 콤보당 K-means
+부분이 약 12.5분으로, 기존 7시간+ 정체 대비 압도적으로 개선. NSL-KDD(약
+2,519건/round)·UNSW-NB15(약 3,507건/round)는 cap보다 훨씬 작아 부분표본
+경로 자체가 발동하지 않는다(항상 전체 데이터로 fit).
+
+**품질 실측 1 — 부분표본 fit이 전체 fit과 동등한가(합성, N=200,000, 실제
+코드처럼 normal_subset=label=0 전체(18만 건) 사용)**:
+| | fit 시간 | 정상 클러스터 수 | pseudo attack 비율 | 참라벨(10%) 일치율 |
+|---|---|---|---|---|
+| 전체 fit | 594.5s | 1854/2000 | 0.1000 | **1.0000** |
+| 부분표본 fit(cap=10,000) | 38.2s | 1943/2000 | 0.1000 | **1.0000** |
+
+전체 fit vs 부분표본 fit의 pseudo-label 자체도 200,000개 전부 **100% 일치**.
+(주의: 최초 시도에서 normal 참조 표본을 임의로 200개만 준 합성 실험은
+"K=2000이 정상/공격 비율을 뒤집는다"는 잘못된 결과를 냈었다 — 실제 코드는
+`normal_subset = selected_data[selected_labels==0]`로 그 라운드의 정상
+데이터 전체를 참조하므로(`cl_client.py:207`) 200개는 비현실적으로 작은
+설정이었다. 위 표는 실제 코드와 같은 조건으로 재실행한 결과다.)
+
+**품질 실측 2 — 원 논문 K리스트가 작은 데이터(NSL-KDD)에서도 나은가**
+(`git stash`로 신구 코드를 오가며 `B_dd=none_ss=random_mm=cndids_af=cndids_as=pca`
+NSL-KDD 콤보를 5-experience 전체 완주, Phase 1의 hidden_dim 수정은 양쪽
+다 적용된 상태로 K리스트만 격리):
+| | f1 | precision | recall | pr_auc | roc_auc | bwt |
+|---|---|---|---|---|---|---|
+| 기존 `[5,10,20,30,50,80]` | 0.7255 | 0.5692 | 0.9999 | 0.8039 | 0.7652 | -0.0882 |
+| 신규 `[100,300,500,1000,2000]` | **0.8556** | **0.8494** | 0.8620 | **0.8947** | **0.8649** | **-0.0031** |
+
+기존 축소 리스트는 recall≈1.0·precision=0.57 패턴(거의 모든 샘플을
+이상치로 판정하는 퇴화 상태)이었고, 원 논문 리스트로 복귀하니 precision이
+크게 개선되며 F1/PR-AUC/ROC-AUC/BWT 전부 개선됐다 — CICIDS2018 붕괴만
+고치는 게 아니라 NSL-KDD 규모에서도 원 논문 리스트가 더 낫다는 것을 실측
+확인. "작은 데이터에 큰 K를 쓰면 나빠질 것"이라는 사전 우려는 기각됐다.
+
+## CADE 사설 encoder 미니배치 학습 도입 + encoder_lr 보정 (2026-08-11)
+
+**발견**: `components/cade/cade_drift_detector.py`의 `fit()`이
+`encoder_epochs`(=5)회 반복하며 매번 `train_step`에 selected_data 전체를
+미니배치 분할 없이 한 번에 넘기고 있었다 — 즉 "5 epoch"이 아니라 총 5회의
+그래디언트 업데이트에 불과했다. CADE 원문(`run_drebin_cade.sh`/
+`run_ids_cade.sh`)을 재대조한 결과 Drebin(`--cae-batch-size 64`)/
+IDS2018(`--cae-batch-size 512`) 모두 배치 크기만 다를 뿐 미니배치 자체는
+항상 쓴다. `encoder_lr=0.001`도 CADE 원문의 "실제로 쓰이지 않는 argparse
+기본값"을 인용한 것이었다 — 실제 CADE 실험은 두 데이터셋 모두
+`--cae-lr 0.0001`로 override해서 돈다.
+
+**수정**: `fit()`에 표준 미니배치 학습(매 epoch마다 셔플 후 batch_size 단위
+분할) 추가. batch_size는 CADE 원문의 데이터셋별 값(64/512)이 이 테스트베드의
+3개 데이터셋과 대응되지 않으므로(NSL-KDD·UNSW-NB15는 CADE가 평가하지 않은
+데이터셋) 새로 추측하지 않고 `global_hparams.batch_size`(Track A 공유값,
+`pipeline/cl_client.py`가 `merged_component_kwargs`에 주입)를 재사용.
+`component_hparams/cade.yaml`의 `encoder_lr`을 0.0001로 수정.
+
+**검증(`git stash`로 신구 코드를 오가며 pure-CADE 콤보
+`A_dd=cade_ss=random_mm=none_af=none_as=cade_mad` NSL-KDD 5-experience
+전체 완주)**:
+| | f1 | precision | recall | pr_auc | roc_auc | bwt |
+|---|---|---|---|---|---|---|
+| 기존(통짜 5스텝, lr=0.001) | 0.7297 | 0.9554 | 0.5903 | 0.9090 | 0.8693 | -0.0261 |
+| 신규(미니배치, lr=0.0001) | **0.7866** | 0.9573 | **0.6676** | 0.9082 | 0.8429 | **0.0125** |
+
+두 경우 모두 붕괴 없이 정상 범위(precision 0.95대)로 동작하며, F1/recall/BWT는
+신규 쪽이 뚜렷이 낫고 PR-AUC는 거의 동일, ROC-AUC는 소폭(0.026) 하락 —
+전반적으로 순개선이며 최소한 퇴보는 아님을 확인.
+
+## 분류기 헤드: classifier(z) 유지, classifier(decoder(z))는 채택하지 않음 (2026-08-11)
+
+**문제 제기**: `base/models.py`의 `FCLAutoEncoder.classifier`가 SSF 원문
+(`utils.py:59-61`, `classifier(decoder(z))`)과 달리 잠재 표현 `z`에서 바로
+분류한다 — SSF 방법론을 온전히 쓰지 못하는 것 아니냐는 문제 제기.
+
+**검토**: `classifier(decoder(z))`로 바꾸는 것 자체의 기술적 blast radius는
+작다(`base/models.py` 생성자·forward 및 `pipeline/common_baselines.py`의
+`NoAnomalyScorer.score()` 두 곳 — GPM은 `nn.Linear`를 이름으로 제네릭
+순회하므로 자동 적응, CADE/CND-IDS는 `z`/`x_hat`을 classifier를 거치지
+않고 직접 소비하므로 무관). 하지만 이 변경을 채택할 근거의 성격이 같은
+세션에서 고친 다른 두 버그(공유 백본 hidden_dim/latent_dim, CADE 미니배치
+학습)와 근본적으로 다르다:
+
+- hidden_dim/latent_dim은 이 테스트베드 스스로 "NSL-KDD엔 이미 틀렸다"고
+  인정하고 있던 자기 시인 버그였고, CADE도 "폭은 데이터셋마다 달라야
+  한다"는 원칙엔 동의해 근거가 두 논문에서 나왔다. CADE 미니배치 학습
+  누락도 원문과 명백히 다르게 구현된, 마찬가지로 자기 시인급 버그였다.
+  두 경우 모두 "대안이 없어 채택 외에 선택지가 없는" 상황이었다.
+- `classifier(decoder(z))`는 그런 종류의 버그가 아니다. `classifier(z)`는
+  이미 "가장 단순한 절충"으로 문서화된, 그 자체로 정당한 설계다(SSF는
+  `decoder(z)`를 쓰지만, CADE는 분류기와 오토인코더가 아예 분리된 별도
+  모델이라 이 축에 의견이 없고, CND-IDS는 지도 분류기 헤드 자체가 없어
+  역시 의견이 없다). 즉 지금 있는 근거는 "SSF가 이렇게 한다" 하나뿐이다.
+
+**결정: 채택하지 않는다.** 실측(A/B) 없이 이 상태로 Track A 90개 조합
+전부가 공유하는 백본을 SSF 하나의 설계로 바꾸면, 근거 없이 특정 논문을
+우대하는 것이 되어 이 테스트베드의 목적(0절 — 재조합·비교, 특정 논문
+재현이 아님)에 어긋난다. "고칠 수 없어서"가 아니라 "지금 가진 근거로는
+공유 그리드에 강제할 명분이 없어서" 그대로 둔다 — 이 판단은 hidden_dim/
+CADE 미니배치 건과 마찬가지로 실증적 근거를 먼저 확인한 뒤 내린 것이지,
+반대로 근거 없이 바꾸지 않기로 한 것도 아니다(둘 다 실측·원문 대조를
+거쳤다는 점은 동일하다 — 결과만 "바꾼다"/"안 바꾼다"로 갈렸을 뿐).

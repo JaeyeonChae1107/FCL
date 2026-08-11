@@ -15,7 +15,25 @@ triplet_margin: 2.0
 # CND_IDS.py:76-78 TripletMarginLoss(margin=2), semihard mining(TripletMarginMiner)
 # — 정상(0)/신규(1) pseudo-label 클러스터 간 거리 학습에 사용.
 
+cluster_fit_sample_size: 10000
+# 2026-08-11 추가 — 원 논문에는 없는 이 테스트베드 고유의 성능 최적화
+# 하이퍼파라미터(GPM의 activation_sample_size와 동일한 성격). K-means
+# 클러스터 후보를 원 논문 리스트([100,300,500,1000,2000], 데이터셋 무관
+# 고정)로 되돌리면서, CICIDS2018처럼 라운드당 선택 데이터가 수십만 건인
+# 경우 K=2000 fit을 experience당 7회(elbow 6+최종 1) 반복하는 비용이
+# 감당 불가능해진다. 데이터가 이 값보다 크면 무작위 부분표본에서만
+# fit하고(중심점만 찾으면 됨), 실제 pseudo-label 배정은 이미 검증된 GPU
+# 벡터화 predict로 전체 데이터에 적용한다. 합성 데이터(N=240,000, 80차원)
+# 로컬 벤치마크 실측: cap=10,000일 때 K=2000 elbow+최종fit 전체가 라운드당
+# 약 150초(5 experience 기준 콤보당 약 12.5분) — cap=20,000이면 약 277초
+# (콤보당 약 23분)로 늘어난다. NSL-KDD(라운드당 약 2,519건)·UNSW-NB15
+# (약 3,507건)는 이 값보다 훨씬 작아 부분표본 경로 자체가 발동하지 않는다
+# (항상 전체 데이터로 fit — 기존과 동일). 이 값 자체는 원 논문 근거가
+# 없는 순수 엔지니어링 절충이므로, 결과 품질이 나빠지면(A/B로 확인,
+# docs/metric_justification.md 참고) 조정 대상이다.
+
 latent_dim: 30
 # CND_IDS.py:13 기본 latent 차원 (encoder: nInput→128→256→128→latent).
-# 단, 이 테스트베드는 10.1절 global_hparams.latent_dim=64를 모든 조합에
-# 동일 적용하므로, 이 값은 실제로는 global_hparams가 덮어쓴다(참고용 기록).
+# 단, 이 테스트베드는 10.1절에 따라 공유 백본의 latent_dim(2026-08-11부터
+# SSF 공식으로 데이터셋마다 계산 — global_hparams.yaml 참고)을 모든 조합에
+# 동일 적용하므로, 이 값은 실제로는 그 계산값으로 덮어써진다(참고용 기록).

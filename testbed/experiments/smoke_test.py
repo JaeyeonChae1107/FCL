@@ -14,7 +14,7 @@ from typing import Any, Dict, List
 import torch
 import yaml
 
-from testbed.base import FCLAutoEncoder
+from testbed.base import FCLAutoEncoder, ssf_backbone_dims
 from testbed.common.compatibility import enumerate_valid_combos
 from testbed.common.result_schema import make_combo_id
 from testbed.components.cndids.cndids_anti_forgetting import CNDIDSAntiForgetting
@@ -62,6 +62,10 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
     input_dim = dataset["input_dim"]
     hp = dict(global_hparams)
     hp["_input_dim"] = input_dim
+    # 2026-08-11: hidden_dim/latent_dim을 SSF 원 논문 공식으로 이 데이터셋의
+    # input_dim에 맞춰 그때그때 계산한다(configs/global_hparams.yaml 주석
+    # 참고) — grid_runner.py의 run_combo_full과 동일한 근거.
+    hp["hidden_dim"], hp["latent_dim"] = ssf_backbone_dims(input_dim)
     # Track B(CND-IDS) 에폭/배치크기 오버라이드 — grid_runner.py의
     # run_combo_full과 동일한 근거(configs/global_hparams.yaml 주석 참고).
     if combo["track"] == "B":

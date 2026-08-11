@@ -14,6 +14,19 @@ T_MAD(기본 3.5, utils.py:77-78)를 넘으면 drift로 판정(detect.py:97-104)
 `self.model`만 `.to(device)`로 옮기므로, 이 사설 encoder는 CLClient가 명시적으로
 `to(device)`를 호출해줘야 올바른 디바이스로 옮겨간다(`pipeline/cl_client.py`
 참고, 다른 컴포넌트에는 없는 훅).
+
+**2026-08-11 발견·수정 — 미니배치 학습 누락**: `fit()`이 `encoder_epochs`회
+반복하며 매번 `train_step`에 selected_data 전체를 미니배치 분할 없이 한
+번에 넘기고 있었다 — 즉 "5 epoch"이 아니라 총 5회의 그래디언트 업데이트에
+불과했다. CADE 원문(`cade/main.py`, `run_drebin_cade.sh`/`run_ids_cade.sh`)을
+재대조한 결과 두 데이터셋(Drebin/IDS2018) 모두 배치 크기(64/512)만 다를 뿐
+미니배치 자체는 항상 쓴다 — 이미 문서화된 "250→5 epoch 축소"는 epoch 수
+축소에 대한 근거였지 미니배치 자체를 없애는 근거가 아니었다. 표준 미니배치
+학습(매 epoch마다 셔플 후 batch_size 단위 분할)을 추가했다. batch_size는
+CADE 원문의 Drebin/IDS2018 값(64/512)이 이 테스트베드의 3개 데이터셋과
+깔끔하게 대응되지 않으므로(NSL-KDD·UNSW-NB15는 CADE 원 논문이 평가하지
+않은 데이터셋) 새로 추측해 채우지 않고, Track A가 이미 공유하는
+`global_hparams.batch_size`를 그대로 재사용한다.
 """
 
 from typing import Dict, Optional
@@ -30,11 +43,12 @@ class CADEDriftDetector(BaseDriftDetector):
     def __init__(self, input_dim: int, hidden_dim: int = 128, latent_dim: int = 32,
                  t_mad: float = 3.5, contrastive_margin: float = 10.0,
                  contrastive_lambda: float = 0.1, encoder_epochs: int = 5,
-                 encoder_lr: float = 1e-3):
+                 encoder_lr: float = 1e-3, batch_size: int = 128):
         self.t_mad = t_mad
         self.margin = contrastive_margin
         self.lam = contrastive_lambda
         self.epochs = encoder_epochs
+        self.batch_size = batch_size
         self._device = torch.device("cpu")
         self._encoder = ContrastiveAutoEncoder(input_dim, hidden_dim, latent_dim)
         self._optimizer = torch.optim.Adam(self._encoder.parameters(), lr=encoder_lr)
@@ -53,8 +67,13 @@ class CADEDriftDetector(BaseDriftDetector):
     def fit(self, data: torch.Tensor, labels: torch.Tensor) -> None:
         if len(data) < 2:
             return
+        n = len(data)
         for _ in range(self.epochs):
-            train_step(self._encoder, self._optimizer, data, labels, self.margin, self.lam)
+            perm = torch.randperm(n, device=data.device)
+            for start in range(0, n, self.batch_size):
+                idx = perm[start:start + self.batch_size]
+                train_step(self._encoder, self._optimizer, data[idx], labels[idx],
+                           self.margin, self.lam)
 
         self._encoder.eval()
         with torch.no_grad():

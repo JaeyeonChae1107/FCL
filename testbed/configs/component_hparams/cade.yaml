@@ -29,5 +29,13 @@ encoder_epochs: 5
 # 5로 낮췄다 — 이는 "속도를 위한 임의 축소"가 아니라 one-shot vs continual
 # 재학습이라는 설계 차이에 따른 의도적 조정이다.
 
-encoder_lr: 0.001
-# CADE cade/main.py:193, utils.py:64-65 기본값과 동일(Adam, lr=0.001).
+encoder_lr: 0.0001
+# 2026-08-11 수정: CADE cade/utils.py:64-65의 argparse 기본값은 0.001이지만,
+# 실제 CADE 실험 스크립트(run_drebin_cade.sh:14, run_ids_cade.sh:14)는 두
+# 데이터셋(Drebin/IDS2018) 모두 `--cae-lr 0.0001`로 override해서 돈다 —
+# 즉 원문이 "실제로 쓰는" 값은 0.0001이고, 이전 기록(0.001)은 "쓰이지 않는
+# 기본값"을 잘못 인용한 것이었다.
+
+# encoder 사설 미니배치 학습(batch_size)은 이 파일이 아니라
+# global_hparams.batch_size(Track A 공유값)를 그대로 재사용한다 —
+# cade_drift_detector.py 모듈 docstring 참고.

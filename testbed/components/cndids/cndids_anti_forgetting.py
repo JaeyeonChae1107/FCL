@@ -26,13 +26,12 @@ CND-IDS 원 논문 근거 (CND-IDS/FeatureExtractors/CND_IDS.py:161-166):
   서브셋을 쓴다 — CND_IDS.py의 pseudo-labeling과는 무관하다. 처음에 이 둘을
   혼동해 "CND-IDS가 공격 라벨을 쓴다"고 잘못 판단했었다.)
 
-이 구현은 위 메커니즘을 그대로 따르되, 두 가지를 이 테스트베드 스케일에 맞게
-조정했다:
-  - K 후보를 [100,300,500,1000,2000]에서 축소했다 — 원본은 label_budget 없이
-    experience 전체(수만 건)에 클러스터링하지만, 이 테스트베드는 PRD 9.2절에
-    따라 Track B도 label_budget(기본 10%)만큼 선택된 데이터(수천 건)에만
-    접근하므로, 그 스케일에 맞춰 후보를 줄였다. "여러 K를 elbow로 선택한다"는
-    메커니즘 자체는 동일하다.
+이 구현은 위 메커니즘을 그대로 따른다. K 후보 [100,300,500,1000,2000]도 원문
+그대로 데이터셋 무관 고정값이다(2026-08-11 재검토 — 한때 label_budget
+서브샘플링에 맞춰 [5,10,20,30,50,80]으로 축소했었지만, Track B가 experience
+전체를 그대로 쓰도록 바뀌면서 축소해야 했던 이유 자체가 사라졌다. 자세한
+경위는 아래 `_CLUSTER_K_CANDIDATES` 정의부 주석 참고). 다만 아래 한 가지는
+이 테스트베드 고유의 조정이다:
   - "알려진 정상 참조 데이터"로, 이번 라운드 라벨 예산 안에서 이미 선택된
     데이터 중 label=0인 것만 걸러 쓴다(`cl_client.py`의 `normal_subset`,
     2026-07-30 재설계 — 별도 고정 표본을 만들지 않는다) — CND-IDS의
@@ -54,7 +53,6 @@ label 생성에 공격 라벨을 쓰지 않으므로 이 원칙과 실제로 상
 """
 
 import copy
-import math
 from typing import List, Optional, Set, Tuple
 
 import numpy as np
@@ -64,73 +62,68 @@ import torch.nn.functional as F
 from testbed.base.anti_forgetting import BaseAntiForgetting
 from testbed.base.models import BaseCLModel
 
-# CND-IDS 원본(modules/K_Means.py:18)은 [100,300,500,1000,2000]. label_budget
-# 적용으로 데이터 스케일이 작아진 NSL-KDD/UNSW-NB15 기준으로 비례 축소해
-# [5,10,20,30,50,80]으로 고정했었다.
-#
-# **실측으로 발견된 버그(2026-08-04)**: 이 고정값은 "라운드당 선택 데이터가
-# 수천 건"이라는 가정(주석에 명시)에서 나온 것인데, CICIDS2018 전체 데이터
-# (~1200만 행)를 쓰면 라운드당 선택 데이터가 약 24만 건으로 그 가정을
-# 100배 가까이 벗어난다(실측: NSL-KDD 2,519건, UNSW-NB15 3,507건 vs
-# CICIDS2018 ~240,000건, testbed/data/dataset_loader.py 기준). K를 80까지만
-# 써도 클러스터 하나에 수천 건이 뭉치고, "정상 라벨이 하나라도 속한 클러스터 =
-# 정상 클러스터"라는 CND-IDS의 pseudo-labeling 기준(on_experience_start)이
-# 사실상 거의 모든 클러스터를 "정상"으로 덮어버린다 — 그 결과
-# _pseudo_labels_for_batch가 거의 전부 0(정상)을 반환하고, _metric_loss의
-# "같은 pseudo-label 쌍은 거리를 줄여라" 항이 "거의 모든 샘플을 한 점으로
-# 모아라"가 되어 인코더가 붕괴한다(CICIDS2018 Track B 3개 조합 모두
-# roc_auc≈0.5, memory_manager 선택과 무관하게 완전히 동일한 결과 — 실측
-# 확인, docs/metric_justification.md 참고).
-#
-# 고정 K 리스트 대신 n(실제 선택 데이터 크기)에 비례해 K를 계산하되,
-# **sqrt(n) 스케일링**을 쓴다(K ~ sqrt(n/2)는 K-means에서 흔히 쓰는 경험적
-# 기준). n에 선형으로 비례시키면(예: n=240,000에서 K가 최대 7621까지 커짐)
-# 로컬 벤치마크(합성 데이터, n=240,000·80차원)에서 K=80 KMeans 한 번조차
-# 5분을 넘겨 완료되지 않는 것을 실측으로 확인했다 — CICIDS2018 Track B
-# 조합은 라운드마다 이 elbow 탐색(후보 6개)을 반복해야 하므로 선형
-# 스케일링은 실행이 사실상 불가능한 수준으로 느려질 위험이 크다. sqrt
-# 스케일링은 NSL-KDD 기준점(n_ref=2519)에서 기존 [5,10,20,30,50,80]과
-# 정확히 같은 값을 내면서(회귀 없음), CICIDS2018 규모(n≈240,000)에서는
-# 최대 K가 약 780 정도로 억제되어(선형 스케일링의 7621 대비 계산량이
-# 훨씬 적음) 여전히 원래 붕괴 원인(K=80으로는 클러스터당 수천 건이 뭉쳐
-# "정상 라벨이 하나라도 속하면 정상 클러스터" 기준이 사실상 전체를
-# 뒤덮던 문제)을 완화하기에 충분한 해상도 개선을 제공한다.
-_CLUSTER_K_REF_N = 2519
-_CLUSTER_K_REF_CANDIDATES = (5, 10, 20, 30, 50, 80)
-_CLUSTER_K_REF_RATIOS = tuple(k / math.sqrt(_CLUSTER_K_REF_N) for k in _CLUSTER_K_REF_CANDIDATES)
+# **2026-08-11 재검토로 원상 복귀**: CND-IDS 원본(modules/K_Means.py:18)은
+# [100,300,500,1000,2000]을 데이터셋 무관하게(7개 평가 데이터셋 전부 동일)
+# 그대로 쓴다 — 스케일링 공식 자체가 없다. 이전(2026-08-04)에 이 값을
+# [5,10,20,30,50,80]으로 축소했던 이유는 "라운드당 선택 데이터가 수천 건"
+# 이라는, 이 테스트베드가 자체적으로 추가했던 label_budget 서브샘플링(~10%)
+# 때문이었다(코드 주석에 명시돼 있었음). 그런데 그 서브샘플링은 Track B가
+# 원 논문처럼 experience 전체를 그대로 쓰도록 바뀌면서 이미 제거됐다 —
+# 즉 "작은 리스트로 축소해야 했던 이유" 자체가 사라졌으므로, sqrt(n)
+# 스케일링(내가 임의로 고안한 공식)이 아니라 원 논문 리스트를 그대로
+# 채택하는 게 맞다. CND-IDS 저장소가 평가하는 7개 데이터셋은 전부 이
+# 테스트베드의 NSL-KDD보다 훨씬 큰 규모라, 원문 리스트가 NSL-KDD처럼
+# 작은 데이터에서도 잘 맞는다는 보장은 없다 — 실측(A/B, 기존 축소 리스트
+# 대비)으로 확인 후에도 품질이 유지되는지가 관건이며, 확인 결과는
+# docs/metric_justification.md에 기록한다.
+_CLUSTER_K_CANDIDATES = (100, 300, 500, 1000, 2000)
 
 
-def _cluster_k_candidates(n: int) -> List[int]:
-    sqrt_n = math.sqrt(n)
-    scaled = {max(2, round(ratio * sqrt_n)) for ratio in _CLUSTER_K_REF_RATIOS}
-    return sorted(scaled)
-
-
-def _elbow_kmeans_fit(data_np: np.ndarray, candidates: List[int], seed: int = 42):
+def _elbow_kmeans_fit(data_np: np.ndarray, candidates: List[int], seed: int = 42,
+                       fit_sample_size: Optional[int] = None):
     """CND-IDS modules/K_Means.py:fit()과 동일한 elbow 선택 절차.
 
     원본(`KMeans(n_clusters=i, random_state=42)`)은 n_init을 명시하지 않아
     설치된 sklearn(1.2.1)의 기본값인 n_init=10이 그대로 적용된다. 이 테스트베드는
     원본과 달리 experience(라운드)마다 이 elbow 탐색을 반복하므로(원본은 한
     학습 세션당 한 번), 후보 6개 × n_init=10 조합이 라운드마다 반복되면 비용이
-    크다(NSL-KDD 기준 조합당 최대 수십~수백 초). 그래서 **elbow 탐색 단계**(어떤
-    K가 좋은지 WCSS 추세만 보면 되는 단계)는 n_init=3으로 줄이고, **실제
-    pseudo-label에 쓰이는 최종 fit**만 원본과 동일하게 n_init=10(기본값)을
-    유지한다 — 클러스터 배정 품질에 영향을 주는 부분은 원본 그대로 두고,
-    탐색용 반복만 줄인 것이다.
+    크다. 그래서 **elbow 탐색 단계**(어떤 K가 좋은지 WCSS 추세만 보면 되는
+    단계)는 n_init=3으로 줄이고, **실제 pseudo-label에 쓰이는 최종 fit**만
+    원본과 동일하게 n_init=10(기본값)을 유지한다 — 클러스터 배정 품질에
+    영향을 주는 부분은 원본 그대로 두고, 탐색용 반복만 줄인 것이다.
+
+    **2026-08-11 추가(fit_sample_size)**: K 후보가 원 논문 리스트(최대 2000)로
+    돌아가면서, CICIDS2018처럼 라운드당 선택 데이터가 수십만 건인 경우
+    `KMeans(n_clusters=2000).fit()`을 experience당 7회(elbow 6 + 최종 1) 반복
+    하는 비용이 감당 불가능해진다(GPM의 `activation_sample_size` — 정확히
+    같은 종류의 문제를 같은 방식으로 이미 해결한 전례). `fit_sample_size`가
+    주어지고 데이터가 그보다 크면, **elbow 탐색과 최종 fit 모두** 무작위
+    부분표본에서 수행한다 — 이렇게 찾은 중심점(cluster_centers_)은 이후
+    `_pseudo_labels_for_batch`가 `torch.cdist`로 전체 데이터를 배정하는 데
+    그대로 쓰이므로(그 경로는 이미 GPU 벡터화·검증 완료), 부분표본으로 찾은
+    중심점이 합리적이기만 하면 최종 라벨링 자체는 전체 데이터에 적용된다.
+    합성 데이터 검증과 실콤보 A/B는 docs/metric_justification.md 참고.
     """
     from sklearn.cluster import KMeans
     from kneed import KneeLocator
 
     n = len(data_np)
-    valid = [k for k in candidates if k < n]
+    if fit_sample_size is not None and n > fit_sample_size:
+        rng = np.random.default_rng(seed)
+        sample_idx = rng.choice(n, size=fit_sample_size, replace=False)
+        fit_data = data_np[sample_idx]
+    else:
+        fit_data = data_np
+    n_fit = len(fit_data)
+
+    valid = [k for k in candidates if k < n_fit]
     if not valid:
-        valid = [max(2, min(n, 2))]
+        valid = [max(2, min(n_fit, 2))]
 
     wcss = []
     for k in valid:
         km = KMeans(n_clusters=k, random_state=seed, n_init=3)
-        km.fit(data_np)
+        km.fit(fit_data)
         wcss.append(km.inertia_)
 
     optimal_k = valid[-1]
@@ -140,7 +133,7 @@ def _elbow_kmeans_fit(data_np: np.ndarray, candidates: List[int], seed: int = 42
             optimal_k = kneedle.elbow
 
     final_km = KMeans(n_clusters=optimal_k, random_state=seed)  # n_init 기본값(10) 유지
-    final_km.fit(data_np)
+    final_km.fit(fit_data)
     return final_km
 
 
@@ -161,10 +154,12 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
     backbone_type = "autoencoder"
 
     def __init__(self, lambda_r: float = 0.1, lambda_cl: float = 0.1,
-                 triplet_margin: float = 2.0):
+                 triplet_margin: float = 2.0,
+                 cluster_fit_sample_size: Optional[int] = None):
         self.lambda_r = lambda_r
         self.lambda_cl = lambda_cl
         self.margin = triplet_margin
+        self.cluster_fit_sample_size = cluster_fit_sample_size
         self._teacher: Optional[BaseCLModel] = None
         self._kmeans = None
         self._normal_cluster_ids: Set[int] = set()
@@ -185,7 +180,9 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         데이터 중 label=0인 것만 걸러낸 것이다(비어있지 않을 때만 호출됨 —
         cl_client.py 참고)."""
         data_np = selected_data.detach().cpu().numpy()
-        self._kmeans = _elbow_kmeans_fit(data_np, _cluster_k_candidates(len(data_np)))
+        self._kmeans = _elbow_kmeans_fit(
+            data_np, list(_CLUSTER_K_CANDIDATES),
+            fit_sample_size=self.cluster_fit_sample_size)
 
         ref_np = normal_subset.detach().cpu().numpy()
         ref_clusters = self._kmeans.predict(ref_np)

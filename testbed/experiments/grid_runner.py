@@ -18,7 +18,7 @@ import numpy as np
 import torch
 from sklearn.metrics import precision_recall_curve, roc_auc_score
 
-from testbed.base import FCLAutoEncoder
+from testbed.base import FCLAutoEncoder, ssf_backbone_dims
 from testbed.common.compatibility import enumerate_valid_combos
 from testbed.common.metrics import (
     bwt,
@@ -62,6 +62,10 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
     input_dim = dataset["input_dim"]
     hp = dict(global_hparams)
     hp["_input_dim"] = input_dim
+    # 2026-08-11: hidden_dim/latent_dim을 SSF 원 논문 공식으로 이 데이터셋의
+    # input_dim에 맞춰 그때그때 계산한다(configs/global_hparams.yaml 주석
+    # 참고) — 더 이상 고정 상수를 그대로 쓰지 않는다.
+    hp["hidden_dim"], hp["latent_dim"] = ssf_backbone_dims(input_dim)
     # Track B(CND-IDS)는 원 논문 에폭(20)을 쓴다 — Track A와 같은 200을
     # 그대로 적용하면 CND-IDS의 약한 망각방지 가중치(lambda_cl=0.1)가 그
     # 학습 강도를 못 버텨 catastrophic forgetting이 발생함을 실측으로

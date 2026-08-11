@@ -47,16 +47,19 @@ n_experiences: 5            # CND-IDS 원 논문 근거 — X-IIoTID/CICIDS2017(
                             # utils.py 다수 위치에서 확인). CICIDS2018은 이 근거의
                             # 직접 대상이 아니지만, 그리드 전체에 동일 적용한다는
                             # 원칙에 따라 같은 값을 그대로 쓴다.
-latent_dim: 64
-hidden_dim: 128
-# 2026-07-30 재검토로 정정: SSF 원 논문 공식(utils.py:28-36,
-# nearest_pow2=2**round(log2(input_dim)); hidden=nearest_pow2//2;
-# latent=nearest_pow2//4)을 UNSW-NB15(196차원)에 직접 재계산하면
-# nearest_pow2=256 -> hidden=128, latent=64다. 이전 기록은 nearest_pow2(256)
-# 자체를 hidden으로 잘못 대입한 계산 오류였다(latent=64는 맞았음). NSL-KDD
-# (121차원) 기준으로는 nearest_pow2=128 -> hidden=64/latent=32가 나오지만,
-# 두 데이터셋에 동일 아키텍처를 강제해야 하는 이 테스트베드 제약상 "더 큰
-# 쪽(UNSW-NB15)의 논문 공식값"을 공통 기본값으로 채택한다(기존 원칙 유지).
+# 2026-08-11 재검토: hidden_dim/latent_dim은 더 이상 여기 고정값으로 두지
+# 않는다. SSF 원 논문(utils.py:32-36, nearest_pow2=2**round(log2(input_dim));
+# hidden=nearest_pow2//2; latent=nearest_pow2//4)은 이 공식을 데이터셋을
+# 로드할 때마다 매번 새로 계산한다(ssf.py:51-54,116-120) — 한 데이터셋에서
+# 계산한 값을 고정 상수로 굳혀 다른 데이터셋에 강제하지 않는다. 이전 기록은
+# "두 데이터셋에 동일 아키텍처를 강제해야 하니 더 큰 쪽(UNSW-NB15)의 값을
+# 채택한다"는 절충이었는데, 이 절충 자체가 NSL-KDD엔 이미 틀린 값(공식대로면
+# hidden=64/latent=32)이라는 걸 스스로 인정하고 있었고 CICIDS2018은 애초에
+# 고려하지 않았다. 이제 `testbed/base/models.py`의 `ssf_backbone_dims(input_dim)`을
+# `grid_runner.py`/`smoke_test.py`가 매 데이터셋마다 호출해 이 두 값을 그
+# 자리에서 계산해 넣는다(모든 콤보·모든 컴포넌트가 동일 데이터셋에서는 동일
+# 값을 공유 — cl_client.py가 이 값을 CADE 사설 encoder 등에도 동일하게
+# 주입하므로 하나의 실행 안에서는 여전히 통일된 값이다).
 # normal_reference_size는 2026-07-30에 제거했다 — 12.6절 재보정용 고정
 # 참조 표본이라는 별도 개념 자체가 논문에 없었고(CADE 원 논문은 median/MAD를
 # "그 시점 라벨이 있는 정상 데이터 전체"로 계산하는데, CADE에는 이 테스트베드

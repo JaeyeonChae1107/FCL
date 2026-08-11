@@ -59,7 +59,11 @@ class CLClient:
         for hp in component_hparams.values():
             merged_component_kwargs.update(hp)
         merged_component_kwargs.update(
-            input_dim=input_dim, hidden_dim=hidden_dim, latent_dim=latent_dim)
+            input_dim=input_dim, hidden_dim=hidden_dim, latent_dim=latent_dim,
+            batch_size=global_hparams["batch_size"])
+        # batch_size는 CADEDriftDetector의 사설 encoder 미니배치 학습에만 쓰인다
+        # (2026-08-11 추가) — 다른 컴포넌트는 이 이름의 생성자 인자가 없어
+        # build()의 시그니처 필터링으로 자동으로 무시된다.
 
         self.drift_detector = build(
             "drift_detector", combo["drift_detector"], **merged_component_kwargs)
