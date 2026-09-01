@@ -46,6 +46,24 @@ from testbed.pipeline import CLClient
 # 한 번도 검사하지 못했다(위 모듈 docstring 참고). None이면 데이터셋의
 # experience 전체를 검사한다. 값을 넣으면(디버깅 등) 예전처럼 일부만 검사.
 SMOKE_N_EXPERIENCES: Optional[int] = None
+
+# 2026-09-01 추가 — epochs_per_experience는 SMOKE_N_EXPERIENCES와 성격이
+# 다르다: 라운드 수/데이터 양을 줄이면 "어떤 라운드가 어떤 데이터로 실행
+# 되는가"가 바뀌어 그 조건에서만 나오는 버그(K-means 클러스터 규모, CADE/
+# CND-IDS 참조 캡 트리거 여부, 희귀 category 존재 여부)를 놓친다 — 위
+# SMOKE_N_EXPERIENCES=2였을 때 실제로 겪은 문제(모듈 docstring 참고)와
+# 같은 종류라 절대 줄이지 않는다. 반면 epoch 수는 "같은 라운드를 얼마나
+# 오래 학습시키는가"일 뿐 — 15.1b/c(optimizer step 횟수/label budget),
+# 15.2/15.2b(예측 퇴화/roc_auc), 15.4(CND-IDS pseudo-label)는 전부 그
+# 라운드의 데이터·설정만으로 결정되고 epoch 수와 무관하다(15.4는 라운드
+# 시작 시 한 번 도는 K-means 결과라 학습 루프보다도 먼저 정해짐). 유일하게
+# epoch 수에 걸리는 15.1d(loss 발산 체크, 첫/마지막 epoch 비교)도 발산은
+# 보통 초반 몇 epoch 안에 이미 드러나는 문제라 실전 epoch 수(200/20)를
+# 다 안 돌려도 잡힌다. 그래서 전체 데이터·전체 라운드는 그대로 유지한 채
+# epoch 수만 줄여 스모크 테스트가 사실상 본 그리드(grid_runner.py)와
+# 동일한 비용으로 조합마다 두 번 학습시키던 낭비를 없앤다(사용자 지시).
+SMOKE_EPOCHS_PER_EXPERIENCE = 10
+SMOKE_EPOCHS_PER_EXPERIENCE_TRACK_B = 5
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _TESTBED_ROOT = os.path.dirname(_HERE)
 _REPO_ROOT = os.path.dirname(_TESTBED_ROOT)
@@ -90,11 +108,16 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
     # input_dim에 맞춰 그때그때 계산한다(configs/global_hparams.yaml 주석
     # 참고) — grid_runner.py의 run_combo_full과 동일한 근거.
     hp["hidden_dim"], hp["latent_dim"] = ssf_backbone_dims(input_dim)
-    # Track B(CND-IDS) 에폭/배치크기 오버라이드 — grid_runner.py의
-    # run_combo_full과 동일한 근거(configs/global_hparams.yaml 주석 참고).
+    # Track B(CND-IDS) 배치크기 오버라이드 — grid_runner.py의 run_combo_full과
+    # 동일한 근거(configs/global_hparams.yaml 주석 참고). epochs_per_experience는
+    # 아래에서 스모크 전용 값으로 다시 덮어쓴다.
     if combo["track"] == "B":
-        hp["epochs_per_experience"] = global_hparams["epochs_per_experience_track_b"]
         hp["batch_size"] = global_hparams["batch_size_track_b"]
+    # 2026-09-01 추가 — 위 SMOKE_EPOCHS_PER_EXPERIENCE(_TRACK_B) 절 참고.
+    # global_hparams의 실전 epoch 수(200/20) 대신 스모크 전용 축소 값을 쓴다.
+    hp["epochs_per_experience"] = (
+        SMOKE_EPOCHS_PER_EXPERIENCE_TRACK_B if combo["track"] == "B"
+        else SMOKE_EPOCHS_PER_EXPERIENCE)
 
     torch.manual_seed(hp.get("seed", 42))
     model = FCLAutoEncoder(input_dim=input_dim, hidden_dim=hp["hidden_dim"],
