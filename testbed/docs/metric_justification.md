@@ -1053,3 +1053,875 @@ IDS2018(`--cae-batch-size 512`) 모두 배치 크기만 다를 뿐 미니배치 
 CADE 미니배치 건과 마찬가지로 실증적 근거를 먼저 확인한 뒤 내린 것이지,
 반대로 근거 없이 바꾸지 않기로 한 것도 아니다(둘 다 실측·원문 대조를
 거쳤다는 점은 동일하다 — 결과만 "바꾼다"/"안 바꾼다"로 갈렸을 뿐).
+
+## Experience 분할을 class-incremental 구조로 전환 (2026-08-12)
+
+**문제 제기**: `n_experiences=5`로 나누는 것 자체는 CND-IDS 원 논문 근거였지만,
+실제 분할 방식(`data/dataset_loader.py`)은 데이터 전체(정상+공격 구분 없이)를
+고정 seed로 무작위로 섞은 뒤 그냥 5등분하는 것뿐이었다 — experience 사이에
+의도된 분포 차이가 전혀 없어, 지속학습이 방어해야 할 진짜 "새로운 것이
+등장"하는 상황 자체가 시나리오에 없었다.
+
+**검토했다가 기각한 대안**: SSF 원 논문 방식(`ssf.py`의 가변 길이 스트리밍
+윈도우 + drift 감지)도 검토했으나, 코드를 끝까지 재확인한 결과 SSF도 drift
+감지 여부와 무관하게 매 라운드 무조건 재학습함을 확인했다(`if drift: ...
+else: ...` 양쪽 분기 다 `for epoch in range(epoch_1): ...` 재학습 루프를
+포함 — 이전에 "drift 감지 시에만 재학습"이라고 판단했던 것은 오독이었다,
+정정함). 게다가 SSF는 데이터 크기에 따라 라운드 수가 달라지고(고정
+n_experiences 구조와 안 맞음), "대표 표본 선택+망각" 메커니즘 자체가 SSF
+고유 알고리즘이라 공유 시나리오로 채택하면 SSF 방법론을 전체 그리드에
+강제하는 셈이 된다(0절 위반). 또한 "UNSW-NB15 원본 파일 순서가 우연히
+정상→공격으로 깨끗하게 갈린다"는 방식도 검토했으나, 특정 논문 근거가 없는
+발견물이라 기각했다(주관 배제 원칙).
+
+**채택한 방식**: CND-IDS 원 논문의 실제 experience 분할 메커니즘
+(`CND-IDS/utils.py:275-299`, `create_split_experiences`)을 그대로 이식했다
+— `n_experiences=5`라는 숫자를 원래 의미 있게 만드는 메커니즘이며, 데이터를
+"언제 등장시킬지"의 시나리오 설계 문제일 뿐 특정 컴포넌트 알고리즘이
+아니라서 93개 조합 전부에 공평하다. 정상 트래픽은 무작위로 고르게 5개
+experience에 분배하고, 공격은 세부 카테고리별로 묶어 라운드로빈으로
+experience에 배정한다(`class_order[i % 5].append(category)`, category는
+정렬된 순서로 순회) — 한 experience는 자신에게 배정된 공격 유형만 본다.
+train/test 양쪽에 같은 class_order를 재사용해 experience i의 test가
+experience i의 train과 같은 카테고리를 반영하도록 했다(CND-IDS 원문과 동일).
+`data/dataset_loader.py`의 `_class_incremental_split`이 핵심 구현이고,
+기존 `_chunk_shuffled`/`_chunk_by_row_order`/`_shuffle`은 삭제했다.
+
+**데이터셋별 카테고리 확보**:
+- NSL-KDD: `labels5`(정상/DoS/Probe/R2L/U2R) — 기존에 버려지던 컬럼을
+  살렸다. `_read_nslkdd_features`가 category로 반환.
+- CICIDS2018: 이진화 전 원본 `Label` 문자열(예: 'DDoS attacks-LOIC-HTTP')을
+  보존 — 기존엔 이진화만 하고 버려졌다. `_read_cicids2018_features`가
+  category로 반환.
+- UNSW-NB15: 지금 쓰는 SSF 전처리본엔 이진 `label`만 있고 다중클래스
+  `attack_cat`이 없다. 공식 `UNSW_NB15_training-set.csv`(175,341행)/
+  `UNSW_NB15_testing-set.csv`(82,332행)의 행 수가 SSF 전처리본과 정확히
+  일치함을 확인해(같은 원본에서 나온 것으로 판단), 250만행짜리 원본을
+  재전처리하지 않고 공식 파일의 `attack_cat`만 같은 행 위치에서 가져와
+  결합한다(`_load_unsw_attack_cat`). **행 정렬은 가정하지 않고 label
+  컬럼 완전 일치로 실측 검증한 뒤에만 신뢰**하도록 구현했다(불일치 시
+  즉시 예외). 공식 원본은 SharePoint 호스팅이라 CICIDS2018과 달리 자동
+  다운로드는 지원하지 않고, 사용자가 https://research.unsw.edu.au/projects/unsw-nb15-dataset
+  에서 받아 `UNSW-NB15-raw/`에 수동 배치해야 한다.
+
+**검증(전부 실측 완료)**:
+1. NSL-KDD 실제 실행 결과가 사전 계산한 표와 완전히 일치: exp0=DoS(45,927),
+   exp1=Probe(11,656), exp2=R2L(995), exp3=U2R(52), exp4=공격 없음(카테고리
+   4개 vs experience 5개라 자연 발생, 인위적으로 완화하지 않음).
+2. 합성 데이터(다중 카테고리)로 `_class_incremental_split` 단독 검증 —
+   전체 행 수 보존, class_order 배정 정상.
+3. `pytest testbed/tests/` 13/13 통과(회귀 없음).
+4. `python -m testbed.experiments.smoke_test --datasets nsl-kdd` — **93/93
+   조합 전부 통과**.
+   **2026-08-26 정정(문서 부정확성으로 확인)**: 이 문장이 "U2R 52건짜리
+   희소 라운드, 공격 0건짜리 라운드 포함"이라고 적어 마치 스모크 테스트가
+   그 라운드들까지 실제로 검사한 것처럼 서술했는데, 사실이 아니었다 —
+   당시 `SMOKE_N_EXPERIENCES=2`(하드코딩)였으므로 이 명령은 5개
+   experience 중 앞 2개(exp0=DoS, exp1=Probe)만 검사했고, U2R(exp3)과
+   공격 0건 라운드(exp4)는 한 번도 검사한 적이 없다. 이 잘못된 "이미
+   확인됨" 문구가 4개 논문 컴포넌트 전수 재감사(2026-08-26) 전까지
+   CND-IDS의 pseudo-label 붕괴(정확히 그 안 본 라운드들에서 발생)를
+   못 잡은 원인 중 하나로 보인다 — 자세한 경위는 아래 "4개 논문 컴포넌트
+   전수 재감사" 절 참고. `SMOKE_N_EXPERIENCES`는 이제 전체 experience를
+   보도록 고쳤다.
+5. Pure-CADE 조합(`A_dd=cade_ss=random_mm=none_af=none_as=cade_mad`,
+   `af=none`이라 망각방지 장치 없음) NSL-KDD 5-experience 전체 실행 —
+   **BWT가 기존 i.i.d 분할 대비 +0.013 → -0.177로 뚜렷하게 악화**. 이는
+   버그가 아니라 의도한 신호다: 예전 무작위 분할에서는 방어할 진짜 분포
+   변화가 없어 BWT가 0 근처로 나온 것이고(그럴듯해 보이지만 무의미한
+   비-망각), 이제 진짜 class-incremental 구조에서 처음으로 진짜
+   catastrophic forgetting이 드러난 것이다.
+
+**남은 작업**: UNSW-NB15는 사용자가 공식 CSV를 배치해야 로컬 검증 가능.
+CICIDS2018은 로컬에 원본이 없어 실제 카테고리 분포·smoke 통과 여부는 GPU
+서버에서 최종 확인 필요. 이 변경은 93×3 전체의 데이터를 바꾸므로 이미
+필요했던 하이퍼파라미터 재실행(백본 크기/K-means/CADE 미니배치)과 묶어서
+한 번에 전체 그리드를 재실행해야 한다.
+
+## 3개 병렬 에이전트 전수 원문 대조 감사 + 구조적 충실도 보강 (2026-08-12)
+
+**배경**: class-incremental 분할 전환 후 "지금까지 수십 번 검토했는데도 왜
+이런 문제가 계속 나오냐"는 문제 제기에 따라, SSF/CND-IDS/CADE·SPIDER·
+파이프라인 3개 영역을 각각 별도 에이전트가 원문 코드와 줄 단위로 대조하는
+전수 감사를 수행했다. 기존 검토들은 대부분 "공식/하이퍼파라미터가 일치하는가"
+수준이었는데, 이번 감사는 배치/pair 구성 방식, 연산 순서, drift 등 조건에
+따른 상태 변화 방향, 손실항 누락 여부, 차용한 메커니즘의 실제 출처까지
+추적했다(이 관점을 앞으로의 감사 표준으로 삼는다 — memory
+`feedback-structural-fidelity-audits` 참고). 결과: 17개 대조 항목 중 11개에서
+이전에 문서화되지 않은 실제 불일치를 발견했다.
+
+### 1. 귀속/문서 정정만 (동작 변경 없음)
+
+1. **`pipeline/cl_client.py` 모듈 docstring**: "이 순서는 각 논문에서 그대로
+   도출된 것"이라는 주장이 SSF에 대해서는 사실과 반대였다 — SSF 원문
+   (`ssf.py:236-291`)은 대표 표본 재선택으로 메모리를 먼저 갱신한 뒤 그
+   갱신된 세트로 학습하는데, 이 파이프라인은 학습(Step4) 후 메모리 갱신
+   (Step5) 순서다. **코드는 바꾸지 않았다** — Step4가 매 미니배치
+   `get_replay_batch()`로 "이전" 버퍼를 읽는 공유 리플레이 계약 때문에,
+   순서를 뒤집으면 그 라운드의 `selected_data`가 학습 전에 먼저 버퍼로
+   들어가 버려 같은 라운드 안에서 자기 자신을 리플레이하는 결과가 된다
+   (SPIDER/CND-IDS 방향 메모리 매니저에서 치명적 — get_replay_batch를
+   실제로 소비하는 유일한 두 컴포넌트). docstring에서 "논문에서 도출됐다"는
+   과장된 인과 주장만 제거했다.
+2. **`components/cndids/cndids_memory_manager.py` docstring**: "CND-IDS
+   원문 근거"라는 프레이밍을 정정했다. CND-IDS의 실제 제안 방법
+   (`CND_IDS.py`, 196줄)에는 메모리/리플레이가 전혀 없다 — 이 컴포넌트
+   (max_size=1000 포함)는 실제로는 같은 저장소의 `CFE.py`(ADCN 베이스라인용
+   별도 피처 추출기, CND-IDS와 무관)의 `Memory` 클래스와 닮아 있을 뿐이다.
+3. **`common/metrics.py`의 `bwt()`**: "CND-IDS 원 논문 공식 그대로"라는
+   표현을 정정했다. `AutonomousDCN/ADCNmainloop.py:418`(파일:줄 인용 자체는
+   원래도 정확했다)은 CND-IDS 저자 자신의 제안 방법이 아니라 같은 저장소의
+   ADCN 비교 베이스라인 평가 코드다. 공식 자체는 표준 continual-learning
+   문헌의 BWT 정의와 일치하므로 구현이 틀린 것은 아니고, 귀속 표현만
+   정정했다.
+
+### 2. 실제로 반영한 것 (코드 변경, 전부 A/B 실측 후 반영 — NSL-KDD 기준)
+
+4. **CADE class-aware pairing 추가** (`contrastive_ae.py`
+   `build_paired_batches()`, `cade_drift_detector.py`). 원문(`cade/data.py:
+   268-345`)은 배치 구성 시 `similar_ratio`(기본 0.25)로 same/different-class
+   쌍을 강제하는데, 이 부분이 아예 없어 순수 무작위 셔플에 의존하고
+   있었다 — class-incremental 분할이 만드는 극단 불균형 라운드(U2R 52건
+   단독 등)와 결합하면 배치에 dissimilar 쌍이 없어 margin loss가 죽을 위험이
+   실제로 있었다. (label, similar 여부) 조합별 그룹화 + `torch.randint`
+   벡터화로 이식(원문의 이중 for-loop `np.random.choice` 대신). 클래스가
+   하나뿐인 라운드는 dissimilar 풀을 similar 풀로 대체(원문 미정의 상황에
+   대한 안전한 폴백).
+   **A/B (`A_dd=cade_ss=random_mm=none_af=none_as=cade_mad`)**: f1
+   0.4984→0.6482(+30%), precision 0.796→0.795(유지), recall 0.363→0.547,
+   bwt -0.177→-0.140.
+5. **SSF InfoNCE 재구성-대조 손실항 추가** (`components/ssf/ssf_infonce.py`
+   신규, `ssf_anti_forgetting.py`). SSF의 실제 task_loss는 BCE 하나가
+   아니라 `weighted_con_loss.mean() + weighted_classification_loss.mean()`
+   (`ssf.py:310-318`)로, InfoNCE 기반 재구성-대조 손실(`utils.py:458-492`,
+   디코더 출력 `recon_vec`에 적용, `tem=0.02`)이 통째로 빠져 있었다.
+   **A/B (`A_dd=none_ss=ssf_mm=none_af=lwf_ssf_as=cade_mad`)**: f1
+   0.6680→0.7107(+6%), bwt -0.0161→-0.0005(거의 완전한 망각 방지).
+   **new_sample_weight=100은 채택하지 않았다** — SSF에서 100은 "누적 풀
+   전체(~2.5만) 대비 신규 표본(~200개)"라는 극단적 비율(~1:125)을 보정한
+   값인데, 이 테스트베드는 new_batch/replay_batch 크기가 비슷해(~1:1)
+   같은 100을 곱하면 gradient 기여도가 ~99:1로 replay가 사실상 무력화된다.
+   실측: weight=100 적용 시 f1 0.7107→0.5655, bwt -0.0005→-0.1341로 급격히
+   악화. `labeling_budget`(global_hparams.yaml)과 같은 종류의 함정이라 같은
+   방식으로 처리 — 배치 단위 가중치라는 **구조**는 그대로 가져오되 값은
+   1.0(신규/과거 동등 취급)으로 이 테스트베드의 new:old 비율에 맞게
+   재보정했다. 자세한 근거는 `ssf.yaml`의 `new_sample_weight` 주석 참고.
+6. **SSF 메모리 버퍼 drift 반응 방향 수정** (`ssf_memory_manager.py`). SSF
+   원문(`utils.py:259-388`)은 drift 시에도 버퍼를 목표 크기로 유지한 채
+   회전율만 높이는데("보충", not "축소"), 이전 구현은 유지 개수 자체를
+   `max_size*drift_retention_ratio`로 줄였다. 이제 drift 시 **기존 버퍼
+   쪽만** 대표성 상위 일부로 먼저 추리고, 거기에 이번 라운드 신규 표본
+   전체를 합친 뒤 평시와 동일하게 대표성 상위 max_size개를 최종 유지 —
+   버퍼 총량은 항상 max_size로 수렴하되 drift 시 과거 표본이 더 많이
+   교체된다.
+   **A/B (`A_dd=ssf_ss=ssf_mm=ssf_af=none_as=cade_mad`)**: f1
+   0.4551→0.5122(+12.5%), precision 0.495→0.493(유지), recall
+   0.421→0.533, bwt -0.1103→-0.0725.
+7. **CND-IDS multi-teacher LwF 누적** (`cndids_anti_forgetting.py`). 원문
+   (`CND_IDS.py:42,54-69,195`)은 `self.old_models`에 매 experience 종료 시
+   모델 스냅샷을 계속 추가만 하고(절대 비우지 않음), `LwFloss()`가 누적된
+   **모든** 과거 모델과 개별 MSE를 구해 합산한다 — 이전 구현은 직전 1개
+   teacher만 유지·매번 덮어써서 라운드가 진행될수록 원문 대비 망각방지
+   압력이 약해지고 있었다. 가중치 적용 방식도 다시 대조해 함께 고쳤다:
+   원문은 항목별로 `lambda_r`을 곱하고 그 합계에 다시 `lambda_cl`을 곱해
+   실효 가중치가 `lambda_r*lambda_cl`인데(`:66,159,180`), 이전 구현은
+   `lambda_cl`만 곱하고 있었다(두 값이 우연히 같은 0.1이라 결과가 크게
+   갈리진 않았지만 원문과 어긋났다).
+   **A/B (`B_dd=none_ss=random_mm=none_af=cndids_as=pca`, Track B)**: f1
+   0.8774→0.8757(거의 동일), precision 0.826→0.873(+5.6%), recall
+   0.935→0.879(-6.0%), pr_auc 0.876→0.897, **bwt -0.0099→+0.1341**(약한
+   망각에서 양의 backward transfer로 — 누적 teacher의 정규화 압력이 과거
+   experience 표현을 오히려 개선하는 방향으로 작용, F1 손실 없이 얻은
+   개선).
+
+전부 `pytest testbed/tests/`(13/13) 통과 확인.
+
+### 3. 의도적으로 채택하지 않은 것 (문서화만)
+
+- **CND-IDS의 optimizer 매 experience 재생성**: SSF 원문(`ssf.py:122,
+  273,291`)을 다시 확인한 결과, optimizer를 스트리밍 전체에서 **한 번만**
+  생성해 끝까지 재사용한다(재설정 안 함) — CND-IDS(`CND_IDS.py:104`)와
+  정면으로 다른 관행이다. 두 논문이 서로 다르게 하는 이상 어느 한쪽을
+  공유 클라이언트(`cl_client.py`, 모든 조합이 쓰는 단일 optimizer)에
+  강제하면 classifier(decoder(z))와 같은 이유로 0절 위반이다. 현재(유지)가
+  이미 SSF와 일치하므로 유지.
+- **CND-IDS의 validation split + best-checkpoint 선택**: `CND_IDS.py:
+  131-192`가 하는 이 모델 선택 휴리스틱은 SSF/CADE/SPIDER 어디에도 없는
+  CND-IDS 고유 설계다. cndids_af에만 특별 적용하면 4개 컴포넌트의 학습
+  루프가 비대칭해지고, 전체에 적용하면 나머지 3개 논문이 요구한 적 없는
+  로직을 강제하게 된다 — 채택하지 않음.
+
+### 4. 우선순위 낮음 (보류, 재평가 대상)
+
+- SSF LwF의 무조건 적용(원문은 non-drift 라운드에서만) — 다른 논문과
+  상충하지 않는 순수 SSF 자체 충실도 문제라 고쳐도 되지만 영향 범위가
+  좁다(`dd≠none & af=lwf_ssf`).
+- SSF SampleSelector/MemoryManager의 목표분포·representativeness 산정
+  단순화(균일분포 vs 원문의 KL-divergence dual-mask) — 원문의 최적화
+  절차 전체를 포팅해야 하는 큰 작업 대비 실익 불확실.
+
+### 5. 조치 불필요 (재확인 완료)
+
+- SPIDER 버퍼 크기(`max_size=1000`) — SPIDER 자체 논문 수치는 아니지만
+  이미 "SSF/SPIDER/CND-IDS를 같은 용량 예산에서 비교"라는 근거가 있다
+  (위 "검토했지만 문제없음을 확인한 것" 절 참고). SPIDER 코드 자체가
+  로컬에 없어 원천적으로 그 이상 검증 불가능.
+- SSFDriftDetector 최소 윈도우 크기 가드 누락 — 실제 크래시 사례 없는
+  경미한 엣지케이스.
+- CND-IDS PCAScorer 죽은 코드 — 버그 아님.
+
+## 테스트베드 구조적 완성도 감사 (2026-08-14)
+
+**배경**: "논문과 일치하는가"(위 절들)는 충분히 봤지만, "테스트베드 자체가
+'가장 뛰어난 지속학습 조합을 찾는다'는 목적에 맞게 엔지니어링적으로
+완성도 있게 짜였는가"는 별도로 다시 봐야 한다는 문제 제기에 따라, 데이터
+파이프라인/시간흐름, 학습 루프·그래디언트 흐름, 평가·결과·리더보드
+파이프라인 3개 영역을 각각 별도 에이전트가 다시 감사했다. Track A/B 그리드
+분리 자체(`common/compatibility.py`)는 사용자가 그대로 두라고 확정해 감사
+대상에서 제외했다. 총 13개 항목을 발견했고, 안전하고 기계적인 6개는 바로
+반영, 실측 검증이 필요했던 GPM 1건은 A/B 두 차례로 확정, 나머지는 사용자
+판단이 필요해 보류했다.
+
+### 1. 바로 반영한 것 (기계적, 위험도 낮음)
+
+1. **낡은 `results/` 캐시 270개**: `grid_runner.py`의 결과 캐싱(`if
+   os.path.exists(out_path): continue`)이 코드 버전을 검사하지 않아,
+   오늘 CADE/SSF/CND-IDS 컴포넌트 4건과 class-incremental 분할을 고친
+   뒤에도 그 이전(2026-07-31~08-04) 코드로 계산된 결과 270개가 재계산
+   없이 그대로 남아있었다 — 지금 그리드를 돌리면 낡은 결과가 "최신"으로
+   반영될 뻔했다. `testbed/archive/2026-08-14_pre-structural-audit/`에
+   보존(이미 git에 커밋돼 있어 git으로도 복원 가능, 이 폴더는 편의용
+   사본)한 뒤 `testbed/results/`를 비웠다. 재발 방지로 `grid_runner.py`에
+   `compute_code_version()`(components/base/pipeline/dataset_loader.py
+   내용을 해시)을 추가해, 캐시된 결과의 `code_version`이 지금 코드와
+   다르면 스킵하지 않고 재계산하도록 했다(`result_schema.py`에
+   `code_version` 필드 추가).
+2. **`_class_incremental_split`의 class_order 미포함 카테고리 조용한
+   드롭**: train에서 계산한 `class_order`를 test에 재사용하는데, test
+   파일에 train에 없던 공격 category가 있으면 그 표본이 에러도 경고도
+   없이 어떤 experience에도 배정되지 못하고 사라지는 구조였다. NSL-KDD는
+   실측으로 문제없음을 확인했지만(대분류 5종 기준 train/test category
+   집합 일치) UNSW-NB15는 로컬에 원본이 없어 검증 못 했다 — 이 코드베이스의
+   "추측으로 조용히 진행하지 않는다" 원칙(예: `_load_unsw_attack_cat`의
+   행 정렬 검증)에 맞춰, class_order가 다루지 못하는 category가 있으면
+   즉시 `ValueError`를 던지도록 안전장치를 추가했다.
+3. **`best_f1_reference=0.0`의 오독 가능성**: Track B는 이 참고 지표
+   자체를 계산하지 않는데 `0.0`을 그대로 넣어서, CSV를 열어보는 사람이
+   "이 조합이 도달 가능한 최선의 F1이 0"이라고 오독할 위험이 있었다 —
+   "계산 안 함"을 `float('nan')`으로 명시했다.
+4. **`memory_footprint`가 마지막 라운드 스냅샷 하나뿐**: `SPIDERMemoryManager`
+   처럼 매 라운드 버퍼를 그 라운드 selected_data 크기로 통째로 교체하는
+   memory_manager는, class-incremental 분할이 만드는 라운드별 데이터量
+   변동(마지막 experience가 우연히 희소 카테고리면 버퍼가 작게 찍힘)
+   때문에 마지막 스냅샷만으론 오해를 살 수 있었다 — 라운드별 크기를
+   전부 기록해 `memory_footprint_peak`/`memory_footprint_avg`를 추가로
+   남기도록 `grid_runner.py`/`result_schema.py`를 고쳤다.
+5. **smoke_test가 "손실이 실제로 줄어드는 방향으로 갔는가"를 검증하지
+   않음**: 기존 15.1a(파라미터 변화량)/15.1b(optimizer step 횟수)는
+   "학습 루프가 설계대로 실행됐는가"만 보고, 손실 발산 여부는 15.2/15.3의
+   간접적인 NaN 전파로만(진단 메시지가 근본 원인을 가리키지 못하는 채로)
+   걸러졌다. `cl_client.py`의 `run_experience()`가 이제 experience당
+   `first_epoch_avg_loss`/`last_epoch_avg_loss`를 함께 반환하고,
+   `smoke_test.py`에 15.1d 게이트(finite 여부 + 첫 epoch 대비 10배+
+   증가 시 발산 의심 실패 처리)를 추가했다.
+
+### 2. GPM 기저(basis) 풀랭크 문제 — 실측 검증 후 반영
+
+GPM(`components/spider_gpm/gpm_anti_forgetting.py`)의 기저 누적에 크기
+상한이 전혀 없다는 게 감사에서 발견됐다. 실측(NSL-KDD, `af=gpm`, 5
+experience)으로 직접 재현했다: `encoder.0`(121차원)이 exp4에서 정확히
+121/121(풀랭크)에 도달해 그 레이어의 그래디언트가 마지막 라운드에
+완전히 0이 됐다(`project_gradients()`의 `grad - grad@basis@basis.T`가
+기저가 전체 공간을 덮으면 항상 grad 전체를 지워버리기 때문). `encoder.2`도
+93.75%까지 갔다.
+
+원인으로 GPM 원 논문 Algorithm 2의 residual projection 단계(SVD 전에
+이미 누적된 기저 방향을 먼저 제거)가 빠져 있다고 보고 `_compute_basis()`에
+추가했으나, A/B 실측(같은 조합)으로 **f1 0.7006→0.6440, bwt
+-0.108→-0.142로 오히려 악화**됨을 확인해 되돌렸다 — 이미 잘 커버된
+작은 레이어(`classifier`/`decoder.0`, latent_dim=32)일수록 residual을
+빼고 남은 에너지가 작고 흩어져 있어 오히려 그 레이어 차원 대부분이
+"새로 필요한 성분"으로 채택되는 역효과가 났다(기존엔 37.5%만 고정됐는데
+residual 적용 후엔 87.5%까지 고정 — 가장 직접적으로 예측에 관여하는
+레이어일수록 더 심하게 다쳤다). 이 파일의 2026-07-30 기록(공식 코드를
+문자 그대로 맞췄다가 실측 회귀로 되돌린 사례)과 같은 종류의 함정이라
+같은 원칙(실측 우선)으로 처리했다.
+
+대신 `max_basis_ratio=0.9`(신규, 원 논문에 없는 이 테스트베드 고유의
+안전장치)를 추가해, 기저가 ambient dimension의 90%를 넘지 못하게 상한만
+뒀다(넘칠 QR 열은 오래된 방향부터 유지하고 최근 방향부터 잘림 — "오래된
+태스크를 더 우선 보호"라는 GPM의 취지와 부합). A/B 실측 결과 이 cap만
+적용한 버전은 기존(무제한) 대비 f1 0.7006→0.7012(사실상 동일),
+bwt -0.1084→-0.0990(약간 개선)로, 풀랭크로 인한 치명적 실패만 막고
+나머지는 그대로 유지하는 것을 확인했다.
+
+### 3. 사용자 판단이 필요한 것 (아직 반영하지 않음)
+
+- **MinMaxScaler가 미래 experience 정보를 누수**: `dataset_loader.py`의
+  두 프로토콜(`preserve_official_split` True/False) 모두, 5개
+  experience로 나누기 **전에** 전체(또는 train 파일 전체)에 스케일러를
+  fit한다 — experience 0을 정규화할 때 이미 experience 4의 값 범위까지
+  반영된 스케일러를 쓴다는 뜻이다. CICIDS2018(train+test 병합분까지
+  포함)이 더 심하고 NSL-KDD/UNSW-NB15는 정도가 약하지만 같은 종류의
+  문제다. 제안된 수정: experience로 먼저 나눈 뒤 `MinMaxScaler.partial_fit()`
+  으로 그 시점까지의 experience만 누적 반영 — 후속 experience 값이
+  `[0,1]` 밖으로 나가는 것은 버그가 아니라 "분포가 실제로 이동했다"는
+  의미 있는 신호로 그대로 둬야 한다. 다만 이건 93×3 전체의 입력 데이터를
+  바꾸는 변경이라(이미 계산된 것과 재계산될 것을 다시 갈라놓음), A/B
+  실측과 함께 사용자 확인 후 반영 여부를 정하기로 했다.
+- **리더보드 F1 정렬이 BWT(망각)를 전혀 반영하지 않음**: "왜 BWT를
+  정렬 기준에서 뺐는가"에 대한 근거가 코드/문서 어디에도 없다 — 의도된
+  설계라는 기록이 없는 채로 지속학습 테스트베드의 핵심 지표(망각 방지)가
+  "최선의 조합" 판정에서 완전히 빠져 있다. 대안(F1 우선 + BWT 임계치
+  이하 경고 표시, F1 순위와 BWT-패널티 순위 병기 등)은 있지만 어느 쪽을
+  택할지는 사용자가 정할 문제로 남긴다.
+
+### 4. 사용자 질문에 대한 정직한 답
+
+- **데이터가 시간 흐름에 따라 배치 단위로 잘 입력되는가**: experience
+  순서·미니배치 셔플·train/test 분리는 감사로 문제없음을 확인했다(위
+  스케일러 항목 제외). 다만 "시간 흐름을 반영한 배치"라는 서사는
+  **공격 종류의 등장 순서에만** 있다 — 정상 트래픽의 experience 배분은
+  순수 무작위 균등분배라 시간 흐름과 무관하다(`_class_incremental_split`,
+  CND-IDS 원 논문의 설계를 그대로 이식한 결과, 버그는 아니지만 절반만
+  "시간 흐름 반영"이다).
+- **5개 experience에 걸쳐 조합별로 다 잘 학습되는가**: GPM을 제외한
+  나머지(SSF/CADE/CND-IDS/SPIDER 유래 컴포넌트, null baseline)는 loss
+  그래프 연결성·replay 그래디언트 흐름·optimizer 분리·추상 계약 일관성·
+  train/eval 전환 전부 코드 근거로 문제없음을 확인했다. GPM만 위 2번
+  항목의 문제가 있었고 지금은 고쳤다.
+- **Backbone은 잘 짜여져 있는가**: `FCLAutoEncoder`(encoder→z,
+  decoder→x_hat, classifier→z 직결)는 구조 자체가 단순하고 문제없다.
+  `classifier(z)`(SSF 원문의 `classifier(decoder(z))`가 아님)는 이미
+  의도적 절충으로 문서화되어 있다(위 절 참고). `ssf_backbone_dims()`도
+  검증됐다.
+
+## 5개 영역 병렬 재감사 (2026-08-14, 2차) — "논문과 일치하는가" 전면 재검증
+
+**배경**: 위 구조적 완성도 감사 이후, "93개 조합이 쓰는 방법들이 논문의
+실제 방법과 일치하는지 모든 코드를 줄마다 재확인해달라"는 요청에 따라
+CADE/SSF/CND-IDS/GPM·SPIDER/파이프라인-조합로직 5개 영역을 각각 별도
+에이전트로 처음부터 다시 대조했다(오늘 이미 적용한 수정들도 재검증
+대상에 포함). GPM 에이전트는 WebFetch로 공식 저장소
+(`sahagobinda/GPM/main_pmnist.py`)를 직접 가져와 대조했다.
+
+### 재확인된 기존 수정 (전부 MATCH)
+
+CADE class-aware pairing, SSF InfoNCE, SSF 메모리 버퍼 drift 방향, CND-IDS
+multi-teacher LwF — 4건 전부 각 원문과 항별로 재대조해 정확함을 재확인했다.
+
+### 이번에 새로 반영한 것
+
+1. **CND-IDS `_metric_loss`의 "본질적으로 동일" 서술 정정**
+   (`cndids_anti_forgetting.py`): 원문은 `TripletMarginLoss`+semihard
+   마이닝(상대 마진 트리플릿, `CND_IDS.py:38-39,76-78`)인데 구현은 절대
+   마진 페어와이즈다 — 방향(같은 클러스터는 가깝게, 다른 클러스터는
+   margin 이상)은 같지만 손실의 수학적 형태가 달라 "동일한 근사"가 아니라
+   "다른 형태로 근사"임을 명시했다. 새 의존성(`pytorch_metric_learning`)
+   설치 위험 회피라는 채택 이유 자체는 유효해 구현은 유지.
+2. **SSFSampleSelector의 "균일분포=SSF 대표성 개념" 서술 정정**
+   (`ssf_sample_selector.py`): SSF 원문(`utils.py:109-190`)의 목표 분포는
+   균일분포가 **전혀 아니다** — 현재 관측되는(드리프트된) 분포의 경험적
+   히스토그램이다(drift-추종형 선택). 이 테스트베드의 균일분포 대체는
+   인터페이스 제약(SampleSelector가 old/control 분포에 접근 불가, 원문의
+   M_t 최적화 자체가 M_c에 의존)상 불가피했지만, "SSF 개념을 표현한 것"이
+   아니라 "SSF의 핵심 메커니즘을 포기하고 완전히 다른 대체 휴리스틱(균일
+   커버리지)을 쓴 것"이라고 정정했다.
+3. **component_registry.py의 "CND-IDS 순정 조합" 표에서 `mm=cndids` 제거**:
+   `CNDIDSMemoryManager` 자신의 docstring이 이미 "CND-IDS 원문에는 메모리가
+   없다"고 밝히고 있는데, 레지스트리 요약 표는 여전히 `mm=cndids`를
+   `mm=spider`와 나란히 "CND-IDS 순정" 선택지처럼 적어놓고 있었다 —
+   `mm=none`이 실제로 더 순정에 가깝다는 점을 명시했다.
+4. **CADEMADScorer `compute_threshold()` — 재검토 후 이중 MAD 유지, 인용만
+   정정**: 원문(`detect.py:99`)은 이미 MAD-정규화된 점수를 상수
+   `mad_threshold`(3.5)와 직접 비교하는데, 이 구현은 그 점수 위에 다시
+   `median+t_mad*MAD`를 씌운다. A/B 실측(NSL-KDD, 순정 CADE 콤보)으로
+   원문처럼 상수 `t_mad`만 쓰도록 바꿔봤더니 f1 0.6482→0.5746,
+   bwt -0.1403→-0.1896으로 **오히려 악화**됨을 확인했다(pr_auc/roc_auc는
+   불변 — score() 자체는 안 바뀜). 원인으로 보는 것: CADE 원문은 크고
+   안정된 단일 코퍼스로 1회만 보정하는 정적 설계인데 이 테스트베드는
+   라벨 예산만큼의 작은 정상 참조로 매 라운드 다시 보정해야 해서, 이중
+   MAD가 라운드별 스케일 잡음을 흡수하는 적응적 역할을 하는 것으로
+   보인다. 코드는 유지하고 잘못된 인용(`detect.py:91,150-158`을 이
+   임계값 공식의 근거인 것처럼 쓴 부분)만 정정했다.
+5. **GPM residual projection — 공식 Eq-9 그대로 재구현 후 재검증, 최종
+   기각 확정**: 1차 시도(2026-08-14 앞선 절)는 정규화 방식이 공식과
+   달랐을 가능성이 있다는 지적을 받아, WebFetch로 확인한 공식 Eq-9
+   정규화(잔차가 아닌 원본 activation 총 에너지로 정규화, 누적치가 "기존
+   기저가 이미 설명한 비율"에서 시작)로 다시 구현해 재검증했다. 결과는
+   더 나빴다(f1 0.7006→0.5538, bwt -0.108→-0.170 — 1차 시도의
+   f1 0.6440보다도 나쁨). 구현 결함 가능성을 배제한 채로도 나빠졌으므로,
+   "residual projection이 이 아키텍처(얕은 backbone, latent_dim=32, 5
+   experience)에 안 맞는다"는 결론을 확정하고 최종 되돌렸다 —
+   `max_basis_ratio=0.9` cap만 유지.
+
+### 사용자 판단이 필요한 것 (아직 반영하지 않음, 심각도순)
+
+1. ~~**[최우선] "순정 CADE" 조합에서 CADE의 두 핵심 요소가 실제로 연결되지
+   않음**~~ — **2026-08-14 해결 완료**, 아래 "CADE 인코더-MAD 연결" 절 참고.
+2. **[중요, 미해결] 파이프라인 전체가 이진 라벨만 다뤄 CADE의
+   "class-aware"가 실질적으로 퇴화**: class-incremental 분할에 쓰는
+   다중클래스 category가 `experiences`에 담겨 어떤 컴포넌트에도 전달되지
+   않는다(`dataset_loader.py`). 그 결과 CADE의 pairing은 "여러 공격
+   유형별"이 아니라 "정상 vs 뭉뚱그려진 공격 평균"으로 단순화된다 — CADE의
+   핵심 주장(어떤 known family와도 안 닮은 새 유형 탐지)이 온전히 재현되지
+   않는다. 재검토 결과 범위가 처음 판단보다 크다 — `CADEDriftDetector`의
+   pairing뿐 아니라 `CADEMADScorer`의 centroid 모델도(원문은 정상+각 family별
+   centroid 여러 개 중 최솟값을 쓰는데, 지금은 정상 centroid 하나뿐) 다중
+   클래스로 바꿔야 한다. 게다가 class-incremental 분할상 한 라운드엔 배정된
+   카테고리만 등장하므로 family별 centroid는 라운드에 걸쳐 누적해야 하고,
+   희소 카테고리(예: U2R 52건) 라운드의 centroid는 노이즈가 심할 수 있어
+   "여러 노이즈 centroid 중 최솟값"이 오히려 지금 방식보다 못할 위험도 있다
+   — GPM/SSF에서 실측으로 확인된 것과 같은 종류의 함정일 가능성. 아직
+   구현하지 않았다 — 사용자 판단 대기.
+3. **[참고] 4개 논문이 이 파이프라인과 원문에 얼마나 가까운지 순위 —
+   CND-IDS ≫ SSF ≳ SPIDER &gt; CADE**(2번 항목 미해결 기준): n_experiences=5·
+   class-incremental 분할·Track B 배치/에폭이 전부 CND-IDS 원문 그대로라,
+   평가 운동장 자체가 CND-IDS의 "안방"이다. SSF는 부품(대표샘플 선택,
+   KL-마스크, LwF)은 정확히 이식됐지만 절차(누적 풀+스트리밍) 수준은
+   재현되지 않고 epoch=200은 원문(4~5)의 약 40배다. SPIDER는 원 코드 부재로
+   검증 자체가 근본적으로 제한된다. CADE는 1번(연결)은 해결했지만 2번
+   (다중클래스)과 "라운드 개념 자체가 원문에 없다"는 문제가 남아있다.
+   리더보드 순위를 "어떤 논문이 최선인가"로 해석할 때 이 비대칭을 반드시
+   함께 고지해야 한다.
+4. ~~SSF LwF가 drift 시엔 원문에서 아예 꺼짐~~ — **2026-08-14 시도했다가
+   되돌림**, `ssf_anti_forgetting.py` 모듈 docstring "2026-08-14" 절 참고.
+5. SSFDriftDetector 최소 윈도우 크기 가드 누락 — class-incremental 분할이
+   만드는 불균등한 라운드 크기(예: exp3=52건)에서 실제 영향 가능성 재확인.
+   경미하지만 실재하는 문제. 아직 미해결.
+
+### CADE 인코더-MAD 연결 (2026-08-14 해결)
+
+`CADEDriftDetector`가 학습시키는 사설 대조학습 인코더의 출력이 파이프라인
+어디에도 안 쓰이고, `CADEMADScorer`는 무관한 공유 backbone의 z에 MAD
+공식만 적용하던 문제(위 1번)를 해결했다. `dd=cade`와 `as=cade_mad`가
+함께 선택된 콤보에서만 `CLClient.__init__`이 `CADEMADScorer.
+set_private_encoder()`로 둘을 연결한다 — `drift_detector.
+uses_shared_representation`과 대칭인 `anomaly_scorer.
+uses_shared_representation` 플래그를 추가해 Step 6/7(및 `grid_runner.py`의
+추론 지연 측정, `smoke_test.py`의 15.5 게이트)의 인코딩 경로를 분기했다.
+`dd=cade`가 아닌 조합에서 `as=cade_mad`를 쓰면 여전히 공유 backbone의
+z를 쓴다(버그가 아니라 "MAD 통계 판정이 대조학습 없이도 통하는가"를 보는
+정당한 재조합 실험으로 남김).
+
+A/B 실측(NSL-KDD, 순정 CADE 콤보 `dd=cade/ss=random/mm=none/af=none/
+as=cade_mad`)으로 f1 0.6482→0.7898(+22%), precision 0.795→0.893,
+recall 0.547→0.708, pr_auc 0.749→0.922, roc_auc 0.741→0.877,
+bwt -0.1403→-0.0810 — **전 지표가 큰 폭으로 개선**됨을 확인했다. 이는
+이번 세션 전체를 통틀어 가장 큰 단일 개선폭이며, CADE가 자기 알고리즘대로
+작동하지 않고 있었다는 진단이 정확했음을 강하게 뒷받침한다. 93개 조합
+스모크 테스트(93/93 통과)와 `pytest`(13/13)로 회귀 없음을 확인했다.
+
+전부 `pytest`(13/13)와 93개 조합 스모크 테스트로 회귀 없음을 확인했다.
+
+## CADE 다중클래스(family) centroid 연결 — 두 차례 구현 결함 발견·수정 (2026-08-25)
+
+### 배경
+
+위 연결(인코더-MAD)은 됐지만, `CADEDriftDetector.fit()`에 넘기는 `labels`가
+여전히 이진(정상/공격)이었다 — CADE 원문의 실제 단위는 "정상 + 각 공격
+family"고(`detect.py:62` centroid, `data.py:268-345` pairing), DoS/Probe/
+R2L/U2R을 "공격" 한 뭉치로 묶으면 CADE의 핵심(family 단위 최근접 판정)이
+성립하지 않는다. `data/dataset_loader.py`가 이미 class-incremental 분할에
+쓰던 `category`를 `train_category`로 노출하고, `cl_client.py`가 이를
+`CADEDriftDetector.fit_with_category()`(신규)에 넘기도록 배선했다.
+
+### 1차 시도 — raw 데이터로 그 라운드에 한 번만 centroid 계산 → 대실패
+
+`group.unique()`로 이번 라운드에 있는 category만 그 라운드 raw 데이터로
+centroid를 만들고, 없어진 category는 이전 값을 그대로 두는 방식이었다.
+NSL-KDD 순정 CADE 콤보로 A/B: **f1 0.7713→0.0804(recall 0.66→0.04)로
+붕괴**. 원인: 사설 인코더는 CADE 원문(정적 1회 학습)과 달리 매 라운드
+계속 미세조정되는데, 한 번 등장했다가 사라진 family의 centroid는 등장
+당시 인코더 좌표에 박제된 채 남아 이후 라운드의(이미 이동한) 인코더
+좌표계와 어긋난다. 특히 NSL-KDD 마지막 experience(exp4)는 공격이 전혀
+없어(class-incremental 분할 설계상 자연 발생) 그 라운드는 "정상끼리만
+뭉치기" 대조학습만 수행 — 정상 centroid만 갱신되고 나머지는 낡은 채로
+남아 최종 판정 기하가 완전히 어긋났다.
+
+**사용자 지적("성능이 이렇게 붕괴한 건 분명 문제가 있다는 뜻인데, 왜 이렇게
+자잘한 문제가 많이 생기는지 이해가 안 간다. 처음부터 끝까지 다시 검토해줘")
+에 따라 "구조적 불일치"로 성급히 결론 내리지 않고 원인을 계속 추적했다.**
+
+### 2차 시도 — 참조 표본을 매 라운드 현재 인코더로 재인코딩 → 여전히 실패(f1=0.0)
+
+category별 raw 참조 표본을 인스턴스 수명 전체에 걸쳐 누적 보관(`_category_
+refs`, 최근 500개 캡)했다가, 매 라운드 **알려진 모든 category**의 centroid를
+**현재** 인코더로 다시 계산(`_recompute_all_centroids`)하도록 재설계했다.
+1차 문제(좌표계 어긋남)는 없앴지만 결과는 더 나빠졌다(**f1=0.0, precision=
+recall=0** — 어떤 표본도 threshold를 못 넘음). 진단 결과: 라운드가 진행될수록
+`min_anomaly_score`의 (전체 표본 대상) 최댓값이 14.98→3.83→3.06→1.87로
+단조 감소하다 마지막 라운드에 threshold(2.80)가 그 압축된 스케일 위에서
+계산돼 아무 표본도 넘지 못했다. 근본 원인: 이 테스트베드는 한 라운드에
+"정상 + 공격 family 하나"만 등장하므로, 사설 인코더가 매 라운드 그 2-클래스
+로만 재학습되면서 **예전에 본 family와 정상을 구분하는 능력을 라운드가
+지날수록 잃어버린다**(파국적 망각) — 재인코딩은 "지금 좌표"를 쓰게는
+해줬지만, 그 "지금 좌표" 자체가 이미 예전 family들과 정상을 구분 못 하는
+붕괴된 좌표였다.
+
+### 3차 시도 — 사설 인코더 전용 최소 리플레이 도입 → 채택
+
+`_category_refs`에 쌓아둔 과거 라운드의 참조 표본을 이번 라운드 대조학습
+배치에 섞어 넣어(`_replay_known_categories`), encoder가 이번 라운드에 없는
+과거 family와의 구분도 계속 "리허설"하도록 했다. NSL-KDD A/B: **f1 0.0→
+0.4334(precision 0.810, recall 0.296), pr_auc 0.595→0.764, bwt -0.198→
+0.097**로 회복 — 더 이상 붕괴하지 않고 정상적으로 작동한다(min_anomaly_score
+최댓값이 라운드가 지나도 13~15 수준으로 유지됨, 단조 압축 현상 사라짐).
+
+### 최종 판단 — 이진 baseline(f1 0.7713) 대비 여전히 낮지만 채택
+
+남은 격차는 버그가 아니라 시나리오 자체의 데이터 희소성으로 판단한다 —
+label_budget(10%) 적용 후 U2R은 라운드당 약 4~5건만 선택되고, 이 family는
+class-incremental 분할 설계상 정확히 한 라운드에만 등장해 리플레이로도
+표본 수 자체를 늘릴 수 없다(원 논문도 이 정도로 극단적으로 적은 표본으로는
+안정된 centroid를 못 만든다 — CADE 고유의 한계이지 이식 결함이 아니다).
+
+이 테스트베드의 평가 기준은 성능이 아니라 "각 논문의 실제 기법을 얼마나
+충실하게, 안정적으로 재현하는 조합인가"다(세션 내 사용자 확정 기준). 이
+기준으로 보면: (1) 다중클래스 family centroid + family 단위 contrastive
+pairing은 CADE 원문의 핵심 메커니즘을 이진 방식보다 훨씬 충실하게 재현하고,
+(2) 3차 시도 이후로는 안정적으로(f1=0 같은 붕괴 없이) 작동한다. GPM
+residual projection/CADEMADScorer 단일 t_mad/SSF drift-gated LwF와
+달리 — 저 세 사례는 "원문을 충실히 재현했더니 이 테스트베드 구조와 안 맞아
+**항상** 더 나빴다"는 반복 확인 끝에 되돌린 것이고, 이번 건은 "구현 결함
+두 개를 실제로 찾아 고쳤고, 남은 격차는 CADE 자체도 못 피하는 극단적 데이터
+희소성"이라는 점에서 성격이 다르다 — **되돌리지 않고 유지**한다.
+
+`max_category_ref=500`(신규 hparam, 원문 근거 없음 — 이 테스트베드가 encoder를
+계속 재학습한다는 구조적 차이를 보정하기 위한 전용 장치)는
+`configs/component_hparams/cade.yaml`에 문서화한다.
+
+### 93개 조합 스모크 테스트로 발견한 4번째 문제 — ss=ssf와의 상호작용
+
+위 3차 시도까지는 `ss=random` 콤보 하나만 A/B로 확인한 상태였다. 사용자
+지적("처음부터 끝까지 다시 검토해달라")에 따라 전체 93개 조합 스모크
+테스트로 넓혀서 재확인한 결과, `dd=cade`+`ss=ssf`+`as=cade_mad` 9개 조합
+(mm/af 조합과 무관하게 전부)에서 새로운 실패를 발견했다 — exp0에서
+threshold=33.81인데 그 라운드 전체 평가 score 범위가 [0.0002,15.17]밖에
+안 돼(15.2 예측 완전 퇴화, 15.3 threshold 범위 이탈) 모든 표본이 "정상"으로
+판정됐다. 이 9개 조합은 Fix 2 이전(이진 단일 centroid)에는 전부 정상
+통과했다(`smoke_v4_final.log` 확인) — 순수하게 Fix 2가 만든 회귀였다.
+
+원인: `ss=ssf`는 SSF 원문과 달리 이 테스트베드에서 "분포 전 구간에 고르게
+퍼지도록" 표본을 뽑는 균일-커버리지 선택으로 대체돼 있다(`ssf_sample_
+selector.py` 참고, 원문 mask 최적화 자체는 SampleSelector 인터페이스만으로
+재현 불가해 대체한 것 — 별개로 이미 문서화됨). 이 균일-커버리지로 뽑힌
+"정상 참조" 표본 중 일부는 원래 특징 공간에서 경계/극단에 위치해, 다중
+family min-centroid 점수에서 우연히 어떤 공격 family centroid에 더
+가까워 유난히 낮은 점수를 받고, 나머지는 정상 centroid 기준의 정상적인
+점수를 받는다 — 이 이질적인 분포 때문에 `compute_threshold`의 이중 MAD
+공식(median+3.5*MAD)이 계산 근거였던 eval_scores 자기 자신의 최댓값조차
+넘는 값을 냈다. 이진 단일 centroid 때는 점수가 더 균질해 이 문제가
+드러나지 않았다.
+
+수정: `CADEMADScorer.compute_threshold()`가 계산한 threshold를
+`eval_scores.max()`로 clamp한다 — threshold가 자신의 계산 근거였던
+분포의 최댓값조차 넘으면 이미 그 계산이 보증하는 범위를 벗어난 것이므로,
+이중 MAD 공식 자체(A/B로 이미 검증된 부분)는 손대지 않고 이런 병적인
+경우만 막는 최소 안전장치다. 이후 93개 조합 nsl-kdd 스모크 테스트
+**93/93 전부 통과**, `pytest`(13/13) 회귀 없음 확인.
+
+CICIDS2018/UNSW-NB15는 로컬 메모리 제약(전자는 원본 CSV 병합 시 GiB 단위
+배열 할당 실패, 후자는 공식 attack_cat 원본 파일 미보유)으로 로컬 검증
+불가 — 기존 관례대로 GPU 서버에서 93×3 전체 재실행 시 최종 확인한다.
+
+## 4개 논문 컴포넌트 전수 재감사 (2026-08-26)
+
+사용자 요청("테스트베드로서 역할을 잘 할 수 있는지 모든 파일의 코드를
+소스코드와 비교하면서 직접 검토")으로, SSF/CADE/CND-IDS/SPIDER-GPM 4개
+영역을 각각 전담하는 병렬 에이전트(로컬에 있는 각 논문 원본 저장소와
+직접 대조, 실행 기반 검증 포함)와 파이프라인/공통 인프라 계층에 대한
+직접 검토를 병행했다. 이전 감사들이 "공식/citation이 원문과 일치하는가"
+위주였다면, 이번엔 그에 더해 "실제로 돌려봤을 때 라운드별 상태가 올바르게
+유지되는가", "다른 컴포넌트와 결합했을 때도 안전한가"까지 확인했다.
+
+### 발견 1(확정) — grid_runner.py의 코드 버전 캐시 자체에 구멍
+
+`compute_code_version()`의 `_VERSIONED_PATHS`가 `configs/`(하이퍼파라미터
+YAML)와 `common/`(F1/BWT 계산식)을 포함하지 않았다 — `git log`로 이
+세션 동안만도 component_hparams/*.yaml이 여러 번 실제로 바뀌었음을
+확인했다. `.py` 파일 없이 하이퍼파라미터만 고치고 그리드를 재실행하면
+바뀐 값이 반영 안 된 옛 결과가 조용히 재사용될 뻔했다 — 270개 스테일
+결과 사고(2026-08-14)를 막으려고 만든 안전장치 자신이 같은 종류의
+구멍을 갖고 있었던 것. `configs/`, `common/`, `experiments/grid_runner.py`
+자신을 추가하고, 디렉터리 필터가 `.py`만 인식하던 것도 `.yaml`까지
+인식하도록 함께 고쳤다(이것도 안 고쳤으면 `configs/`를 목록에 추가해도
+실제로는 아무 파일도 안 잡혔을 것).
+
+### 발견 2(확정) — 스모크 테스트가 뒤쪽 라운드를 한 번도 검사하지 못한 구조적 사각지대
+
+`SMOKE_N_EXPERIENCES=2`(하드코딩)가 5개 experience 중 앞 2개만 검사했다.
+class-incremental 분할은 설계상 희귀·어려운 category와 공격 0건 라운드를
+**항상 뒤쪽**에 배치하므로, 정확히 그 라운드들이 한 번도 스모크 테스트를
+거치지 않았다. 이 사각지대 때문에 아래 두 개의 심각한 붕괴(af=gpm,
+af=cndids)가 "통과" 처리된 채 방치돼 있었다. `SMOKE_N_EXPERIENCES`를
+`None`(=전체)으로 바꾸고, 15.2 게이트를 강화(다수 클래스 비율 ≥0.97을
+경고가 아니라 실패로), roc_auc 역전 감지(15.2b, 신규)와 CND-IDS
+pseudo-label 쏠림의 조건부 실패 처리(15.4)를 추가했다 — 소요 시간은
+늘어나지만(대략 2.5배) 사용자 지시대로 정확성을 우선한다.
+
+### 발견 3(확정, 최종 원인은 GPM 결함이 아니었음) — af=gpm 완전 붕괴
+
+전체 5라운드 실행 시 `af=gpm`이 f1=0.0053, pr_auc=0.52(거의 무작위),
+bwt=-0.628까지 붕괴(아무 망각방지 없는 af=none보다 훨씬 나쁨). 두 단계로
+원인을 추적했다:
+1. bias가 GPM의 gradient projection에서 완전히 빠져 있음을 발견해
+   weight+bias를 하나로 증강해 함께 사영하도록 고쳤다 — 하지만 A/B
+   실측으로 이 수정만으로는 붕괴가 전혀 안 풀렸다(f1 그대로, roc_auc는
+   오히려 0.265로 악화). 이 수정 자체는 이론적으로 정당하고 해롭지도
+   않아 유지하지만, 붕괴의 원인은 아니었다.
+2. 계속 추적한 결과 **`af=gpm`과 `as=none`(고정 0.5 임계값)의 궁합
+   문제**였다 — GPM의 gradient projection 압력 아래서 classifier 로짓
+   스케일이 라운드마다 계속 커지는데(weight_norm 3.08→6.16), `as=none`의
+   고정 임계값이 이를 전혀 못 따라간다. `as=cade_mad`(매 라운드 재보정)로
+   바꾸면 f1 0.0054→**0.6655**, bwt -0.507→**-0.1405**로 완전히 건강해진다
+   (naive fine-tuning의 bwt -0.433보다 훨씬 덜 잊음 — GPM이 원래 주장하는
+   효과 그대로).
+GPM 코드를 더 고쳐 이 조합을 억지로 성능 개선하지 않는다 — 두 컴포넌트
+각각은 자기 논문대로 충실하지만 서로 안 맞는 "진짜 비호환 조합"이 발견된
+것이고, 발견 2의 강화된 게이트가 이걸 정확히 실패로 잡아 그리드에서
+제외하는 게 올바른 처리다.
+
+부수적으로 GPM의 `compute_loss()`가 `replay_batch`를 전혀 쓰지 않는다는
+것도 발견했다 — GPM 원 논문 자체는 리플레이가 필요 없다는 게 핵심 주장
+이라 `mm=none`(순정 GPM)과 결합됐을 땐 맞는 동작이지만, SPIDER 논문은
+바로 그 GPM에 별도 유한 버퍼를 추가한 것이 핵심 기여라 `mm=spider`와
+결합됐을 때 그 버퍼를 아예 안 쓰면 "SPIDER"를 재현하지 못한다. replay_batch
+가 있을 때만 그 위에도 같은 task loss를 더하도록 고쳤다(`mm=none`과
+결합되면 replay_batch가 항상 None이라 원 논문 그대로 동작이 자동
+보존된다). A/B 실측: `af=gpm+mm=spider+as=cade_mad`(완전한 SPIDER)
+f1=0.8544, **bwt=+0.0423**(과거 태스크 성능이 오히려 개선) — GPM만
+쓸 때(f1=0.6655)보다도 뚜렷이 낫다.
+
+**재감사에서 발견 — 이 결과에 두 가지 단서가 붙는다**: (1) `mm=spider`의
+리플레이 배치는 실제 라벨이 아니라 SPIDERMemoryManager의 스냅샷 모델이
+만든 pseudo-label이다(`spider_memory_manager.py` 참고) — 즉 `af=gpm+
+mm=spider`도 `af=lwf_ssf`/`af=none`에 대해서만 분석됐던 자기학습
+(self-training) 우려의 대상에 포함된다(뚜렷한 붕괴는 관찰 안 됐지만
+"자기학습과 무관한 통제군"은 아니다). (2) 재실행(f1=0.8399, bwt=+0.0992
+— 방향은 같지만 수치는 다름, 그 사이 다른 수정들이 겹친 영향으로 보임)
+에서 R-matrix를 라운드별로 분해해보니, 양의 BWT 대부분이 R2L 라운드
+하나(diag F1≈0.31→최종 F1≈0.67)에서 나왔는데, 그 구간에서 classifier
+weight_norm은 거의 안 변한 반면(6.05→6.08) `as=cade_mad`의 threshold는
+3.43→3.76으로 라운드마다 다시 계산된다 — 즉 이 양의 BWT는 "진짜 표현
+수준의 역전이(backward transfer)"와 "매 라운드 재계산되는 MAD 임계값의
+표본 잡음"이 섞인 결과일 가능성이 있다(이중 MAD 재보정 자체가 라운드별
+스케일 흔들림을 흡수하는 적응적 성격이라는 건 `cade_anomaly_scorer.py`
+의 2026-08-14 절에 이미 문서화됨). 데이터 누출은 아니다(정상 참조와
+SPIDER 버퍼 모두 그 라운드의 selected_data에서만 나오고, test는 Step 7
+평가에만 쓰인다 — 확인 완료) — 다만 "깨끗한 backward transfer"라는
+표현은 이 단서를 달아 이해해야 한다.
+
+### 발견 4(확정) — CND-IDS pseudo-label 참조가 공격 희귀 라운드에서 거의 전체를 뒤덮음
+
+`on_experience_start`가 받는 "정상 참조"(`normal_subset`)가 매 라운드
+**그 라운드 자신의** 라벨 구성에서 다시 정의되는데, 원문의 `datastream.
+init_normal`은 스트림 시작 전 **한 번** 확정되는 고정 참조다. 공격이
+희귀한 라운드(R2L 6.9%, U2R 0.38%)는 `normal_subset`이 라운드의
+93~100%까지 차지해, K-Means 클러스터 대부분이 참조 데이터를 하나는
+포함하게 되어 거의 모든 클러스터가 "정상"으로 판정됐다(실측: pseudo-label
+다수 비율 R2L 0.9844, U2R 1.0000). U2R 라운드 직후 0.870이었던 정확도가
+다음 라운드엔 0.707로 떨어지는 실제 망각 효과까지 확인했다. `normal_subset`
+을 인스턴스 수명 전체에 걸쳐 누적하는 별도 풀(`_normal_ref_pool`, 최근
+5000개 캡)로 바꾸고, "이 클러스터가 정상인가" 판정에 그 누적 풀을 쓰도록
+고쳤다(클러스터링 자체는 원문처럼 매 라운드 새로 fit). A/B 실측: f1
+→**0.889**, roc_auc→**0.895**, bwt→**+0.037**, U2R 라운드 자체 성능
+(diag-F1)이 **0.44**까지 회복(붕괴 이전엔 사실상 미학습 수준).
+
+**2026-08-26 재감사에서 발견 — 위 "누적"이 사실상 전혀 누적되지
+않고 있었다(원인 재규명, 효과 자체는 유지)**: 처음 구현(`combined_ref
+[-cap:]`, 꼬리 슬라이싱)은 Track B가 label_budget 없이 experience
+전체를 쓰는 탓에 `normal_subset` 자체가 이미 매 라운드 cap(5000)보다
+훨씬 크다(NSL-KDD 13,468~59,396건) — 그 결과 `combined_ref`의 마지막
+`cap`개는 **항상 100% 이번 라운드 자신의 데이터**였다(provenance
+추적으로 실측: 5라운드 전체에서 이전 라운드 표본 생존율 0%). 위에서
+관찰된 개선은 "라운드를 넘어 기억한다"가 아니라 **"참조 표본 수가
+줄어들면 K-Means 클러스터가 덜 뒤덮인다"**는 원 논문과 무관한 우연한
+부작용이었다(같은 클러스터링에 참조만 전체 vs 5000건 무작위로 바꿔
+분리 검증: R2L pseudo_ratio 0.9720→0.9634, U2R 0.9998→0.9962 — 표본
+수 축소 자체가 효과의 전부). 꼬리 슬라이싱을 무작위 표본으로 바꿔 실제
+누적이 되도록 고쳤다 — `CNDIDSMemoryManager`(정상 전용 FIFO 버퍼)도
+같은 근본 원인(버퍼도 max_size=1000보다 라운드당 표본 수가 훨씬 큼)의
+같은 문제가 있어 함께 고쳤다. **재수정 후 프로덕션 규모(K후보 최대
+2000, cluster_fit_sample_size=10000) 재실행 결과**: f1=0.8218,
+roc_auc=0.8684, bwt=-0.0403, diag-F1=[0.949,0.882,0.613,**0.493**,0.0]
+— 꼬리 슬라이싱 버전(f1=0.855, roc_auc=0.851, U2R diag=0.43~0.46) 대비
+전체 f1은 소폭 낮아졌지만 roc_auc와 U2R 자체 성능은 오히려 더 낫다(R2L은
+소폭 하락). 우연히 작동하던 메커니즘을 실제로 의도한 대로 작동하는
+메커니즘으로 바꾼 것이므로, 절대 수치의 소폭 변동은 "성능 하락"이 아니라
+"이제 실제로 옳은 걸 계산한다"는 관점에서 받아들인다(이 테스트베드의
+판단 기준 — 사용자 확정). 참고로 위 발견4 수치(0.889/0.895/+0.037)는
+MinMaxScaler 시간 유출 수정("발견 6-보충") **이전**에 측정된 것이라
+그 자체로도 이미 낡았다 — 두 수정을 함께 반영한 재측정에서는 f1=0.855,
+roc_auc=0.851, **bwt=-0.047**(부호 반전)로 나왔다(U2R diag-F1은 0.458로
+여전히 회복 유지). 이후 A/B는 반드시 그 시점의 최신 코드 전체로
+재확인해야 한다는 교훈이 두 번째로 확인된 것 — `ssf_sample_selector.py`
+모듈 docstring의 같은 교훈 참고.
+
+### 발견 5(확정) — SSF 리플레이 버퍼의 소수 클래스 완전 소실
+
+`SSFMemoryManager.update()`의 대표성 점수(자기 클래스 centroid까지의
+거리)가 클래스 자신의 특징 분산에 스케일이 좌우되는데, 이 점수를 클래스
+구분 없이 **전역** `topk`로 랭킹해 버퍼를 채우고 있었다. 실측(NSL-KDD
+5라운드 전체, `dd=ssf/ss=ssf/mm=ssf/af=lwf_ssf/as=cade_mad`): 라운드3
+(U2R)에서 선택된 attack 5건이 그 즉시 같은 `update()` 호출 안에서 버퍼
+attack 슬롯(369개, 전부 DoS/Probe/R2L)에 밀려 **0/5 생존**. 클래스별로
+버퍼 슬롯을 구성비만큼(최소 1개) 미리 배정하고 그 쿼터 안에서만 top-k를
+매기도록 고쳤다(`_quota_topk_indices`). `SSFSampleSelector`도 같은 종류의
+문제(균일-히스토그램 대체가 클래스를 몰라 라운드마다 예측 불가능하게
+비율을 왜곡 — R2L 라운드는 비례 기대치 대비 82% 적게 선택됨)를 같은
+방식(`_quota_select`)으로 고쳤다.
+
+**다중클래스(category) 쿼터로 더 확장 — 처음엔 둘 다 기각했다가, 재검증
+후 선택기만 채택**: 이진 쿼터 수정 후에도 U2R 라운드 자체 성능이
+0.048→0.048로 거의 그대로여서, CADE처럼 `train_category`(다중클래스)로
+쿼터를 나누는 확장을 선택기/버퍼 양쪽에 각각 시도했다. **처음** A/B
+(f1 0.7291 기준선)는 둘 다 순손해로 나와 둘 다 되돌렸는데, 4개 논문
+컴포넌트 전수 재감사에서 이 A/B가 그 사이 반영된 MinMaxScaler 시간 유출
+수정("발견 6-보충") 이전의 낡은 숫자와 비교된 것이었음이 드러났다 —
+전처리가 그리드 전체의 절대 수치를 같이 움직이므로, 4개 변형 중 어느
+게 최선인지의 **순위 자체**가 달라질 수 있다는 걸 놓쳤던 것이다.
+현재 코드로 4개 변형을 처음부터 다시 측정한 결과:
+  - 이진 쿼터만: f1=0.6565, roc_auc=0.7150, diag-F1=[0.851,0.554,
+    0.257,0.009,0.0]
+  - **선택기만 category 쿼터: f1=0.7040, roc_auc=0.6451, diag-F1=
+    [0.846,0.556,0.254,0.067,0.0]** — 전체 f1도 U2R도 이진보다 낫다.
+  - 버퍼만 category 쿼터: f1=0.5107, roc_auc=0.5101(거의 무작위) — 여전히 나쁨.
+  - 둘 다 category 쿼터: f1=0.5879, roc_auc=0.5276 — 여전히 이진보다 나쁨.
+**결론이 뒤집혔다**: 선택기의 category 쿼터는 채택(`SSFSampleSelector.
+select_with_category()`, 최종 코드에 반영), 버퍼의 category 쿼터는
+재검증 후에도 기각 유지(`SSFMemoryManager`는 이진 쿼터만) — CADE의
+다중클래스 centroid(family별 완전히 분리된 표현 공간을 만드는 게
+메커니즘 자체)와 달리, SSF의 "대표성" 대체 휴리스틱에서는 "예산을 어떻게
+배정할까"(선택기)는 category 단위가 도움이 되지만 "이미 담긴 표본
+중 누구를 내보낼까"(버퍼)는 여전히 손해라는, 두 메커니즘의 비대칭적
+반응으로 보인다. **교훈**: 그리드 전체에 영향을 주는 변경(전처리 등)
+이후에는 이전 A/B 결론을 그대로 믿지 않고 반드시 재확인해야 한다.
+
+### 발견 6-보충 — 전처리 시간 유출: MinMaxScaler + CICIDS2018 포트 빈도
+
+4개 컴포넌트 재감사와는 별개로 직접 검토한 결과, 이미 알려져 있던(보류
+상태였던) "MinMaxScaler가 train 파일 전체에 한 번에 fit된다" 문제가
+스케일러 하나만의 문제가 아니라는 걸 확인했다 — CICIDS2018의 Dst Port
+빈도 범주화(`_bucket_port_frequency`)도 10일치 전체(=모든 experience를
+합친 것)를 병합한 뒤 계산되고 있었다. 둘 다 "라운드로 나누기 전에 전체
+데이터로 전처리 통계를 미리 계산한다"는 같은 패턴이라, experience 0의
+모델이 실제로는 아직 등장하지 않은 미래 experience의 데이터 범위/포트
+빈도까지 이미 알고 있는 셈이었다 — 지속학습 벤치마크의 "미래 정보 없음"
+원칙에 어긋난다. 둘 다 고쳤다:
+- **MinMaxScaler**: 원본(미정규화) 데이터로 먼저 class-incremental 분할을
+  하고, `partial_fit()`으로 라운드 순서대로 누적 갱신 — experience i는
+  0..i의 통계만 안다. 3개 데이터셋 전부 적용, NSL-KDD로 로컬 검증 완료
+  (pytest 15/15, 여러 콤보 A/B 실행 정상).
+- **CICIDS2018 포트 빈도**: `_class_incremental_split`에 `extra_arrays`
+  파라미터를 추가해(NSL-KDD/UNSW-NB15는 안 넘기므로 기존 2-튜플 반환에
+  영향 없음) port/protocol 원본을 X/y/category와 같은 순서로 라운드별
+  슬라이싱한 뒤, `_IncrementalPortBucketer`로 라운드 누적 빈도 기준
+  버킷을 매긴다. protocol 원-핫의 범주 **집합**은 예외적으로 전체
+  데이터에서 한 번 고정한다(스키마 정보이지 통계가 아니라 미래 누출이
+  아니라고 판단 — "이 필드가 어떤 값을 가질 수 있는가"는 프로토콜
+  표준이 정하는 것이지 라운드별 관측 분포가 아니다). CICIDS2018 자체는
+  로컬 메모리 제약으로 끝까지 실행 못 하지만, 합성 데이터로 핵심 불변
+  조건(라운드마다 input_dim이 안 바뀌는가, 버킷이 항상 {0,1,2}인가,
+  extra_arrays 슬라이싱이 X/y/category와 정확히 같은 행 순서인가)을
+  회귀 테스트로 고정했다(`tests/test_cicids_incremental_preprocessing.py`)
+  — GPU 서버 실행 시 실제 규모로 최종 확인한다.
+
+### 발견 6-보충2 — 스모크 테스트 15.2/15.4 게이트만으로는 안 잡히는 경우
+
+CADE 감사 에이전트가 `dd=cade/ss=ssf/mm=spider/af=gpm/as=cade_mad`를
+축소된 epoch(20, 기계 부하로 인한 진단용 단축)으로 실행해 roc_auc=0.151
+(역전 의심)을 발견했었다. 발견 3·4·5·6의 수정이 모두 반영된 뒤 같은
+콤보를 **전체 200 epoch**로 재실행한 결과 roc_auc=0.635~0.711로 건강함을
+확인했다 — 축소된 epoch에서의 불안정성이었거나, 오늘의 다른 수정들이
+부수적으로 해결한 것으로 보인다. 별도의 CADE 전용 수정은 필요 없었다.
+다만 이 경험 자체가 "축소된 설정으로 진단한 결과는 반드시 전체 설정으로
+재확인해야 한다"는 걸 재확인시켜준다 — 이후 모든 A/B는 가능한 한 실제
+프로덕션 하이퍼파라미터(200 epoch 등)로 확인했다.
+
+### 발견 6(시도했다가 되돌림) — SSF LwF distillation을 replay_batch까지 확장
+
+`compute_loss()`의 distillation 항이 `new_batch`에만 적용되고
+`replay_batch`에는 전혀 적용되지 않고 있음을 발견했다 — SSF 원문
+(`ssf.py:296-330`)은 old+new를 합친 전체 배치에 distillation을 적용하므로,
+replay_batch에도 teacher와의 MSE를 더하도록 확장해봤다. **A/B 실측
+결과 오히려 나빠져(f1 0.6565→0.6128, roc_auc 0.7150→0.5981) 되돌렸다**
+— SSF의 teacher는 매 라운드 그 시점 모델 전체를 스냅샷한 것이라,
+replay_batch(과거 라운드 데이터) 위에서도 teacher와 가까워지라고
+강제하면 teacher 자신이 이미 그 데이터로 학습된 상태라 distillation
+신호가 자기 자신을 재확인하는 것에 가까워지고, 정작 new_batch(이번
+라운드에 새로 배워야 할 것) 쪽으로 가야 할 gradient 용량을 깎아먹는
+것으로 보인다 — GPM residual projection/CADEMADScorer 단일 t_mad와
+같은 "원문에 더 충실하지만 이 테스트베드 구조와 안 맞는" 패턴. 원래의
+new_batch만 distillation하는 방식을 유지한다(`ssf_anti_forgetting.py`
+모듈 docstring 참고).
+
+## Track A/B 전체 재감사 후 발견 — Track B에 anomaly_scorer=cade_mad 추가 (2026-09-01)
+
+Track A/B 구조 전수 재감사(사용자 지시: "아예 원초적인 걸로 돌아가서 track
+A/B로 나눈 것이 옳은 건지 등 큰 문제 뿐 아니라 사소한 문제까지 전부 다
+분석해")에서, Track B의 `anomaly_scorer`가 `pca`로만 고정된 것이 실제
+코드 구조상 근거가 없는 제약이었음을 발견했다:
+
+1. **"classifier 전용/autoencoder 전용" 구분이 런타임에 전혀 검사되지
+   않는다**: `CADEMADScorer.required_backbone = "classifier"`,
+   `PCAScorer.required_backbone = "autoencoder"`로 선언은 돼 있지만
+   (`발견했지만 낮은 우선순위라 손대지 않은 것` 절 참고), `base/models.py`의
+   `FCLAutoEncoder`가 Track A/B 공통으로 z/x_hat/logit을 모두 만드는
+   하나의 모델이라 — CADEMADScorer가 소비하는 z는 Track A든 B든
+   구조적으로 완전히 동일하다.
+2. **이미 있던 대칭 사례**: Track A에 `dd=none`+`as=cade_mad`(CADE의
+   대조학습 인코더 없이 MAD 채점 방식만 공유 z 위에 적용)가 정당한
+   재조합으로 이미 존재한다(`cade_anomaly_scorer.py` "2026-08-14" 절
+   참고). 이와 대칭으로 "CND-IDS의 라벨-프리 표현학습 위에 CADE의
+   median+MAD 채점 방식만 얹으면 어떤가"도 구조적으로 똑같이 타당하다.
+3. **threshold 계산 방식이 실제로는 Track이 아니라 scorer 자체 속성으로
+   결정된다**: 기존엔 `CLClient`가 `self.track == "A"`로 분기해 Track A는
+   정상 참조(s_ref) 기반 median+MAD, Track B는 Best-F(라벨 필요)를 썼는데,
+   `pca`=라벨 필요, `cade_mad`/`none`=라벨 불필요가 지금까지 Track과
+   100% 겹쳤을 뿐 논리적 인과관계는 아니었다. `BaseAnomalyScorer`에
+   `threshold_needs_labels` 플래그(기본 False, `PCAScorer`만 True)를
+   추가해 `CLClient` Step 7이 이 플래그로 분기하도록 일반화했다
+   (`base/anomaly_scorer.py`/`pipeline/cl_client.py` "2026-09-01" 절 참고).
+   이 리팩터는 Track A의 기존 동작을 그대로 보존한다(기본값이 예전 분기와
+   정확히 같은 결과를 내도록 설계) — Track A 90개 조합은 영향을 받지 않는다.
+
+사용자 승인("지금 진행(권장)") 후 `common/compatibility.py`의
+`TRACK_B_GRID["anomaly_scorer"]`에 `cade_mad`를 추가했다(전체 유효 조합
+93→96개, Track B 3→6개). 새로 생긴 3개 조합
+(`mm=none/spider/cndids` × `as=cade_mad`)을 NSL-KDD로 `run_combo_full`
+전체 실행(200/20 epoch, 5 experience 전부, CPU)해 기존 `as=pca` 3개와
+직접 A/B 비교했다:
+
+| memory_manager | scorer | f1 | precision | recall | roc_auc | bwt |
+|---|---|---|---|---|---|---|
+| none | cade_mad | 0.8739 | 0.9047 | 0.8452 | 0.9329 | +0.0152 |
+| none | pca | 0.8218 | 0.8621 | 0.7852 | 0.8684 | -0.0403 |
+| spider | cade_mad | 0.8495 | 0.9011 | 0.8035 | 0.8933 | -0.0686 |
+| spider | pca | 0.8718 | 0.8819 | 0.8618 | 0.8856 | +0.0146 |
+| cndids | cade_mad | 0.8558 | 0.9005 | 0.8153 | 0.9088 | -0.0495 |
+| cndids | pca | 0.8497 | 0.8768 | 0.8242 | 0.8705 | -0.0316 |
+
+6개 조합 전부 f1 0.82~0.87, roc_auc 0.87~0.93 범위의 건강한 값을 내고
+어느 쪽으로도 퇴화(단일 클래스 쏠림, roc_auc 역전, threshold 범위 이탈)
+하지 않았다 — `mm=spider`에서는 `pca`가, `mm=none`/`mm=cndids`에서는
+`cade_mad`가 더 나아 결과가 memory_manager에 따라 갈린다(어느 한쪽이
+항상 우세하지 않음). 이 테스트베드의 목적은 "조합의 성능이 올라가는 것"이
+아니라 "논문에 충실한 재조합의 다양성"이므로, 이 mixed 결과 자체가 —
+`cade_mad`가 Track B에서 `pca`의 단순 중복이 아니라 memory_manager와
+상호작용하는 독립적인 축임을 보여주는 — 이 추가가 진짜로 의미 있는 조합
+확장이라는 근거가 된다. perf_matrix 마지막 라운드(exp4) 대각선이 6개
+전부 0.0인 것은 버그가 아니라 NSL-KDD의 class-incremental 분할에서
+exp4에 공격이 아예 없는 것으로 이미 알려진 구조적 특성이다(위 "Phase 2"
+계획 문서 참고).
+
+검증 방법: `run_combo_full()`을 직접 호출해(smoke_test의 pass/fail
+게이트보다 더 엄격한 실제 정량 지표로) NSL-KDD 전체 데이터·전체 5
+experience·CND-IDS 원 논문 epoch(20)로 6개 조합을 전부 실행했다(로컬
+CPU, 총 약 12시간 — Track B의 매 라운드 K-means 재클러스터링이 병목).
+Track A 90개 조합은 위 3번 리팩터가 기존 분기 결과를 그대로 보존하도록
+설계했으므로 재검증 대상에서 제외했다(회귀 테스트 `pytest
+testbed/tests/` 15/15 통과로 별도 확인). 96개 조합 전체에 대한
+smoke_test(15.1~15.5 게이트) 재실행은 로컬 CPU로는 시간이 지나치게
+오래 걸려(Track B 6개만도 12시간) 사용자가 이미 계획한 GPU 서버 이전
+시점에 함께 수행하기로 한다.

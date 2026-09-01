@@ -4,7 +4,11 @@ Paper → component mapping (슬롯 순서: drift / sample / memory / anti / ano
   SSF     : ssf    / ssf    / ssf 또는 spider / lwf_ssf 또는 none / cade_mad 또는 none
   CADE    : cade   / random / none   / none    / cade_mad
   SPIDER  : none   / random / spider / gpm     / cade_mad 또는 none
-  CND-IDS : none   / random / cndids 또는 spider / cndids  / pca
+  CND-IDS : none   / random / spider / cndids  / pca 또는 cade_mad
+  (memory_manager='cndids'는 CND-IDS 원문의 순정 조합이 아니다 — 아래 참고.
+  CND-IDS를 가장 충실히 재현하려면 memory_manager='none'을 쓴다. 구조 전수
+  감사(2026-08-14)에서 이 표가 'cndids'를 마치 순정 CND-IDS 선택지처럼
+  나란히 적어놓아 오해를 부를 수 있다는 지적을 받아 정정했다.)
 
 memory_manager='spider'는 SPIDER 원 논문의 "유한 버퍼 메모리(M)" 메커니즘이다
 (components/spider_gpm/spider_memory_manager.py 참고, 사용자가 원 논문을
@@ -12,10 +16,12 @@ memory_manager='spider'는 SPIDER 원 논문의 "유한 버퍼 메모리(M)" 메
 기존 memory_manager='fifo'(특정 논문 근거 없는 공통 baseline)는 이 SPIDER
 메커니즘으로 대체되어 삭제했다.
 
-anomaly_scorer는 Track B에서 pca만 남겼다 — lof/dif는 CND-IDS 원 논문이
-"자체 제안한 방법"이 아니라 "비교를 위해 인용한 제3자(다른 논문) baseline"
-이라(부록A: "CND-IDS 비교 baseline"), PRD 0절의 "네 논문이 실제로 제안한
-메커니즘만 재조합한다" 원칙에 비춰볼 때 포함 근거가 약했다(사용자 지시).
+anomaly_scorer는 Track B에서 pca(CND-IDS 자체 제안)와 cade_mad(CADE 자체
+제안, Track B에서도 구조적으로 유효 — common/compatibility.py "2026-09-01"
+절 참고)만 남겼다 — lof/dif는 CND-IDS 원 논문이 "자체 제안한 방법"이 아니라
+"비교를 위해 인용한 제3자(다른 논문) baseline"이라(부록A: "CND-IDS 비교
+baseline"), PRD 0절의 "네 논문이 실제로 제안한 메커니즘만 재조합한다"
+원칙에 비춰볼 때 포함 근거가 약했다(사용자 지시).
 """
 
 import inspect

@@ -3,10 +3,15 @@
 # 컴포넌트 메커니즘 자체의 차이에서 비롯되도록 하기 위함.
 #
 # 예외: epochs_per_experience_track_b, batch_size_track_b (아래 각각 참고) —
-# 둘 다 Track 단위(조합 단위가 아님)로만 다르다. Track A 내부끼리, Track B
-# 내부끼리의 비교 공정성은 그대로 유지된다(Track A vs B는 PRD 5절/7절에 따라
-# 애초에 "우열 비교" 대상이 아니므로 이 예외로 깨지는 원칙이 없다) — 실측/
-# 원 논문 근거는 아래 각 주석.
+# 둘 다 Track 단위(조합 단위가 아님)로만 다르다. Track A/B는 같은 평가지표
+# (F1/Precision/Recall/PR-AUC/BWT, common/metrics.py)를 같은 프로토콜로
+# 채점하므로 리더보드에서 함께 순위를 매긴다 — 다만 두 트랙은 각자 자기
+# 근거 논문(SSF 계열 vs CND-IDS)의 실제 하이퍼파라미터를 그대로 쓰다 보니
+# 학습 조건 자체가 다르다(Track A는 라벨 예산 안의 일부만, Track B는
+# experience 전체를 라벨 없이 사용 — 아래 각 주석 참고). 이 비대칭은 감추지
+# 않고 리더보드에 그대로 드러낸다 — 어느 조합이 실제로 최선인지 가리는 게
+# 아니라 보여주는 것이 이 테스트베드의 목적이다. 실측/원 논문 근거는 아래
+# 각 주석.
 
 optimizer: adam            # 테스트베드 기본값 (특정 논문 근거 아님)
 learning_rate: 0.001        # 테스트베드 기본값 (SSF bs와 별개로 CND-IDS
@@ -30,17 +35,18 @@ epochs_per_experience_track_b: 20
 # 값)으로 되돌리면 BWT가 거의 0으로 회복되고 F1도 0.90~0.92로 정상화됨을
 # 실측으로 확인했다(사용자 지시). lr을 낮춰도 같은 효과가 있었지만(예:
 # 0.0001), 그 값은 논문에 없는 임의의 수치라 채택하지 않았다 — epoch=20은
-# 이미 검증된 원 논문 값이라 이쪽을 택했다. Track A/B는 서로 다른 문제를
-# 푸는 트랙이라(PRD 5절/7절 — 우열이 아니라 트레이드오프) 트랙 간 에폭이
-# 달라도 트랙 "내부" 비교의 공정성(이 프로젝트가 지키려는 핵심 원칙)은
-# 전혀 깨지지 않는다 — Track B의 3개 조합은 전부 anti_forgetting=cndids로
-# 고정이라 여전히 셋 다 동일한 20에폭을 받는다.
+# 이미 검증된 원 논문 값이라 이쪽을 택했다. Track A는 라벨 예산(10%) 안의
+# 데이터만, Track B는 experience 전체를 라벨 없이 쓰므로 에폭 수가 달라도
+# "같은 양의 정보"를 학습에 쓰는 게 아니다 — 이 비대칭은 각 트랙이 각자
+# 근거 논문의 실제 값을 그대로 따른 결과이며, 리더보드에서 감추지 않는다
+# (Track B의 6개 조합은 전부 anti_forgetting=cndids로 고정이라 적어도 트랙
+# 내부에서는 전부 동일한 20에폭을 받아 공정하다).
 
 batch_size_track_b: 64
 # 2026-07-30 재검토로 추가: CND-IDS 원 논문 실제 값(CND_IDS.py:103
 # "batch_size = 64") — Track A의 128(SSF 근거)과 다르다. epochs_per_experience_
-# track_b와 같은 이유로 Track 단위 예외를 둔다 — Track B 3개 조합 전부
-# anti_forgetting=cndids로 고정이라 트랙 내부 비교 공정성은 깨지지 않는다.
+# track_b와 같은 이유(각 트랙이 자기 근거 논문의 실제 값을 그대로 따름)로
+# Track 단위 예외를 둔다.
 
 n_experiences: 5            # CND-IDS 원 논문 근거 — X-IIoTID/CICIDS2017(2018 아님)/
                             # UNSW-NB15를 5개 experience로 분할한다고 명시(CND-IDS

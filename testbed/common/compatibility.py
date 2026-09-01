@@ -8,7 +8,7 @@
 | sample_selector | ssf | — | random |
 | memory_manager | ssf | cndids | none, spider |
 | anti_forgetting | lwf_ssf, gpm | cndids | none |
-| anomaly_scorer | cade_mad, none | pca | — |
+| anomaly_scorer | none | pca | cade_mad |
 
 Track A의 anomaly_scorer에 `none`(분류기 자체 sigmoid(logit) 판정 — SSF/SPIDER
 원 논문의 실제 방식)을 추가했다(사용자 지시) — CADE의 MAD 채점 방식(cade_mad)과
@@ -22,6 +22,25 @@ experience마다 전체 교체(No MRP), 직전 태스크 스냅샷 모델로 pse
 Track B의 anomaly_scorer는 `pca`만 남겼다 — `dif`/`lof`는 CND-IDS 원 논문
 자체의 제안 방법이 아니라 CND-IDS가 비교를 위해 인용한 제3자 baseline이라
 (부록A), 삭제했다(사용자 지시).
+
+**2026-09-01 추가 — Track B에 `cade_mad` 추가(93→96개 조합)**: Track A/B
+전체 재감사에서 발견해 사용자 승인 후 반영. `base/models.py`가 이미
+확인해주듯 Track A/B는 애초에 같은 `FCLAutoEncoder` 하나를 공유해 z를
+만든다(`backbone_type`/`required_backbone` 자체가 런타임에 검사되지 않는
+문서용 표기임은 `docs/metric_justification.md` "발견했지만 낮은 우선순위라
+손대지 않은 것" 절 참고) — 즉 `CADEMADScorer`가 소비하는 z는 Track A든
+Track B든 구조적으로 동일하고, `dd=none`+`as=cade_mad`(Track A, "CADE의
+대조학습 없이 MAD 채점 방식만 쓰면 어떤가"라는 정당한 재조합, 위
+component_registry.py 참고)와 대칭으로 "CND-IDS의 라벨-프리 표현학습 위에서
+CADE의 median+MAD 채점 방식만 쓰면 어떤가"도 똑같이 정당한 재조합이다.
+`anomaly_scorer`의 threshold 계산 방식은 이제 track이 아니라
+`threshold_needs_labels` 플래그(scorer 자체의 속성, `base/anomaly_scorer.py`
+"2026-09-01" 절)로 분기하므로, Track B에서도 `cade_mad`는 (pca의 Best-F
+대신) 정상 참조(s_ref) 기반 median+MAD를 그대로 쓴다 — CND-IDS의
+"라벨 없이 학습" 원칙(표현학습 자체는 여전히 라벨을 안 씀)과 충돌하지
+않는다(Track B의 기존 pca도 threshold 계산 자체는 Best-F로 라벨을 쓰므로,
+"threshold 계산에 라벨을 쓰는가"는 이미 pca에서도 track 고유의 제약이
+아니었다).
 
 ## drift_detector의 (sample_selector, memory_manager) 조건부 제약
 
@@ -94,15 +113,16 @@ TRACK_B_GRID: Dict[str, List[str]] = {
     "drift_detector": ["none"],
     "sample_selector": ["random"],
     "memory_manager": ["none", "spider", "cndids"],
-    "anomaly_scorer": ["pca"],
-}  # itertools.product -> 1*1*1*3*1 = 3개
+    "anomaly_scorer": ["pca", "cade_mad"],
+}  # itertools.product -> 1*1*1*3*2 = 6개 (2026-09-01: cade_mad 추가, 위
+   # 모듈 docstring "2026-09-01" 절 참고)
 
 SLOTS = ["drift_detector", "sample_selector", "memory_manager",
          "anti_forgetting", "anomaly_scorer"]
 
 
 def enumerate_valid_combos() -> List[dict]:
-    """Track A(90개)와 Track B(3개)를 각각 직접 구성해 concat한 93개만
+    """Track A(90개)와 Track B(6개)를 각각 직접 구성해 concat한 96개만
     생성한다 — "생성 후 제외" 로직은 쓰지 않는다 (PRD 4.2절).
 
     Track A는 (sample_selector, memory_manager)별로 drift_detector가 실제로
@@ -132,7 +152,7 @@ def enumerate_valid_combos() -> List[dict]:
         combo = dict(zip(TRACK_B_GRID.keys(), values))
         combo["track"] = "B"
         combos.append(combo)
-    assert len(combos) == 93, f"expected 93 valid combos, got {len(combos)}"
+    assert len(combos) == 96, f"expected 96 valid combos, got {len(combos)}"
     return combos
 
 

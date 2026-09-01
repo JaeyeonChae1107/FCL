@@ -17,6 +17,9 @@ from testbed.components.novelty_baselines.thresholding import best_f_threshold
 
 class PCAScorer(BaseAnomalyScorer):
     required_backbone = "autoencoder"
+    # compute_threshold()가 Best-F(라벨 필수)를 쓴다 — base/anomaly_scorer.py
+    # "2026-09-01" 절 참고.
+    threshold_needs_labels = True
 
     def __init__(self, variance_threshold: float = 0.95):
         self.variance_threshold = variance_threshold
@@ -38,7 +41,13 @@ class PCAScorer(BaseAnomalyScorer):
         X = data.detach().cpu().numpy()
         recon = self._pca.inverse_transform(self._pca.transform(X))
         err = np.abs(X - recon).mean(axis=1)
-        return torch.from_numpy(err.astype(np.float32))
+        # GPU 이식성: sklearn 경로를 거치느라 CPU numpy로 왕복했지만, 반환
+        # 텐서는 다른 scorer(예: CADEMADScorer.score())와 동일하게 입력
+        # data와 같은 device여야 한다는 BaseAnomalyScorer 암묵 계약을 따라야
+        # 한다. torch.from_numpy()는 항상 CPU 텐서를 만들어서 이 계약을
+        # 어기고 있었다 — 지금까지는 호출부(cl_client.py)가 매번 즉시
+        # .cpu()를 부르거나 결과를 버려서 크래시로 이어지지 않았을 뿐이다.
+        return torch.from_numpy(err.astype(np.float32)).to(data.device)
 
     def compute_threshold(self, eval_scores: torch.Tensor,
                            eval_labels: Optional[torch.Tensor]) -> float:

@@ -1,6 +1,6 @@
 """그리드 실행 — PRD Phase 3.
 
-enumerate_valid_combos()가 직접 구성한 조합(현재 93개: Track A 90 + Track B 3 —
+enumerate_valid_combos()가 직접 구성한 조합(현재 96개: Track A 90 + Track B 6 —
 drift_detector가 실제로 소비되지 않는 (sample_selector, memory_manager) 조합은
 'ssf'만 제외하고 'none'/'cade'는 남긴다, common/compatibility.py 참고) 중
 스모크 테스트(Phase 2.5)를 통과한 조합만 NSL-KDD/UNSW-NB15/CICIDS2018 전체
@@ -8,10 +8,12 @@ drift_detector가 실제로 소비되지 않는 (sample_selector, memory_manager
 완전 교차 조합을 그대로 도는 코드 경로는 두지 않는다(PRD 6절).
 """
 
+import hashlib
 import io
 import json
 import os
 import time
+import traceback
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -34,6 +36,109 @@ from testbed.pipeline import CLClient
 from testbed.experiments.smoke_test import _load_configs, _REPO_ROOT, _TESTBED_ROOT
 
 RESULTS_DIR = os.path.join(_TESTBED_ROOT, "results")
+# 2026-09-01 추가 — 실패한 조합의 기록을 results/*.json과 같은 디렉터리에
+# 바로 두면(예: {combo_id}.failed.json) leaderboard_builder.py의
+# `glob.glob(os.path.join(RESULTS_DIR, "*.json"))`이 그 파일도 그대로
+# 주워서 `result.get("combo_id")`까지는 통과하고(REQUIRED_RESULT_FIELDS의
+# f1/precision 등은 없음) 리더보드 DataFrame에 깨진 행으로 섞여 들어갈
+# 위험이 있다 — 별도 하위 디렉터리에 둬서 그 glob 패턴에 아예 걸리지 않게
+# 한다(glob.glob은 기본적으로 하위 디렉터리를 재귀 탐색하지 않는다).
+FAILURES_DIR = os.path.join(RESULTS_DIR, "failures")
+
+
+def _atomic_write_json(path: str, obj: Any) -> None:
+    """json.dump()을 임시 파일에 쓴 뒤 os.replace()로 원자적으로 교체한다.
+
+    2026-09-01 추가 — GPU 서버에서 장시간 무인 실행 중 프로세스가 결과
+    파일 쓰기 도중에 죽으면(OOM kill, 세션 종료, 정전 등) 기존 코드처럼
+    `out_path`에 직접 `json.dump()`하면 그 파일이 반쯤 쓰인 상태로 남을 수
+    있다 — 다음 실행이 이어서 돌 때(run_grid의 resume 로직) 그 조합이 이미
+    "완료"된 것으로 보이지만 실제로는 잘린 JSON이라 `json.load()`가
+    예외를 던지고, 이 예외가 잡히지 않으면 그 시점에 전체 그리드가 죽는다
+    — 정작 이미 완료된 다른 조합들의 파일은 멀쩡한데도 재개 자체가 안 되는
+    상황이 된다. 같은 파일시스템 안에서의 `os.replace()`(POSIX/Windows
+    양쪽에서 원자적)는 임시 파일이 완전히 쓰인 뒤에만 목적지 이름으로
+    교체하므로, 중간에 죽어도 목적지 파일은 "이전 상태 그대로" 또는
+    "새 내용 전체"만 존재하고 반쯤 쓰인 상태가 될 수 없다."""
+    tmp_path = f"{path}.tmp{os.getpid()}"
+    with io.open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, path)
+
+
+def _load_json_safely(path: str) -> Optional[Dict[str, Any]]:
+    """캐시된 결과 파일을 읽는다. 손상된(잘려나간) JSON이면 예외를 던지는
+    대신 None을 반환해 "캐시 없음"으로 취급한다(2026-09-01 추가).
+
+    `_atomic_write_json()` 도입 이후로는 새로 쓰이는 파일이 반쯤 쓰인 채
+    남을 일은 없지만, 이 안전장치를 넣기 전에 이미 깨진 채 남아있을 수 있는
+    과거 파일이나, 파일시스템 자체의 이상(디스크 손상 등) 같은 예외적인
+    경우까지 대비한다 — 장시간 무인 GPU 실행에서 이런 파일 하나 때문에
+    전체 그리드가 멈추는 것보다는, 경고를 남기고 그 조합을 다시 계산하는
+    편이 훨씬 안전하다."""
+    try:
+        with io.open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"경고: {path} 을(를) 읽을 수 없어(손상된 파일로 추정: {exc}) "
+              f"캐시 없음으로 간주하고 재계산합니다.")
+        return None
+
+# 2026-08-14 추가 — 결과 캐싱(run_grid의 "이미 파일 있으면 스킵")이 코드
+# 버전을 검사하지 않아, CADE/SSF/CND-IDS 컴포넌트를 고친 뒤에도 이전 결과
+# 270개가 재계산 없이 그대로 남아있던 사고가 실제로 발생했다(2026-08-12
+# 수정, 2026-08-14 실측 발견 — testbed/archive/2026-08-14_pre-structural-audit/
+# README 참고). 결과가 어떤 코드 상태에서 계산됐는지 해시로 남겨, 캐시를
+# 재사용하기 전에 지금 코드와 일치하는지 확인한다.
+#
+# 2026-08-26 발견·수정(전수 재검토 중) — 이 안전장치 자체에 같은 종류의
+# 구멍이 있었다: `configs/`(global_hparams.yaml, component_hparams/*.yaml)와
+# `common/`(metrics.py의 F1/BWT 공식, result_schema.py)가 빠져 있었다.
+# `git log`로 확인한 결과 component_hparams/*.yaml은 이 세션 동안만도
+# 여러 커밋에 걸쳐 실제로 값이 바뀌었다(t_mad 인용 정정, GPM max_basis_ratio
+# 도입, SSF new_sample_weight 재보정, 오늘의 CADE max_category_ratio 등) —
+# 즉 .py 파일을 하나도 안 건드리고 하이퍼파라미터 YAML만 고친 뒤 그리드를
+# 재실행하면, code_version이 그대로라 **바뀐 하이퍼파라미터로 재계산해야
+# 할 결과를 옛날 값 그대로 조용히 재사용**하는 사고가 날 수 있었다 —
+# 270개 스테일 결과 사고와 정확히 같은 종류의 문제를 이 안전장치 자신이
+# 재현하고 있었던 것. configs/와 common/(계산식 자체가 여기 있다)도
+# 포함시킨다. experiments/grid_runner.py 자기 자신도 포함한다 — 이 파일의
+# 결과-구성 로직(예: best_f1_reference, memory_footprint_peak 계산)이
+# 바뀌면 옛 캐시 파일의 필드 구성 자체가 지금 코드와 달라질 수 있어서다.
+_VERSIONED_PATHS = [
+    os.path.join(_TESTBED_ROOT, "components"),
+    os.path.join(_TESTBED_ROOT, "base"),
+    os.path.join(_TESTBED_ROOT, "pipeline"),
+    os.path.join(_TESTBED_ROOT, "common"),
+    os.path.join(_TESTBED_ROOT, "configs"),
+    os.path.join(_TESTBED_ROOT, "data", "dataset_loader.py"),
+    os.path.join(_TESTBED_ROOT, "experiments", "grid_runner.py"),
+]
+
+
+def compute_code_version() -> str:
+    """_VERSIONED_PATHS 아래 모든 .py/.yaml 파일 내용을 해시해 12자리로
+    줄인다. 이 해시가 바뀌면 결과에 영향을 줄 수 있는 코드나 하이퍼파라미터가
+    바뀐 것으로 간주한다.
+
+    2026-08-26 수정 — `_VERSIONED_PATHS`에 `configs/`(하이퍼파라미터 YAML)를
+    추가했는데, 이 필터가 `.py`만 걸러서 정작 YAML 파일은 전부 건너뛰고
+    있었다(같은 실수를 두 번 할 뻔함 — 디렉터리만 목록에 넣고 그 안의
+    실제 확장자를 확인 안 함). `.yaml`도 포함하도록 수정한다."""
+    h = hashlib.sha256()
+    files = []
+    for p in _VERSIONED_PATHS:
+        if os.path.isdir(p):
+            for root, _, names in os.walk(p):
+                for name in sorted(names):
+                    if name.endswith(".py") or name.endswith(".yaml"):
+                        files.append(os.path.join(root, name))
+        elif os.path.isfile(p):
+            files.append(p)
+    for path in sorted(files):
+        with open(path, "rb") as f:
+            h.update(f.read())
+    return h.hexdigest()[:12]
 
 
 def _best_f1_achievable(scores: torch.Tensor, labels: torch.Tensor) -> float:
@@ -58,7 +163,8 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
                     global_hparams: Dict[str, Any],
                     component_hparams: Dict[str, Dict[str, Any]],
                     labeling_budget: Dict[str, Any],
-                    device: str = "cpu") -> Dict[str, Any]:
+                    device: str = "cpu",
+                    code_version: Optional[str] = None) -> Dict[str, Any]:
     input_dim = dataset["input_dim"]
     hp = dict(global_hparams)
     hp["_input_dim"] = input_dim
@@ -69,7 +175,7 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
     # Track B(CND-IDS)는 원 논문 에폭(20)을 쓴다 — Track A와 같은 200을
     # 그대로 적용하면 CND-IDS의 약한 망각방지 가중치(lambda_cl=0.1)가 그
     # 학습 강도를 못 버텨 catastrophic forgetting이 발생함을 실측으로
-    # 확인했다(configs/global_hparams.yaml 주석 참고). Track B 3개 조합은
+    # 확인했다(configs/global_hparams.yaml 주석 참고). Track B 6개 조합은
     # 전부 anti_forgetting=cndids로 고정이라 이 오버라이드로도 트랙 내부
     # 비교의 공정성은 그대로 유지된다.
     if combo["track"] == "B":
@@ -90,11 +196,19 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
     total_available = 0
     training_time_sec = 0.0
     last_out = None
+    # 2026-08-14 추가 — memory_footprint를 마지막 라운드 스냅샷 하나만 보면
+    # SPIDER처럼 매 라운드 버퍼를 그 라운드 selected_data 크기로 통째로
+    # 교체하는 memory_manager(spider_memory_manager.py 참고)는 class-
+    # incremental 분할이 만드는 라운드별 데이터量 변동(예: 마지막 experience가
+    # 우연히 희소 카테고리면 버퍼가 작게 찍힘) 때문에 오해를 살 수 있다 —
+    # 라운드별 크기를 전부 기록해 peak/avg도 같이 남긴다.
+    memory_footprint_history: List[int] = []
 
     for exp_idx, e in enumerate(experiences):
         t0 = time.time()
         out = client.run_experience(
-            exp_idx, e["train_X"], e["train_y"], all_test_splits, labeling_budget)
+            exp_idx, e["train_X"], e["train_y"], all_test_splits, labeling_budget,
+            train_category=e.get("train_category"))
         training_time_sec += time.time() - t0
 
         threshold = out["threshold"]
@@ -106,6 +220,7 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
         total_selected += out["n_selected"]
         total_available += len(e["train_X"])
         last_out = out
+        memory_footprint_history.append(client.memory_manager.size())
 
     R = build_r_matrix(f1_rows)
     bwt_value = bwt(R)
@@ -126,8 +241,13 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
     except ValueError:
         final_roc_auc = 0.0
 
+    # 2026-08-14 수정: Track B는 이 참고 지표 자체를 계산하지 않는데, 이전엔
+    # 0.0을 그대로 넣어 CSV를 열어보는 사람이 "이 조합이 도달 가능한 최선의
+    # F1이 0"이라고 오독할 위험이 있었다(구조 전수 감사에서 발견) — "계산
+    # 안 함"을 NaN으로 명시한다.
     best_f1_reference = (
-        _best_f1_achievable(pooled_scores, pooled_labels) if combo["track"] == "A" else 0.0
+        _best_f1_achievable(pooled_scores, pooled_labels)
+        if combo["track"] == "A" else float("nan")
     )
 
     # Inference latency: 마지막 라운드 모델로 pooled test 데이터를 다시
@@ -140,8 +260,14 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
     t0 = time.time()
     with torch.no_grad():
         pooled_test_x = torch.cat([tx for tx, _ in all_test_splits]).to(client.device)
-        z_all, _, _ = client.forward_batched(pooled_test_x)
-        client.anomaly_scorer.score(z_all)
+        # 2026-08-14: CADEMADScorer가 사설 인코더에 연결된 경우(cl_client.py
+        # Step 6/7과 동일한 이유) 공유 backbone을 거치지 않고 원본을 그대로
+        # 넘긴다 — 아니면 이미 z인 값을 다시 원본 취급해 shape이 안 맞는다.
+        if client.anomaly_scorer.uses_shared_representation:
+            z_all, _, _ = client.forward_batched(pooled_test_x)
+            client.anomaly_scorer.score(z_all)
+        else:
+            client.anomaly_scorer.score(pooled_test_x)
     inference_time = time.time() - t0
     n_inference_samples = sum(len(tx) for tx, _ in all_test_splits)
     avg_inference_latency_ms = (inference_time / max(n_inference_samples, 1)) * 1000.0
@@ -152,6 +278,11 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
     # 실제로 소비한 라벨 수는 항상 0이므로 그 값을 그대로 반영한다.
     labeling_cost = 0.0 if combo["track"] == "B" else total_selected / max(total_available, 1)
     memory_footprint = client.memory_manager.size()
+    memory_footprint_peak = max(memory_footprint_history) if memory_footprint_history else 0
+    memory_footprint_avg = (
+        sum(memory_footprint_history) / len(memory_footprint_history)
+        if memory_footprint_history else 0.0
+    )
 
     result = {
         "combo_id": make_combo_id(combo),
@@ -173,9 +304,12 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
         "labeling_cost": labeling_cost,
         "training_time_sec": training_time_sec,
         "memory_footprint": memory_footprint,
+        "memory_footprint_peak": memory_footprint_peak,
+        "memory_footprint_avg": memory_footprint_avg,
         "avg_inference_latency_ms": avg_inference_latency_ms,
         "best_f1_reference": best_f1_reference,
         "seed": seed,
+        "code_version": code_version if code_version is not None else compute_code_version(),
     }
     validate_result(result)
     return result
@@ -206,6 +340,9 @@ def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
              shard: Optional[tuple] = None,
              track: Optional[str] = None) -> List[Dict[str, Any]]:
     global_hparams, component_hparams = _load_configs()
+    code_version = compute_code_version()
+    print(f"code_version={code_version} (components/base/pipeline/dataset_loader 해시 — "
+          f"이 값이 캐시된 결과 파일과 다르면 재계산합니다)")
     if smoke_results_path is None:
         smoke_results_path = os.path.join(_TESTBED_ROOT, "experiments", "smoke_test_results.json")
     passed_by_dataset = load_smoke_passed_combo_ids(smoke_results_path)
@@ -217,6 +354,7 @@ def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
     all_results = []
+    failed_combos: List[Dict[str, Any]] = []
     for dataset_name in datasets:
         if passed_by_dataset is not None:
             passed_ids = passed_by_dataset.get(dataset_name, set())
@@ -264,21 +402,86 @@ def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
                 # CICIDS2018처럼 조합당 25~50분+ 걸리는 경우 재계산 낭비를
                 # 막기 위함) — 이미 결과 파일이 있는 조합은 다시 계산하지
                 # 않고 건너뛴다. 결과 유효성 자체는 validate_result()를 통과해
-                # 저장된 파일이므로 이미 보장되어 있다.
-                print(f"[{dataset_name}] {combo_id} 이미 결과 있음, 건너뜀")
-                continue
+                # 저장된 파일이므로 이미 보장되어 있다. 단, 2026-08-14부터는
+                # 그 파일이 **지금 코드**로 계산된 게 맞는지 code_version으로
+                # 확인한 뒤에만 건너뛴다 — 컴포넌트를 고친 뒤에도 낡은 결과가
+                # 재사용되던 사고(testbed/archive/2026-08-14_pre-structural-audit/
+                # README 참고)를 다시 겪지 않기 위함이다. 옛 결과 파일에
+                # code_version 필드가 아예 없으면(이 필드 도입 이전 파일)
+                # 무조건 재계산한다.
+                #
+                # 2026-09-01: `_load_json_safely()`가 손상된(잘려나간) 캐시
+                # 파일이면 예외 대신 None을 반환한다 — None이면 캐시가 아예
+                # 없던 것처럼 취급해 그대로 재계산으로 넘어간다.
+                cached = _load_json_safely(out_path)
+                if cached is not None and cached.get("code_version") == code_version:
+                    print(f"[{dataset_name}] {combo_id} 이미 결과 있음(코드 버전 일치), 건너뜀")
+                    continue
+                if cached is not None:
+                    print(f"[{dataset_name}] {combo_id} 결과는 있지만 코드 버전이 달라 재계산합니다 "
+                          f"(cached={cached.get('code_version')!r}, current={code_version!r})")
 
             t0 = time.time()
-            result = run_combo_full(
-                combo, dataset_name, dataset, global_hparams, component_hparams,
-                labeling_budget, device)
+            try:
+                result = run_combo_full(
+                    combo, dataset_name, dataset, global_hparams, component_hparams,
+                    labeling_budget, device, code_version=code_version)
+            except Exception as exc:
+                # 2026-09-01 추가 — 조합 하나가 예외로 죽어도(예: 특정 조합/
+                # 데이터셋 조합에서만 나오는 수치 불안정, GPU OOM 등) 전체
+                # 그리드가 죽지 않고 이 조합만 "실패"로 기록한 뒤 다음 조합으로
+                # 계속 진행한다. GPU 서버에서 96개 조합 x 3개 데이터셋을
+                # 무인으로 오래 돌리는 상황에서, 조합 하나의 실패로 나머지
+                # 전부가 실행되지 않는 것은 치명적이다(스모크 테스트를 이미
+                # 통과한 조합이라도 전체 데이터·GPU 환경에서는 스모크가 못
+                # 잡아낸 경계 상황이 나올 수 있다). 실패 사실은 콘솔에 크게
+                # 남기고, results/failures/ 아래에 별도 파일로 상세 기록한다
+                # (results/*.json과 섞이면 leaderboard_builder.py의 glob이
+                # 주워 스키마가 다른 행으로 리더보드를 오염시킬 위험이 있어
+                # 하위 디렉터리로 분리 — FAILURES_DIR 정의 참고).
+                elapsed = time.time() - t0
+                tb = traceback.format_exc()
+                print(f"[{dataset_name}] {combo_id} 실패({elapsed:.1f}s 경과 후) — "
+                      f"{type(exc).__name__}: {exc}")
+                print(tb)
+                os.makedirs(FAILURES_DIR, exist_ok=True)
+                failure_record = {
+                    "combo_id": combo_id,
+                    "exp_name": f"{combo_id}__{dataset_name}",
+                    "dataset": dataset_name,
+                    "track": combo["track"],
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "traceback": tb,
+                    "elapsed_sec": elapsed,
+                    "code_version": code_version,
+                }
+                failure_path = os.path.join(FAILURES_DIR, f"{combo_id}__{dataset_name}.json")
+                _atomic_write_json(failure_path, failure_record)
+                failed_combos.append(failure_record)
+                continue
+
             elapsed = time.time() - t0
             print(f"[{dataset_name}] {result['combo_id']} f1={result['f1']:.3f} "
                   f"pr_auc={result['pr_auc']:.3f} bwt={result['bwt']:.3f} ({elapsed:.1f}s)")
 
-            with io.open(out_path, "w", encoding="utf-8") as f:
-                json.dump(result, f, ensure_ascii=False, indent=2)
+            _atomic_write_json(out_path, result)
+            # 이 조합이 이전 시도에서 실패해 failures/ 아래에 기록이
+            # 남아있었다면, 이제 성공했으니 그 낡은 실패 기록을 지운다 —
+            # 안 지우면 성공한 조합인데도 failures/ 목록에 계속 남아 혼란을
+            # 준다.
+            stale_failure_path = os.path.join(FAILURES_DIR, f"{combo_id}__{dataset_name}.json")
+            if os.path.exists(stale_failure_path):
+                os.remove(stale_failure_path)
             all_results.append(result)
+
+    if failed_combos:
+        print(f"\n경고: {len(failed_combos)}개 조합이 실패했습니다(상세 내역은 "
+              f"{FAILURES_DIR} 참고). 성공한 {len(all_results)}개 조합의 결과는 "
+              f"그대로 저장되어 있습니다:")
+        for f in failed_combos:
+            print(f"  - [{f['dataset']}] {f['combo_id']}: "
+                  f"{f['error_type']}: {f['error_message']}")
 
     return all_results
 

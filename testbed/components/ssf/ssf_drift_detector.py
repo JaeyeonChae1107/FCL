@@ -7,6 +7,14 @@ UNSW 실험에서는 classifier logit 분포를 직접 비교한다(ssf.py:217-2
 테스트베드의 표현 의존성 계약(12.1절)에서 SSFDriftDetector는 공유 표현 소비자
 (uses_shared_representation=True)이므로, CLClient가 넘기는 현재 모델의 logit을
 그대로 사용한다.
+
+**인용 범위 주의(2026-09-01 보완)**: 위 "logit 비교" 근거는 SSF 원문의
+UNSW-NB15 분기(ssf.py:217-225)다. NSL-KDD 분기(ssf.py:202-214)는 이와
+달리 재구성 확률 비율(`pdf1_probe`/`pdf11_probe`)을 drift 신호로 쓴다 —
+원문 자체가 데이터셋마다 다른 신호로 drift를 감지한다. 이 테스트베드는
+공유 backbone 하나로 모든 데이터셋을 다루므로 logit 비교로 통일했다
+(ssf_anti_forgetting.py 모듈 docstring에 이미 문서화된 것과 같은 종류의
+"공유 backbone이 강제하는 데이터셋 간 절충").
 """
 
 from typing import Optional
