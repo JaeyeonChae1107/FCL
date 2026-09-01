@@ -288,12 +288,27 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
     }
 
 
-def _smoke_results_path() -> str:
-    return os.path.join(_TESTBED_ROOT, "experiments", "smoke_test_results.json")
+def _smoke_results_path(shard: Optional[tuple] = None) -> str:
+    if shard is None:
+        return os.path.join(_TESTBED_ROOT, "experiments", "smoke_test_results.json")
+    # 2026-09-01 추가 — 여러 프로세스가 조합을 나눠(--shard) 동시에 돌릴 때,
+    # 전부 같은 smoke_test_results.json에 쓰면 경쟁 조건이 생긴다: 각 프로세스가
+    # `run_all()` 시작 시점에 그 파일을 한 번 읽어 메모리에 들고 있다가 매 조합마다
+    # "메모리 전체"를 다시 써서 교체하므로(_save_smoke_results), 프로세스 A가 조합을
+    # 다 끝내고 저장한 뒤 프로세스 B가 (A 시작 이전에 읽어둔) 낡은 스냅샷으로
+    # 저장하면 A가 이미 써둔 결과가 그대로 덮어써져 사라진다 — grid_runner.py의
+    # 원자적 쓰기(2026-09-01 추가)가 막는 것은 "한 프로세스가 쓰다가 죽는 것"뿐,
+    # "여러 프로세스가 같은 파일을 동시에 쓰는 것"은 별개 문제라 안 막아준다.
+    # 샤드마다 별도 파일에 쓰게 해 애초에 같은 파일을 동시에 쓸 일이 없게 한다 —
+    # 다 끝난 뒤 merge_shard_results()로 하나로 합친다.
+    shard_idx, n_shards = shard
+    return os.path.join(
+        _TESTBED_ROOT, "experiments", f"smoke_test_results.shard{shard_idx}of{n_shards}.json")
 
 
-def _load_existing_smoke_results() -> List[Dict[str, Any]]:
-    path = _smoke_results_path()
+def _load_existing_smoke_results(path: Optional[str] = None) -> List[Dict[str, Any]]:
+    if path is None:
+        path = _smoke_results_path()
     if not os.path.exists(path):
         return []
     # 2026-09-01 추가 — 저장이 원자적이지 않던 시절(아래 `_save_smoke_results`
@@ -311,7 +326,8 @@ def _load_existing_smoke_results() -> List[Dict[str, Any]]:
         return []
 
 
-def _save_smoke_results(all_results_by_key: Dict[tuple, Dict[str, Any]]) -> None:
+def _save_smoke_results(all_results_by_key: Dict[tuple, Dict[str, Any]],
+                         path: Optional[str] = None) -> None:
     """(combo_id, dataset)를 키로 하는 dict를 그대로 파일에 쓴다 — 매 조합
     완료 직후 호출해, 프로세스가 도중에 죽어도(2026-08-26 실제로 겪음 —
     93개 조합×5라운드 전체 스모크가 세션 중단으로 한 줄도 못 쓰고 날아간
@@ -325,20 +341,54 @@ def _save_smoke_results(all_results_by_key: Dict[tuple, Dict[str, Any]]) -> None
     `_load_existing_smoke_results()`가 예외를 던져(위 참고) 그동안 쌓아둔
     모든 진행 상황을 통째로 잃는, 이 함수가 막으려던 것과 정반대의 결과가
     난다. 임시 파일에 먼저 다 쓴 뒤 `os.replace()`로 원자적으로 교체해
-    이 위험을 없앤다(grid_runner.py의 `_atomic_write_json()`과 동일한 패턴)."""
-    path = _smoke_results_path()
+    이 위험을 없앤다(grid_runner.py의 `_atomic_write_json()`과 동일한 패턴).
+    `path`를 지정하지 않으면 기본(비-샤드) 경로에 쓴다 — 샤드 실행 시에는
+    `run_all()`이 샤드 전용 경로를 명시적으로 넘긴다."""
+    if path is None:
+        path = _smoke_results_path()
     tmp_path = f"{path}.tmp{os.getpid()}"
     with io.open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(list(all_results_by_key.values()), f, ensure_ascii=False, indent=2)
     os.replace(tmp_path, path)
 
 
+def merge_shard_results(n_shards: int) -> None:
+    """`smoke_test_results.shard{i}of{n_shards}.json`(i=0..n_shards-1)을
+    전부 읽어 기존 `smoke_test_results.json`과 합친 뒤 원자적으로 저장한다.
+
+    조합은 샤드 간에 겹치지 않게 나뉘므로(run_all()의 `i % n_shards == idx`
+    필터, grid_runner.py의 --shard와 동일한 방식) 같은 키가 서로 다른 값으로
+    충돌할 일은 없다 — 단순 합집합이다. 샤드 파일이 하나라도 없으면(해당
+    샤드를 아직 안 돌렸거나 실패) 경고만 내고 있는 것만 합친다."""
+    merged: Dict[tuple, Dict[str, Any]] = {
+        (r["combo_id"], r.get("dataset")): r for r in _load_existing_smoke_results()
+    }
+    n_merged = 0
+    for i in range(n_shards):
+        shard_path = _smoke_results_path(shard=(i, n_shards))
+        if not os.path.exists(shard_path):
+            print(f"경고: {shard_path} 이(가) 없습니다 — 이 샤드는 건너뜁니다.")
+            continue
+        for r in _load_existing_smoke_results(path=shard_path):
+            merged[(r["combo_id"], r.get("dataset"))] = r
+            n_merged += 1
+    _save_smoke_results(merged)
+    print(f"{n_merged}개 결과를 {n_shards}개 샤드에서 합쳐 {_smoke_results_path()} 에 저장했습니다 "
+          f"(전체 {len(merged)}개).")
+
+
 def run_all(dataset_name: str = "nsl-kdd", device: str = "cpu",
-            resume: bool = True) -> List[Dict[str, Any]]:
+            resume: bool = True, shard: Optional[tuple] = None) -> List[Dict[str, Any]]:
     """`resume=True`(기본)면 이미 지금 코드 버전으로 기록된 결과는 다시
     돌리지 않고 건너뛴다 — grid_runner.py의 code_version 캐시와 같은
     원칙(2026-08-26 추가, 아래 참고). 매 조합이 끝날 때마다 결과 파일에
-    바로 반영한다(중간에 죽어도 그때까지 진행 상황을 보존)."""
+    바로 반영한다(중간에 죽어도 그때까지 진행 상황을 보존).
+
+    `shard=(idx, n)`이면 조합을 n등분해 idx번째 몫만 실행하고, 결과는
+    공유 파일이 아니라 샤드 전용 파일에 저장한다(_smoke_results_path()의
+    "2026-09-01" 절 참고 — 여러 프로세스가 같은 파일에 동시에 쓰면 경쟁
+    조건으로 서로의 결과를 덮어쓸 수 있다). 모든 샤드가 끝난 뒤
+    `merge_shard_results()`로 하나로 합쳐야 grid_runner.py가 정상 소비한다."""
     global_hparams, component_hparams = _load_configs()
     # 두 데이터셋 모두 동일한 프로토콜(dataset_loader.py 기본값) — 원본
     # train/test 파일 분리 유지, 각 파일 내부는 고정 seed로 섞은 뒤 분할.
@@ -350,14 +400,24 @@ def run_all(dataset_name: str = "nsl-kdd", device: str = "cpu",
     from testbed.experiments.grid_runner import compute_code_version
     code_version = compute_code_version()
 
+    save_path = _smoke_results_path(shard=shard)
     # 다른 데이터셋의 기존 결과는 그대로 보존하고, 이번 dataset_name에
-    # 대해서만 이어서 진행한다 — key: (combo_id, dataset).
+    # 대해서만 이어서 진행한다 — key: (combo_id, dataset). 샤드 실행 시
+    # 이어서 진행할 대상은 "이 샤드가 이전에 쓴 파일"이지 공유 메인
+    # 파일이 아니다(공유 파일을 읽어서 그대로 다시 쓰면 다른 샤드의
+    # 결과까지 이 샤드 전용 파일로 복제되어 merge 시 중복/혼선이 생긴다).
     all_results_by_key: Dict[tuple, Dict[str, Any]] = {
-        (r["combo_id"], r.get("dataset")): r for r in _load_existing_smoke_results()
+        (r["combo_id"], r.get("dataset")): r for r in _load_existing_smoke_results(path=save_path)
     }
 
+    all_combos = enumerate_valid_combos()
+    if shard is not None:
+        shard_idx, n_shards = shard
+        all_combos = [c for i, c in enumerate(all_combos) if i % n_shards == shard_idx]
+        print(f"[{dataset_name}] shard {shard_idx}/{n_shards} 담당 조합 {len(all_combos)}개")
+
     results = []
-    for combo in enumerate_valid_combos():
+    for combo in all_combos:
         combo_id = make_combo_id(combo)
         key = (combo_id, dataset_name)
         cached = all_results_by_key.get(key)
@@ -391,7 +451,7 @@ def run_all(dataset_name: str = "nsl-kdd", device: str = "cpu",
         result["code_version"] = code_version
         results.append(result)
         all_results_by_key[key] = result
-        _save_smoke_results(all_results_by_key)
+        _save_smoke_results(all_results_by_key, path=save_path)
 
         status = "PASS" if result["passed"] else "FAIL"
         print(f"[{status}] {result['combo_id']} ({dataset_name})")
@@ -417,17 +477,44 @@ if __name__ == "__main__":
         "--no-resume", action="store_true",
         help="이미 지금 코드 버전으로 기록된 결과가 있어도 전부 다시 돌린다 "
              "(기본은 건너뛰고 이어서 진행 — run_all()의 resume=True 참고).")
+    parser.add_argument(
+        "--shard", default=None,
+        help="'i/n' 형식으로 조합을 n등분해 i번째 몫만 실행한다(0-indexed, "
+             "grid_runner.py --shard와 동일한 문법). 조합이 서로 독립적인데 "
+             "모델이 작아 GPU 하나로는 활용률이 낮을 때, 여러 프로세스로 "
+             "나눠 같은 GPU(또는 여러 GPU)를 동시에 쓰기 위한 용도. 결과는 "
+             "공유 파일이 아니라 샤드 전용 파일(smoke_test_results.shard{i}of{n}.json)"
+             "에 저장되므로, 모든 샤드가 끝난 뒤 --merge-shards n으로 반드시 "
+             "합쳐야 grid_runner.py가 결과를 인식한다.")
+    parser.add_argument(
+        "--merge-shards", type=int, default=None, metavar="N",
+        help="조합을 실행하지 않고, smoke_test_results.shard{i}ofN.json(i=0..N-1) "
+             "N개를 하나로 합쳐 smoke_test_results.json에 저장한 뒤 종료한다. "
+             "--shard로 나눠 돌린 모든 프로세스가 끝난 뒤 한 번 실행한다.")
     args = parser.parse_args()
+
+    if args.merge_shards is not None:
+        merge_shard_results(args.merge_shards)
+        raise SystemExit(0)
+
     dataset_list = [d.strip() for d in args.datasets.split(",") if d.strip()]
+    shard_arg = None
+    if args.shard is not None:
+        shard_idx_str, n_shards_str = args.shard.split("/")
+        shard_idx, n_shards = int(shard_idx_str), int(n_shards_str)
+        assert 0 <= shard_idx < n_shards, "--shard 는 0 <= i < n 이어야 함"
+        shard_arg = (shard_idx, n_shards)
 
     # 2026-08-26 수정 — run_all()이 이제 조합이 끝날 때마다 결과 파일에
     # 바로 저장한다(중간에 프로세스가 죽어도 그때까지 진행 상황이 남도록 —
     # 93개 조합×5라운드 전체 스모크가 세션 중단으로 한 줄도 못 쓰고 날아간
     # 적이 실제로 있었다). 여기서는 최종 요약만 출력한다 — 별도로 다시
-    # 파일을 합쳐 쓰지 않는다(이미 매 조합마다 저장되어 있음).
+    # 파일을 합쳐 쓰지 않는다(이미 매 조합마다 저장되어 있음. --shard를 쓴
+    # 경우는 예외 — 위 --merge-shards 설명 참고).
     all_results = []
     for ds_name in dataset_list:
-        all_results.extend(run_all(ds_name, device=args.device, resume=not args.no_resume))
+        all_results.extend(run_all(ds_name, device=args.device, resume=not args.no_resume,
+                                    shard=shard_arg))
 
     n_pass = sum(1 for r in all_results if r["passed"])
     print(f"\n{n_pass}/{len(all_results)} combo-dataset 조합이 스모크 테스트 통과")
