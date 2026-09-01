@@ -26,6 +26,23 @@ Track B(CND-IDS)에서 쓰일 때는 `CNDIDSAntiForgetting.compute_loss()`가 �
 replay_batch의 라벨을 쓰지 않으므로(라벨-프리 원칙) pseudo-label 값 자체는
 소비되지 않는다 — "라벨 없는 무작위 교체 버퍼"라는 핵심 성질만 공유하면 되고,
 Track A/B 양쪽 모두에서 이 메모리 매니저를 쓸 수 있다(사용자 지시).
+
+**2026-08-26 발견 — 위 "Track A/B 양쪽 모두" 근거는 라벨-프리(CND-IDS)
+경로만 검증한 것이었다**: 4개 논문 컴포넌트 전수 재감사에서, Track A의
+`af=lwf_ssf`(`SSFAntiForgetting.compute_loss`)와 `af=none`
+(`NoAntiForgetting.compute_loss`)는 CND-IDS와 달리 `replay_batch`의
+라벨을 **실제로** BCE 손실에 쓴다는 걸 재확인했다. 그런데 `mm=spider`와
+결합되면 그 "라벨"은 실측 정답이 아니라 `_pseudo_label()`이 스냅샷
+모델의 예측으로 만든 것이다 — 즉 `mm=spider`+`af=lwf_ssf`(또는
+`af=none`) 조합은 모델이 최근에 낸 예측을 스스로 정답처럼 다시 학습하는
+자기학습(self-training) 피드백 루프가 된다. 이 조합은 크래시하거나
+눈에 띄게 붕괴하지는 않았다(실행 확인 완료 — `mm=spider`+`af=gpm`이
+발견 3에서 건강하게 확인된 것과 별개로 `af=none`/`af=lwf_ssf` 조합도
+정상 실행됨). 다만 이 자기학습 루프 자체의 장단점(예: 모델이 자신 있게
+틀린 예측을 계속 강화할 위험)은 아직 별도로 분석된 적이 없다 — "Track
+A/B 양쪽 모두 쓸 수 있다"는 근거가 실제로는 라벨-프리 경로의 안전성만
+증명했을 뿐, 이 self-training 경로는 다른 성격의 위험이라는 점을
+정직하게 남겨둔다.
 """
 
 import copy

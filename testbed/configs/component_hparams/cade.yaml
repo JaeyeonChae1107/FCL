@@ -39,3 +39,22 @@ encoder_lr: 0.0001
 # encoder 사설 미니배치 학습(batch_size)은 이 파일이 아니라
 # global_hparams.batch_size(Track A 공유값)를 그대로 재사용한다 —
 # cade_drift_detector.py 모듈 docstring 참고.
+
+similar_ratio: 0.25
+# CADE cade/utils.py:70-71 "--similar-ratio" 기본값. 배치의 비교 절반 중
+# 이 비율(batch_size 기준, 즉 half_size 기준으로는 2배)만큼을 같은 클래스,
+# 나머지를 다른 클래스에서 강제로 뽑는다(cade/data.py:268-345 epoch_batches()).
+# 2026-08-12 추가 — contrastive_ae.py의 build_paired_batches() 참고.
+
+max_category_ref: 500
+# 원문 근거 없음 — 이 테스트베드 고유의 보정 장치(2026-08-25 도입).
+# CADE 원문은 encoder를 한 번 학습해 고정하고 전체 코퍼스로 family centroid를
+# 딱 한 번 계산하는 정적 설계라 "참조 표본을 나중에 다시 인코딩"할 필요가
+# 없다. 이 테스트베드는 encoder를 매 experience마다 계속 미세조정하므로,
+# category(정상+공격 family)별 raw 참조 표본을 최근 이 개수만큼 누적
+# 보관했다가 매 라운드 현재 encoder로 centroid를 다시 계산하고(순수
+# 이진 라벨로 재현했던 첫 시도는 라운드마다 등장 family가 하나뿐이라
+# encoder가 과거 family 구분을 잊어버려 recall이 붕괴했다 — 이 참조 표본을
+# 대조학습 배치에도 리플레이로 섞어 넣어 방지한다), 자세한 실측 경위는
+# `docs/metric_justification.md`의 "CADE 다중클래스(family) centroid 연결"
+# 절과 `components/cade/cade_drift_detector.py` 모듈 docstring 참고.

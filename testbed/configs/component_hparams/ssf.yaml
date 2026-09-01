@@ -13,3 +13,31 @@ drift_threshold: 0.05
 lwf_lambda: 0.5
 # SSF ssf.py:45,331 — LwF distillation loss 가중치.
 # total_loss = task_loss + lwf_lambda * MSE(current_output, teacher_output)
+
+new_sample_weight: 1.0
+# 2026-08-12 추가·조정. SSF ssf.py:26 "--new_sample_weight" 기본값은 100.0
+# 이지만, 이 값을 문자 그대로 가져오면 안 된다는 걸 A/B 실측으로 확인했다
+# (NSL-KDD, dd=none/ss=ssf/mm=none/af=lwf_ssf/as=cade_mad 고정):
+#   InfoNCE만 추가(weight=1):    f1=0.7107, bwt=-0.0005 (거의 망각 없음)
+#   + new_sample_weight=100:     f1=0.5655, bwt=-0.1341 (망각 급증)
+#   (참고) InfoNCE 추가 전:       f1=0.6680, bwt=-0.0161
+# 원인은 labeling_budget=200(현재는 fixed_ratio=0.1, 위 global_hparams.yaml
+# 주석 참고)과 완전히 같은 종류의 착시다 — SSF에서 100이라는 값은 "누적
+# 풀 전체(~2.5만, NSL-KDD 기준) 중 이번 라운드 신규 표본(~200개)"이라는
+# 극단적으로 작은 비율(약 1:125)을 겨냥해 보정된 계수다. 이 테스트베드는
+# new_batch/replay_batch를 크기가 비슷한 별개 배치로 분리하므로(구조적
+# 차이, 되돌리지 않음 — ssf_anti_forgetting.py 모듈 docstring 참고),
+# 같은 100이라는 숫자를 곱하면 신규:과거 표본 수 비율이 약 1:1인 상황에서
+# gradient 기여도가 약 99:1로 replay를 거의 완전히 압도해버린다 — SSF가
+# 의도한 "신규 표본을 적당히 우대"가 아니라 "replay를 사실상 무력화"가
+# 되어 BWT가 오히려 악화된다. weight=1(신규/과거 동등 취급)이 세 경우 중
+# BWT·F1 모두 최선이었고, 이는 우연한 튜닝이 아니라 SSF의 실제 비율
+# (신규 기여도 ≈(100*200)/(100*200+25000)≈44%)을 이 테스트베드의 다른
+# 신규:과거 비율(≈1:1)에서 근사 재현하면 weight≈0.79로 1에 가깝다는 계산과도
+# 부합한다. task_loss(BCE+InfoNCE) 계산 시 새 표본 배치 전체에 곱하는
+# 가중치(replay 배치는 1로 고정) — ssf_anti_forgetting.py 모듈 docstring
+# 참고.
+
+infonce_temperature: 0.02
+# SSF ssf.py:47 "tem = 0.02" (CLI로 노출되지 않는 고정값). InfoNCE 손실의
+# 온도 스케일링 계수 — ssf_infonce.py 참고. 2026-08-12 추가.

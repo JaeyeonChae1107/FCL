@@ -105,9 +105,10 @@ def print_report(df: pd.DataFrame, dataset_name: str) -> None:
               f"F1={top['f1']:.4f} PR-AUC={top['pr_auc']:.4f}")
 
     print()
-    print("두 Track은 서로 다른 문제를 푼다 - Track A(semi-supervised")
-    print("discriminative)와 Track B(label-free novelty detection)의 순위 비교는")
-    print("'우열'이 아니라 '트레이드오프'로 해석해야 한다(PRD 5절/7절 이슈2).")
+    print("참고: Track A(semi-supervised discriminative)는 라벨 예산(10%) 안의")
+    print("데이터만, Track B(label-free novelty detection)는 experience 전체를")
+    print("라벨 없이 학습에 쓴다 - 학습 조건은 다르지만 평가지표(F1/PR-AUC/BWT)는")
+    print("동일한 프로토콜로 채점되므로 위 순위는 두 Track을 함께 비교한 것이다.")
     print()
 
     print("상위 5개 조합:")
@@ -127,6 +128,21 @@ def main() -> None:
     dataset_names = sorted({r["dataset"] for r in results})
     for dataset_name in dataset_names:
         dataset_results = [r for r in results if r["dataset"] == dataset_name]
+        # 2026-08-26 추가(전수 재검토 중 발견) — grid_runner.py의 run_grid()는
+        # 중간에 끊겨도 이어서 돌릴 수 있게 설계되어 있다(결과 파일이 있으면
+        # code_version이 지금 코드와 일치할 때만 건너뜀). 그 말은 재실행이
+        # 아직 다 끝나지 않은 상태에서 이 스크립트를 돌리면 results/ 안에
+        # "새 코드로 갓 계산된 결과"와 "아직 재계산 못 한 옛 코드 결과"가
+        # 섞여 있을 수 있다는 뜻이다 — 리더보드가 이 둘을 구분 없이 같은
+        # 표에 섞어 정렬하면 조용히 오해를 부를 수 있어, 코드 버전이 섞여
+        # 있으면 경고만 낸다(자동으로 막지는 않는다 — 부분 결과라도 봐야
+        # 할 때가 있으므로).
+        code_versions = {r.get("code_version") for r in dataset_results}
+        if len(code_versions) > 1:
+            print(f"경고: [{dataset_name}] 결과에 서로 다른 code_version이 섞여 "
+                  f"있습니다({sorted(v for v in code_versions if v)}) — grid_runner.py "
+                  f"재실행이 아직 끝나지 않았을 수 있습니다. 전체 재실행 완료 후 "
+                  f"다시 생성하는 것을 권장합니다.")
         df = build_leaderboard(dataset_results)
         write_reports(df, dataset_name)
         print_report(df, dataset_name)

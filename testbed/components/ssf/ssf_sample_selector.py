@@ -44,10 +44,52 @@ drift_score는 상한이 없어(수백까지 커짐) tanh가 거의 즉시 1로 
 값을 보수적으로 채택했다). `max_drift_influence` 기본값 0.1 — drift_detector가
 결과에 영향을 주긴 하되, 대표성 선택을 압도해 학습을 불안정하게 만들지는
 않도록 하는 안전장치다.
+
+**2026-08-26 발견·수정 — 균일-히스토그램 대체가 라운드마다 예측 불가능하게
+클래스/family 비율을 왜곡하는 문제**: 4개 논문 컴포넌트 전수 재감사에서,
+위 KL-마스크 최적화가 "제1주성분 투영값의 분포"만 보고 어떤 표본이 어떤
+클래스인지는 전혀 모른다는 걸 재확인했다 — 그 결과 어느 클래스가 우연히
+어느 bin에 몰려 있는지에 따라 선택 비율이 라운드마다 완전히 달라진다.
+실측(NSL-KDD)으로 R2L 라운드(공격 995건)는 비례 기대치(99.5건) 대비 82%
+적은 18건만 선택됐는데, U2R 라운드(52건)는 거의 정확히 비례대로 선택되는
+등 들쭉날쭉했다. `select()`를 `_quota_select()`로 리팩터링해 label_budget을
+먼저 그룹(이진 라벨) 구성비대로(최소 1개) 배정하고, 그 쿼터 안에서만 위
+KL+extremity 메커니즘을 적용하도록 했다. 이진 쿼터만으로는 "공격" 예산
+안에서 서로 다른 family까지는 공평해지지 않는다는 것도 확인해(U2R 라운드
+자체 학습 성능이 여전히 낮게 나옴 — `ssf_memory_manager.py`의 같은 절
+참고), `train_category`(다중클래스)로 쿼터를 나누는 `select_with_category()`
+를 추가해봤다.
+
+**한 번 기각했다가, 잘못된 비교였음이 밝혀져 재검증 후 채택함**: 처음엔
+`select_with_category()`/`SSFMemoryManager.update_with_category()`(둘 다
+같은 이유로 시도) 각각을 A/B 실측(NSL-KDD, `dd=ssf/ss=ssf/mm=ssf/
+af=lwf_ssf/as=cade_mad`)해 이진 쿼터가 가장 낫다고 결론 내리고 둘 다
+되돌렸다. 그런데 재감사(4개 병렬 에이전트) 과정에서, 이 A/B가 그 사이
+바뀐 `data/dataset_loader.py`의 MinMaxScaler 시간 유출 수정 **이전**
+숫자와 비교된, 이미 낡은 비교였다는 게 밝혀졌다(같은 "이진 쿼터만"
+콤보를 현재 코드로 다시 재보면 f1=0.7291이 아니라 0.6565가 나온다 —
+전처리가 바뀌면 4개 변형 전부의 절대 수치가 같이 움직이므로 순위까지
+바뀔 수 있다는 걸 놓쳤었다). 현재 코드 기준으로 4개 변형을 전부 다시
+측정한 결과:
+  - 이진 쿼터만: f1=0.6565, roc_auc=0.7150, diag-F1=[0.851,0.554,0.257,
+    0.009,0.0]
+  - **선택기만 category 쿼터: f1=0.7040, roc_auc=0.6451, diag-F1=
+    [0.846,0.556,0.254,0.067,0.0]** ← 전체 f1도, U2R 라운드 자체 성능도
+    이진 쿼터보다 낫다.
+  - 버퍼만 category 쿼터: f1=0.5107, roc_auc=0.5101(거의 무작위) — 여전히
+    나쁨.
+  - 둘 다 category 쿼터: f1=0.5879, roc_auc=0.5276 — 여전히 이진보다 나쁨.
+결론이 뒤집혔다: **선택기의 category 쿼터는 채택**(전체 성능과 U2R 둘 다
+개선), **버퍼의 category 쿼터는 여전히 기각**(단독으로도, 선택기와
+합쳐도 더 나쁨 — `ssf_memory_manager.py`의 같은 절 참고). "실측 우선"
+원칙을 지키려면 실측 자체가 최신 코드 기준이어야 한다는 교훈이 남는다 —
+그리드 전체에 영향 주는 변경(전처리 등) 이후에는 이전 A/B 결론을 그대로
+믿지 않고 재확인해야 한다.
 """
 
 from typing import List
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -82,6 +124,19 @@ class SSFSampleSelector(BaseSampleSelector):
 
     def select(self, new_data: torch.Tensor, new_labels: torch.Tensor,
                label_budget: int, drift_score: float) -> List[int]:
+        return self._quota_select(new_data, new_labels, label_budget, drift_score)
+
+    def select_with_category(self, new_data: torch.Tensor, new_labels: torch.Tensor,
+                              category, label_budget: int, drift_score: float) -> List[int]:
+        """CLClient 전용 훅 — `train_category`(다중클래스)가 있으면 이진
+        라벨 대신 그걸로 쿼터를 나눈다. 한 번 기각했다가 재감사에서 잘못된
+        비교였음이 밝혀져 다시 채택했다 — 아래 "2026-08-26 재검증" 절 참고."""
+        codes = np.unique(np.asarray(category), return_inverse=True)[1]
+        group = torch.tensor(codes, dtype=torch.long, device=new_data.device)
+        return self._quota_select(new_data, group, label_budget, drift_score)
+
+    def _quota_select(self, new_data: torch.Tensor, group: torch.Tensor,
+                       label_budget: int, drift_score: float) -> List[int]:
         n = len(new_data)
         if n == 0:
             return []
@@ -89,11 +144,77 @@ class SSFSampleSelector(BaseSampleSelector):
         if k == n:
             return list(range(n))
 
+        # 2026-08-26 발견·수정 — 균일-히스토그램 대체 방식이 라운드별로
+        # 예측 불가능하게 그룹(클래스/category) 비율을 왜곡하는 문제(4개
+        # 논문 컴포넌트 전수 재감사에서 발견). KL 최적화는 "제1주성분
+        # 투영값의 분포"만 보고 그룹은 전혀 모르므로, 어느 그룹이 어느
+        # bin에 몰려 있는지에 따라 선택 비율이 완전히 달라진다 — 실측
+        # (NSL-KDD)으로 R2L 라운드(공격 995건)는 비례 기대치(99.5건) 대비
+        # 82% 적은 18건만 선택됐는데, U2R 라운드(52건)는 거의 정확히
+        # 비례대로 선택되는 등 라운드마다 들쭉날쭉했다. label_budget을
+        # 그룹 구성비대로(최소 1개) 먼저 배정하고, 그 쿼터 안에서만 아래
+        # KL-마스크 최적화+extremity 블렌딩을 적용한다 — "대표성 있는
+        # 표본을 뽑는다"는 핵심 메커니즘은 그룹 내부에서 그대로 작동하되,
+        # 그룹 간 비율 자체는 더 이상 히스토그램 우연에 좌우되지 않는다.
+        groups = group.unique().tolist()
+        if len(groups) > 1:
+            idx_by_group = {g: (group == g).nonzero(as_tuple=True)[0] for g in groups}
+            counts = {g: len(idx_by_group[g]) for g in groups}
+            quotas = {g: min(max(1, round(k * counts[g] / n)), counts[g]) for g in groups}
+            diff = k - sum(quotas.values())
+            order = sorted(groups, key=lambda g: counts[g], reverse=True)
+            i = 0
+            while diff != 0 and i < 10000:
+                g = order[i % len(order)]
+                if diff > 0 and quotas[g] < counts[g]:
+                    quotas[g] += 1
+                    diff -= 1
+                elif diff < 0 and quotas[g] > 0:
+                    quotas[g] -= 1
+                    diff += 1
+                i += 1
+
+            selected: List[int] = []
+            for g in groups:
+                if quotas[g] <= 0:
+                    continue
+                grp_idx = idx_by_group[g]
+                local_topk = self._select_within_group(
+                    new_data[grp_idx], quotas[g], drift_score)
+                selected.extend(grp_idx[local_topk].tolist())
+            return selected
+
+        return self._select_within_group(new_data, k, drift_score).tolist()
+
+    def _select_within_group(self, new_data: torch.Tensor, k: int,
+                              drift_score: float) -> torch.Tensor:
+        """단일 그룹(클래스) 안에서 KL 마스크 최적화 + extremity 블렌딩으로
+        top-k 인덱스(그 그룹 내부 기준)를 뽑는다 — `select()`가 클래스별로
+        호출한다(위 "2026-08-26" 절 참고)."""
+        n = len(new_data)
+        if k >= n:
+            return torch.arange(n, device=new_data.device)
+
         scores = self._scalar_projection(new_data)
         bins = self._histogram_bins(scores)
 
-        # 목표 분포: bin마다 균등 — SSF의 "대표성" 개념(특정 구간에 쏠리지 않고
-        # 전체 분포를 고르게 대표하는 샘플을 선호)을 균등 목표 분포로 표현한다.
+        # 목표 분포: bin마다 균등.
+        #
+        # **2026-08-14 정정 — "SSF의 대표성 개념을 표현한 것"이 아니다**:
+        # 구조 전수 감사에서 utils.py:109-190을 다시 정독한 결과, SSF의
+        # 실제 목표 분포는 균일분포가 전혀 아님을 확인했다 —
+        # `optimize_old_mask`/`optimize_new_mask`의 `bin_tgt_c`/`bin_tgt_t`
+        # (utils.py:134,175)는 **treatment_res(현재 윈도우의 실제 관측
+        # 분포)의 경험적 히스토그램**이다. 즉 SSF의 진짜 메커니즘은
+        # "선택된 표본이 지금 실제로 관측되는(드리프트됐을 수 있는) 분포를
+        # 따라가도록" 마스크를 최적화하는 drift-추종형 선택이지, "값 범위
+        # 전체에 고르게 퍼뜨리는" 다양성 극대화가 아니다. 이 균일분포
+        # 대체는 인터페이스 제약상 불가피했다 — `select()`는 old/control
+        # 분포에 접근할 방법이 없고(버퍼나 모델을 안 받음), SSF 원문의
+        # M_t 최적화 자체도 M_c(old mask)에 의존하는 구조라(utils.py:177)
+        # SampleSelector 혼자서는 애초에 원문 메커니즘을 재현할 수 없다.
+        # 즉 이건 "SSF 개념의 단순화"가 아니라 "SSF의 핵심 메커니즘을
+        # 포기하고 완전히 다른 대체 휴리스틱(균일 커버리지)을 쓴 것"이다.
         # (drift_score와 무관하게 항상 균등 — 아래에서 별도로 블렌딩한다.)
         target_dist = torch.full((self.num_bins,), 1.0 / self.num_bins, device=new_data.device)
 
@@ -136,5 +257,4 @@ class SSFSampleSelector(BaseSampleSelector):
 
         # PRD 15.1절의 label_budget 5% 이내 일치 요구를 정확히 지키기 위해
         # top-k로 선택한다(이진화만 쓰면 budget을 넘거나 못 채울 수 있음).
-        topk = torch.topk(combined, k).indices.tolist()
-        return topk
+        return torch.topk(combined, k).indices

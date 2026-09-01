@@ -10,3 +10,14 @@ activation_threshold: 0.97
 # 우특이벡터를 기저로 채택한다. 원 논문은 데이터셋별로 0.95~0.99 범위를 실험에
 # 사용하며, 이 테스트베드는 그 중간값인 0.97을 기본값으로 채택한다(특정 논문
 # 실험 재현이 아니라 이 테스트베드의 기본값).
+
+max_basis_ratio: 0.9
+# 2026-08-14 추가 — 원 논문에 없는 이 테스트베드 고유의 안전장치. GPM
+# 원 논문은 은닉층이 충분히 큰 아키텍처(예: PMNIST의 수백~수천 차원)를
+# 가정하는데, 이 테스트베드의 공유 백본은 latent_dim이 훨씬 작다(NSL-KDD
+# 기준 32). residual projection을 넣은 뒤에도(gpm_anti_forgetting.py
+# 참고) 5 experience 안에 일부 레이어(특히 classifier, decoder.0처럼
+# latent_dim 크기의 입력을 받는 레이어)의 기저가 실측으로 풀랭크(100%)에
+# 도달함을 확인했다 — 풀랭크가 되면 project_gradients()가 그 레이어
+# 그래디언트를 완전히 0으로 만들어 학습이 조용히 멈춘다. 항상 ambient
+# dimension의 10%는 학습 가능하게 남겨둔다.

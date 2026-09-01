@@ -16,9 +16,15 @@ REQUIRED_RESULT_FIELDS = {
     "f1": float, "precision": float, "recall": float, "pr_auc": float,
     "bwt": float, "perf_matrix": list,
     "roc_auc": float, "labeling_cost": float, "training_time_sec": float,
-    "memory_footprint": int, "avg_inference_latency_ms": float,
+    "memory_footprint": int, "memory_footprint_peak": int,
+    "memory_footprint_avg": float, "avg_inference_latency_ms": float,
     "best_f1_reference": float, "seed": int,
+    "code_version": str,
 }
+# memory_footprint_peak/avg, code_version은 2026-08-14 추가(구조 전수 감사에서
+# 발견: SPIDER 등 라운드마다 버퍼가 요동치는 memory_manager는 마지막 라운드
+# 스냅샷만으론 오해를 살 수 있고, 결과 캐싱이 코드 버전을 검사하지 않아 낡은
+# 결과가 재사용될 위험이 있었다 — grid_runner.py 참고).
 
 
 def make_combo_id(combo: Dict[str, Any]) -> str:

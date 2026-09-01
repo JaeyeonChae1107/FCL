@@ -1422,7 +1422,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=none_af=none_as=none",
@@ -1437,7 +1437,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=none_af=lwf_ssf_as=cade_mad",
@@ -1452,7 +1452,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=none_af=lwf_ssf_as=none",
@@ -1467,7 +1467,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=none_af=gpm_as=cade_mad",
@@ -1482,7 +1482,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=none_af=gpm_as=none",
@@ -1497,7 +1497,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=none_as=cade_mad",
@@ -1512,7 +1512,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=none_as=none",
@@ -1527,7 +1527,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=lwf_ssf_as=cade_mad",
@@ -1542,7 +1542,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=lwf_ssf_as=none",
@@ -1557,7 +1557,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=gpm_as=cade_mad",
@@ -1572,7 +1572,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=gpm_as=none",
@@ -1587,7 +1587,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=none_as=cade_mad",
@@ -1602,7 +1602,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=none_as=none",
@@ -1617,7 +1617,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=lwf_ssf_as=cade_mad",
@@ -1632,7 +1632,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=lwf_ssf_as=none",
@@ -1647,7 +1647,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=gpm_as=cade_mad",
@@ -1662,7 +1662,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=gpm_as=none",
@@ -1677,7 +1677,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=none_as=cade_mad",
@@ -1692,7 +1692,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=none_as=none",
@@ -1707,7 +1707,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=lwf_ssf_as=cade_mad",
@@ -1722,7 +1722,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=lwf_ssf_as=none",
@@ -1737,7 +1737,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=gpm_as=cade_mad",
@@ -1752,7 +1752,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=gpm_as=none",
@@ -1767,7 +1767,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=none_as=cade_mad",
@@ -1782,7 +1782,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=none_as=none",
@@ -1797,7 +1797,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -1812,7 +1812,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=lwf_ssf_as=none",
@@ -1827,7 +1827,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=gpm_as=cade_mad",
@@ -1842,7 +1842,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=gpm_as=none",
@@ -1857,7 +1857,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=none_as=cade_mad",
@@ -1872,7 +1872,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=none_as=none",
@@ -1887,7 +1887,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -1902,7 +1902,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=lwf_ssf_as=none",
@@ -1917,7 +1917,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=gpm_as=cade_mad",
@@ -1932,7 +1932,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=gpm_as=none",
@@ -1947,7 +1947,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=none_as=cade_mad",
@@ -1962,7 +1962,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=none_as=none",
@@ -1977,7 +1977,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -1992,7 +1992,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=lwf_ssf_as=none",
@@ -2007,7 +2007,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=gpm_as=cade_mad",
@@ -2022,7 +2022,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=gpm_as=none",
@@ -2037,7 +2037,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=none_as=cade_mad",
@@ -2052,7 +2052,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=none_as=none",
@@ -2067,7 +2067,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=lwf_ssf_as=cade_mad",
@@ -2082,7 +2082,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=lwf_ssf_as=none",
@@ -2097,7 +2097,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=gpm_as=cade_mad",
@@ -2112,7 +2112,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=gpm_as=none",
@@ -2127,7 +2127,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=none_as=cade_mad",
@@ -2142,7 +2142,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=none_as=none",
@@ -2157,7 +2157,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=lwf_ssf_as=cade_mad",
@@ -2172,7 +2172,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=lwf_ssf_as=none",
@@ -2187,7 +2187,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=gpm_as=cade_mad",
@@ -2202,7 +2202,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=gpm_as=none",
@@ -2217,7 +2217,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=none_as=cade_mad",
@@ -2232,7 +2232,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=none_as=none",
@@ -2247,7 +2247,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
@@ -2262,7 +2262,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=lwf_ssf_as=none",
@@ -2277,7 +2277,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=gpm_as=cade_mad",
@@ -2292,7 +2292,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=gpm_as=none",
@@ -2307,7 +2307,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=none_as=cade_mad",
@@ -2322,7 +2322,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=none_as=none",
@@ -2337,7 +2337,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
@@ -2352,7 +2352,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=lwf_ssf_as=none",
@@ -2367,7 +2367,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=gpm_as=cade_mad",
@@ -2382,7 +2382,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=gpm_as=none",
@@ -2397,7 +2397,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=none_as=cade_mad",
@@ -2412,7 +2412,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=none_as=none",
@@ -2427,7 +2427,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
@@ -2442,7 +2442,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=lwf_ssf_as=none",
@@ -2457,7 +2457,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=gpm_as=cade_mad",
@@ -2472,7 +2472,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=gpm_as=none",
@@ -2487,7 +2487,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=none_as=cade_mad",
@@ -2502,7 +2502,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=none_as=none",
@@ -2517,7 +2517,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -2532,7 +2532,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
@@ -2547,7 +2547,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
@@ -2562,7 +2562,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=gpm_as=none",
@@ -2577,7 +2577,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=none_as=cade_mad",
@@ -2592,7 +2592,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=none_as=none",
@@ -2607,7 +2607,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -2622,7 +2622,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
@@ -2637,7 +2637,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
@@ -2652,7 +2652,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=gpm_as=none",
@@ -2667,7 +2667,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=none_as=cade_mad",
@@ -2682,7 +2682,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=none_as=none",
@@ -2697,7 +2697,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -2712,7 +2712,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
@@ -2727,7 +2727,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
@@ -2742,7 +2742,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=gpm_as=none",
@@ -2757,7 +2757,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "B_dd=none_ss=random_mm=none_af=cndids_as=pca",
@@ -2772,7 +2772,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "B_dd=none_ss=random_mm=spider_af=cndids_as=pca",
@@ -2787,7 +2787,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "B_dd=none_ss=random_mm=cndids_af=cndids_as=pca",
@@ -2802,7 +2802,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "nsl-kdd"
+    "dataset": "unsw-nb15"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=none_af=none_as=cade_mad",
@@ -2817,7 +2817,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=none_af=none_as=none",
@@ -2832,7 +2833,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=none_af=lwf_ssf_as=cade_mad",
@@ -2847,7 +2849,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=none_af=lwf_ssf_as=none",
@@ -2862,7 +2865,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=none_af=gpm_as=cade_mad",
@@ -2877,7 +2881,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=none_af=gpm_as=none",
@@ -2889,10 +2894,16 @@
       "anomaly_scorer": "none",
       "track": "A"
     },
-    "passed": true,
-    "failures": [],
+    "passed": false,
+    "failures": [
+      "exp3: 15.2 예측이 거의 완전히 한 클래스로 퇴화 (다수 클래스 비율 0.9902 >= 0.97)",
+      "exp3: 15.2b roc_auc가 무작위보다 낮음(역전 의심) (roc_auc=0.2123)",
+      "exp4: 15.2 예측이 거의 완전히 한 클래스로 퇴화 (다수 클래스 비율 0.9958 >= 0.97)",
+      "exp4: 15.2b roc_auc가 무작위보다 낮음(역전 의심) (roc_auc=0.2087)"
+    ],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=none_as=cade_mad",
@@ -2906,8 +2917,11 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp1: 15.2 경고 - 다수 클래스 비율 0.9564 >= 0.90"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=none_as=none",
@@ -2919,10 +2933,16 @@
       "anomaly_scorer": "none",
       "track": "A"
     },
-    "passed": true,
-    "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "passed": false,
+    "failures": [
+      "exp3: 15.2 예측이 거의 완전히 한 클래스로 퇴화 (다수 클래스 비율 0.9819 >= 0.97)",
+      "exp4: 15.2 예측이 거의 완전히 한 클래스로 퇴화 (다수 클래스 비율 0.9890 >= 0.97)"
+    ],
+    "warnings": [
+      "exp2: 15.2 경고 - 다수 클래스 비율 0.9277 >= 0.90"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=lwf_ssf_as=cade_mad",
@@ -2936,8 +2956,11 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp1: 15.2 경고 - 다수 클래스 비율 0.9564 >= 0.90"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=lwf_ssf_as=none",
@@ -2952,7 +2975,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=gpm_as=cade_mad",
@@ -2966,8 +2990,11 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp1: 15.2 경고 - 다수 클래스 비율 0.9564 >= 0.90"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=none_af=gpm_as=none",
@@ -2979,10 +3006,18 @@
       "anomaly_scorer": "none",
       "track": "A"
     },
-    "passed": true,
-    "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "passed": false,
+    "failures": [
+      "exp3: 15.2 예측이 거의 완전히 한 클래스로 퇴화 (다수 클래스 비율 0.9733 >= 0.97)",
+      "exp3: 15.2b roc_auc가 무작위보다 낮음(역전 의심) (roc_auc=0.3675)",
+      "exp4: 15.2 예측이 거의 완전히 한 클래스로 퇴화 (다수 클래스 비율 0.9986 >= 0.97)",
+      "exp4: 15.2b roc_auc가 무작위보다 낮음(역전 의심) (roc_auc=0.2689)"
+    ],
+    "warnings": [
+      "exp2: 15.2b 경고 - roc_auc가 무작위에 가까움 (roc_auc=0.5407)"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=none_as=cade_mad",
@@ -2997,7 +3032,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=none_as=none",
@@ -3011,8 +3047,11 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp3: 15.2 경고 - 다수 클래스 비율 0.9350 >= 0.90"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=lwf_ssf_as=cade_mad",
@@ -3027,7 +3066,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=lwf_ssf_as=none",
@@ -3042,7 +3082,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=gpm_as=cade_mad",
@@ -3057,7 +3098,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=spider_af=gpm_as=none",
@@ -3069,10 +3111,17 @@
       "anomaly_scorer": "none",
       "track": "A"
     },
-    "passed": true,
-    "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "passed": false,
+    "failures": [
+      "exp3: 15.2b roc_auc가 무작위보다 낮음(역전 의심) (roc_auc=0.4956)",
+      "exp4: 15.2 예측이 거의 완전히 한 클래스로 퇴화 (다수 클래스 비율 0.9836 >= 0.97)",
+      "exp4: 15.2b roc_auc가 무작위보다 낮음(역전 의심) (roc_auc=0.3011)"
+    ],
+    "warnings": [
+      "exp3: 15.2 경고 - 다수 클래스 비율 0.9548 >= 0.90"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=none_as=cade_mad",
@@ -3086,8 +3135,11 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp1: 15.2 경고 - 다수 클래스 비율 0.9546 >= 0.90"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=none_as=none",
@@ -3101,8 +3153,11 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp4: 15.2 경고 - 다수 클래스 비율 0.9093 >= 0.90"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=lwf_ssf_as=cade_mad",
@@ -3116,8 +3171,11 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp1: 15.2 경고 - 다수 클래스 비율 0.9546 >= 0.90"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=lwf_ssf_as=none",
@@ -3132,7 +3190,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=gpm_as=cade_mad",
@@ -3146,8 +3205,11 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp1: 15.2 경고 - 다수 클래스 비율 0.9546 >= 0.90"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=spider_af=gpm_as=none",
@@ -3159,10 +3221,14 @@
       "anomaly_scorer": "none",
       "track": "A"
     },
-    "passed": true,
-    "failures": [],
+    "passed": false,
+    "failures": [
+      "exp4: 15.2 예측이 거의 완전히 한 클래스로 퇴화 (다수 클래스 비율 0.9797 >= 0.97)",
+      "exp4: 15.2b roc_auc가 무작위보다 낮음(역전 의심) (roc_auc=0.4040)"
+    ],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=none_as=cade_mad",
@@ -3177,7 +3243,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=none_as=none",
@@ -3191,8 +3258,12 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp3: 15.2 경고 - 다수 클래스 비율 0.9116 >= 0.90",
+      "exp4: 15.2 경고 - 다수 클래스 비율 0.9314 >= 0.90"
+    ],
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -3207,7 +3278,8 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd",
+    "code_version": "c1202a637272"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=lwf_ssf_as=none",
@@ -3222,7 +3294,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=gpm_as=cade_mad",
@@ -3237,7 +3309,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=random_mm=ssf_af=gpm_as=none",
@@ -3252,7 +3324,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=none_as=cade_mad",
@@ -3267,7 +3339,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=none_as=none",
@@ -3282,7 +3354,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -3297,7 +3369,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=lwf_ssf_as=none",
@@ -3312,7 +3384,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=gpm_as=cade_mad",
@@ -3327,7 +3399,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=random_mm=ssf_af=gpm_as=none",
@@ -3342,7 +3414,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=none_as=cade_mad",
@@ -3357,7 +3429,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=none_as=none",
@@ -3372,7 +3444,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -3387,7 +3459,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=lwf_ssf_as=none",
@@ -3402,7 +3474,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=gpm_as=cade_mad",
@@ -3417,7 +3489,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=random_mm=ssf_af=gpm_as=none",
@@ -3432,7 +3504,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=none_as=cade_mad",
@@ -3447,7 +3519,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=none_as=none",
@@ -3462,7 +3534,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=lwf_ssf_as=cade_mad",
@@ -3477,7 +3549,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=lwf_ssf_as=none",
@@ -3492,7 +3564,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=gpm_as=cade_mad",
@@ -3507,7 +3579,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=none_af=gpm_as=none",
@@ -3522,7 +3594,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=none_as=cade_mad",
@@ -3536,8 +3608,10 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp0: 15.2 경고 - 다수 클래스 비율 0.9997 >= 0.99"
+    ],
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=none_as=none",
@@ -3552,7 +3626,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=lwf_ssf_as=cade_mad",
@@ -3566,8 +3640,10 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp0: 15.2 경고 - 다수 클래스 비율 0.9997 >= 0.99"
+    ],
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=lwf_ssf_as=none",
@@ -3582,7 +3658,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=gpm_as=cade_mad",
@@ -3596,8 +3672,10 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp0: 15.2 경고 - 다수 클래스 비율 0.9997 >= 0.99"
+    ],
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=none_af=gpm_as=none",
@@ -3612,7 +3690,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=none_as=cade_mad",
@@ -3627,7 +3705,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=none_as=none",
@@ -3642,7 +3720,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
@@ -3657,7 +3735,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=lwf_ssf_as=none",
@@ -3672,7 +3750,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=gpm_as=cade_mad",
@@ -3687,7 +3765,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=spider_af=gpm_as=none",
@@ -3702,7 +3780,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=none_as=cade_mad",
@@ -3717,7 +3795,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=none_as=none",
@@ -3732,7 +3810,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
@@ -3747,7 +3825,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=lwf_ssf_as=none",
@@ -3762,7 +3840,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=gpm_as=cade_mad",
@@ -3777,7 +3855,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=spider_af=gpm_as=none",
@@ -3792,7 +3870,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=none_as=cade_mad",
@@ -3806,8 +3884,10 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp0: 15.2 경고 - 다수 클래스 비율 0.9997 >= 0.99"
+    ],
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=none_as=none",
@@ -3822,7 +3902,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
@@ -3836,8 +3916,10 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp0: 15.2 경고 - 다수 클래스 비율 0.9997 >= 0.99"
+    ],
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=lwf_ssf_as=none",
@@ -3852,7 +3934,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=gpm_as=cade_mad",
@@ -3866,8 +3948,10 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp0: 15.2 경고 - 다수 클래스 비율 0.9997 >= 0.99"
+    ],
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=spider_af=gpm_as=none",
@@ -3882,7 +3966,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=none_as=cade_mad",
@@ -3897,7 +3981,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=none_as=none",
@@ -3912,7 +3996,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -3927,7 +4011,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
@@ -3942,7 +4026,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
@@ -3957,7 +4041,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=gpm_as=none",
@@ -3972,7 +4056,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=none_as=cade_mad",
@@ -3987,7 +4071,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=none_as=none",
@@ -4002,7 +4086,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -4017,7 +4101,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
@@ -4032,7 +4116,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
@@ -4047,7 +4131,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=gpm_as=none",
@@ -4062,7 +4146,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=none_as=cade_mad",
@@ -4076,8 +4160,10 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp0: 15.2 경고 - 다수 클래스 비율 0.9997 >= 0.99"
+    ],
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=none_as=none",
@@ -4092,7 +4178,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad",
@@ -4106,8 +4192,10 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp0: 15.2 경고 - 다수 클래스 비율 0.9997 >= 0.99"
+    ],
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=lwf_ssf_as=none",
@@ -4122,7 +4210,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
@@ -4136,8 +4224,10 @@
     },
     "passed": true,
     "failures": [],
-    "warnings": [],
-    "dataset": "unsw-nb15"
+    "warnings": [
+      "exp0: 15.2 경고 - 다수 클래스 비율 0.9997 >= 0.99"
+    ],
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "A_dd=cade_ss=ssf_mm=ssf_af=gpm_as=none",
@@ -4152,7 +4242,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "B_dd=none_ss=random_mm=none_af=cndids_as=pca",
@@ -4167,7 +4257,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "B_dd=none_ss=random_mm=spider_af=cndids_as=pca",
@@ -4182,7 +4272,7 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   },
   {
     "combo_id": "B_dd=none_ss=random_mm=cndids_af=cndids_as=pca",
@@ -4197,6 +4287,6 @@
     "passed": true,
     "failures": [],
     "warnings": [],
-    "dataset": "unsw-nb15"
+    "dataset": "nsl-kdd"
   }
 ]

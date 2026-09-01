@@ -47,7 +47,9 @@ class BaseCLModel(nn.Module, ABC):
 
 
 class FCLAutoEncoder(BaseCLModel):
-    """Track A/B 공용. Track A는 x_hat을 손실 계산에 쓰지 않을 뿐, 클래스는 공유한다."""
+    """Track A/B 공용. Track A 대부분은 x_hat을 손실 계산에 쓰지 않지만
+    SSFAntiForgetting(af=lwf_ssf)은 x_hat에 InfoNCE 재구성-대조 손실을
+    적용한다(2026-08-12, ssf_infonce.py 참고) — 클래스 자체는 공유한다."""
 
     def __init__(self, input_dim: int, hidden_dim: int = 128, latent_dim: int = 32):
         super().__init__()

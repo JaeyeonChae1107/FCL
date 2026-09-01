@@ -47,13 +47,21 @@ PRD 9절은 `experience_definition.type`으로 `task_incremental`과
   실측으로 라벨링 비용을 20~50배 절감했다고 보고하지만, 그 절감률 자체를
   이 테스트베드가 재현 목표로 삼지 않는다(0절 — 재현이 아니라 재조합·비교).
 
-## Track B에서 labeling_budget의 의미 축소 (9.2절 참고)
+## Track B는 labeling_budget을 아예 적용하지 않는다 (2026-08 수정, 이전 서술 정정)
 
-Track B(`supervision: label_free`에 대응하는 컴포넌트 조합, 즉 anti_forgetting
-='cndids')에서는 `sample_selector=random`이 `labeling_budget`만큼 샘플을
-무작위로 고르지만, 그 결과(`selected_labels`)는 `CNDIDSAntiForgetting.
-compute_loss()`에서 전혀 쓰이지 않는다(components/cndids/cndids_anti_forgetting.py
-참고 — 라벨을 인자로 받되 의도적으로 무시). 따라서 Track B에서
-`labeling_budget`은 "선택 개수"로만 기능하고 "라벨링 비용" 절감이라는 원래
-의미는 없다 — 별도 시나리오 파일을 두지 않고 같은 scenarios/*.yaml을
-공유하는 이유이기도 하다.
+**이 절의 이전 버전은 더 이상 사실이 아니다** — "Track B도 `sample_selector=
+random`이 `labeling_budget`만큼 샘플을 뽑되 라벨만 무시한다"고 서술했는데,
+CND-IDS 원 논문(Algorithm 1: "Get Xtrain from experience data Ei" ->
+"Fit CFE to Xtrain")을 다시 대조한 결과 label_budget 개념 자체가 없이
+experience 전체를 그대로 학습에 쓴다는 걸 확인해 `pipeline/cl_client.py`의
+Step 3를 고쳤다(`combo["track"] == "B"`일 때 `sample_selector.select()`를
+아예 호출하지 않고 `selected_data = new_data` 그대로 사용 — 라벨링 비용
+"절감"이 아니라 애초에 label_budget 게이트 자체가 없다). `TRACK_B_GRID`가
+여전히 `sample_selector: ["random"]`을 슬롯에 남겨두는 건 combo 딕셔너리
+스키마를 모든 조합에서 통일하기 위한 것일 뿐, Track B 실행에서는 이 값이
+빌드만 되고 실제로 쓰이지는 않는다(`RandomSelector` 인스턴스는 생성되지만
+`select()`가 호출되지 않음) — 리더보드/summary에 `sample_selector=random`
+으로 표시되는 Track B 행을 볼 때 이 점을 감안해야 한다.
+`CNDIDSAntiForgetting.compute_loss()`가 라벨을 인자로 받되 의도적으로
+무시하는 라벨-프리 설계라는 점은 그대로 유효하다(components/cndids/
+cndids_anti_forgetting.py 참고).

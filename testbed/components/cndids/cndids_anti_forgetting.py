@@ -44,12 +44,100 @@ CND-IDS 원 논문 근거 (CND-IDS/FeatureExtractors/CND_IDS.py:161-166):
 `pytorch_metric_learning`은 이 환경에 없는 의존성을 새로 설치하는 위험을
 피하기 위해(이전 `deepod` 사고 참고, testbed/docs/metric_justification.md)
 TripletMarginLoss를 CADE의 contrastive pairing과 동일한 형태(배치를 반으로
-나눠 쌍을 구성, margin 기반)로 직접 구현했다 — 알고리즘의 본질(같은
-클러스터는 가깝게, 다른 클러스터는 margin 이상 멀게)은 동일하게 유지한다.
+나눠 쌍을 구성, margin 기반)로 직접 구현했다.
+
+**2026-08-14 정정 — "알고리즘의 본질은 동일"이라는 서술이 과장이었음**:
+구조 전수 감사에서 재확인한 결과, 원문(`CND_IDS.py:38-39,76-78`)은
+`distances.LpDistance` + `TripletMarginLoss(margin=2)` +
+`TripletMarginMiner(type_of_triplets="semihard")`로 **상대 마진 트리플릿**
+(`d(anchor,positive) - d(anchor,negative) + margin`에 relu, semihard
+마이닝으로 "적당히 어려운" 삼중쌍만 선택)을 쓰는데, `_metric_loss()`는
+배치를 반으로 나눈 **절대 마진 페어와이즈**(같은 클러스터면 거리 자체를
+그대로, 다른 클러스터면 `relu(margin-dist)`)를 쓴다. 둘 다 L2 거리를 쓰고
+"같은 클러스터는 가깝게, 다른 클러스터는 margin 이상 멀게"라는 방향은
+같지만, 손실의 수학적 형태(상대 마진 트리플릿 vs 절대 마진 페어)가 달라
+어떤 쌍이 "hard"로 취급되는지가 다르다 — "본질적으로 동일"이 아니라
+"같은 목표를 다른 손실 형태로 근사"한 것이다. 새 의존성 설치 위험을
+피한다는 이유 자체는 여전히 타당하므로 구현은 유지하되, 서술만 정정한다.
 
 **라벨-프리(label-free) 준수**: `new_batch`의 `selected_labels`는 손실 계산에
 전혀 쓰지 않는다(PRD 12.5절 명시 사항) — 위 확인대로 CND-IDS 원본도 pseudo-
 label 생성에 공격 라벨을 쓰지 않으므로 이 원칙과 실제로 상충하지 않는다.
+
+**2026-08-12 발견·수정 — teacher를 직전 1개만 유지하던 문제**: CND-IDS 원문
+(`CND_IDS.py:42,54-69,195`)은 `self.old_models`라는 리스트에 매 experience
+종료 시(`fit()` 마지막 줄) 그 시점 모델 전체를 `deepclone`해 **계속 추가만
+하고 절대 비우지 않는다**. `LwFloss()`는 이 리스트의 **모든** 과거 모델에 대해
+개별적으로 `MSE(현재 encoder 출력, old_model(현재 배치))`를 계산해 합산한다
+(`CND_IDS.py:57-66`). 즉 experience 3에서는 experience 0·1·2의 스냅샷
+**세 개 전부와** 거리를 재는 것이지, 직전 하나만 보는 게 아니다 — 이전
+구현은 `self._teacher`를 매 `on_task_end`마다 덮어써서 가장 최근 스냅샷하고만
+비교했으므로, 라운드가 진행될수록 원문 대비 망각방지 압력이 점점 약해지고
+있었다(n_experiences=5라 최대 4개까지 누적되므로 비용 부담은 작다).
+
+또한 원문의 가중치 적용 방식도 다시 대조해 함께 고쳤다: `LwFloss()` 내부에서
+개별 old-model 항마다 이미 `reg_strength`(=lambda_r)를 곱하고(`:66`), 그
+합계에 호출부가 **다시** `LwF_strength`(=lambda_cl)를 곱한다(`:159,180`) —
+즉 항 하나당 실효 가중치는 `lambda_r * lambda_cl`이지 `lambda_cl` 단독이
+아니다. 이전 구현은 `lambda_cl`만 곱하고 있었다(이 값이 우연히 CND-IDS
+기본값에서 lambda_r과 같은 0.1이라 결과가 크게 갈리진 않았지만, 두 값이
+달라지면 원문과 어긋난다).
+
+**2026-08-26 발견·수정 — "정상 참조"가 매 라운드 그 라운드 자신의 라벨
+구성에서 다시 정의되어, 공격이 희귀한 라운드에서 참조가 거의 전체를
+뒤덮는 문제**: 4개 논문 컴포넌트 전수 재감사에서, `on_experience_start`가
+받는 `normal_subset`(=`cl_client.py`의 `selected_data[selected_labels==0]`,
+Track B는 experience 전체가 selected_data)이 원문의 `datastream.init_normal`
+(스트림 시작 전 **한 번** 확정되는 고정 참조, 이후 라운드 구성과 무관)과
+근본적으로 다른 성질을 가진다는 걸 재확인했다 — 이 참조의 크기가 **이번
+라운드 자신의 공격 비율**에 그대로 좌우된다. R2L 라운드(실제 공격 6.9%)는
+`normal_subset`이 라운드의 93.1%, U2R 라운드(실제 공격 0.38%)는 99.6%까지
+차지한다. 참조 데이터가 그 라운드 데이터 거의 전체와 겹치면, K-Means가
+만든 클러스터 대부분이 참조 데이터를 최소 하나는 포함하게 되어(`is_normal
+[cluster] = True` 판정 기준이 "그 클러스터에 참조 데이터가 하나라도
+있는가") **거의 모든 클러스터가 "정상"으로 판정**된다 — 실측(NSL-KDD 5라운드
+전체)으로 pseudo-label 다수 클래스 비율이 R2L 0.9844, U2R 1.0000까지
+치솟았고, U2R 라운드 직후 0.870이었던 그 category의 정확도가 다음 라운드엔
+0.707로 떨어지는 실제 망각 효과까지 확인했다(`smoke_test.py` 모듈 docstring
+"2026-08-26" 절, `docs/metric_justification.md` 참고).
+
+원문의 실제 설계 의도(참조는 "지금 이 라운드가 어떻게 생겼는지"와 무관하게
+안정적으로 "알려진 정상이 무엇인지"만 나타내야 함)에 맞춰, `normal_subset`을
+**인스턴스 수명 전체에 걸쳐 누적**하는 별도 풀(`_normal_ref_pool`, 최근
+`max_normal_ref`개 캡)로 바꿨다. 클러스터링 자체(원문처럼 그 라운드 원본
+입력으로 매 라운드 새로 fit)는 그대로 두고, "이 클러스터가 정상인가"
+판정에만 그 라운드 하나가 아니라 누적 풀을 쓴다.
+
+**2026-08-26 재감사에서 발견 — 위 "누적"이 처음엔 사실상 전혀 누적되지
+않고 있었다**: 처음 구현(`combined_ref[-max_normal_ref:]`, 꼬리 슬라이싱)
+은 CADE의 `_category_refs`와 같은 패턴을 그대로 흉내 낸 것이었는데, CADE는
+공격 family별로 나눠 담아 한 family의 라운드당 기여가 보통 cap보다
+작다는 전제가 성립하지만, 여기는 "정상"이라는 단일 통합 버킷이라 그
+전제가 전혀 안 맞았다 — Track B는 label_budget 없이 experience 전체를
+쓰므로 `normal_subset` 자체가 이미 매 라운드 cap(5000)보다 훨씬 크다
+(NSL-KDD 13,468~59,396건). 그 결과 `combined_ref`의 마지막 `cap`개는
+**항상 100% 이번 라운드 자신의 데이터**였다(실측: 5라운드 전체에서 이전
+라운드 표본 생존율 0%, provenance 추적으로 확인) — "누적"이라는 이름과
+달리 실제로는 매 라운드 참조를 통째로 교체하고 있었던 것이다.
+
+그런데도 위에서 인용한 개선(f1→0.889 등)은 실제로 관찰됐다 — 원인을
+분리 실험(같은 K-Means 클러스터링에 대해 참조를 (A) 라운드 전체 vs
+(B) 5000건 무작위 부분표본으로만 바꿔서 비교)으로 추적한 결과, "라운드를
+넘어 기억한다"가 아니라 **"참조 표본 수 자체가 줄어들면 그만큼 K-Means
+클러스터가 덜 뒤덮여 '정상'으로 오판되는 클러스터가 줄어든다"**는 전혀
+다른, 원 논문과 무관한 우연한 부작용이었음이 확인됐다(같은 클러스터링,
+참조만 전체 vs 5000건 무작위: R2L 라운드 pseudo_ratio 0.9720→0.9634,
+U2R 라운드 0.9998→0.9962 — 표본 수 축소 자체가 효과의 전부였다).
+
+이제 꼬리 슬라이싱 대신 **무작위 표본**(`torch.randperm`)으로 캡을
+적용한다 — `combined_ref`(누적 풀 + 이번 라운드) 전체에서 균등하게
+`max_normal_ref`개를 뽑으므로, 이전 라운드의 표본도 실제로 (비율만큼)
+살아남는다. 이러면 "우연한 표본 수 축소 효과"와 "원래 의도했던 진짜
+누적 효과"가 함께 작동하게 된다 — 다만 완벽한 CND-IDS 원문의
+`datastream.init_normal`(스트림 시작 전 한 번 고정되는 참조)과는 여전히
+다르다는 점은 정직하게 남긴다: 이건 그 근사(라운드가 지날수록 갱신되는
+근사적 저수지 표본)이지 문자 그대로 "한 번 고정"은 아니다. A/B 실측
+결과는 `docs/metric_justification.md` 참고.
 """
 
 import copy
@@ -138,9 +226,28 @@ def _elbow_kmeans_fit(data_np: np.ndarray, candidates: List[int], seed: int = 42
 
 
 def _metric_loss(z: torch.Tensor, pseudo_labels: torch.Tensor, margin: float = 2.0) -> torch.Tensor:
+    """2026-08-26 발견·수정(4개 논문 컴포넌트 전수 재감사 — CONFIRMED,
+    단위 테스트로 실측 확인) — pseudo_labels가 이 배치 안에서 전부 같은
+    값이면(같은 클러스터 판정, `same`이 전부 1) 이 손실은 무조건적으로
+    거리를 좁히기만 한다(`same*dist` 항만 활성화, saturate 없음) — 실측:
+    동질 배치에서 loss=4.43, gradient norm 0.5로 실제 임베딩을 뭉갠다.
+    원문의 실제 미이너(`TripletMarginMiner(type_of_triplets="semihard")`,
+    `CND_IDS.py:38-39,76-78`)는 anchor당 양성/음성이 둘 다 있어야 triplet을
+    만들 수 있어, pseudo-label이 배치 전체에서 동질적이면 유효 triplet이
+    0개가 되어 손실이 조용히 0이 된다 — 이 구현은 같은 상황에서 오히려
+    적극적으로 임베딩을 뭉개 원문과 질적으로 다르게 반응하고 있었다.
+    `on_experience_start`의 정상 참조 풀 수정(위 모듈 docstring 참고)
+    이후에도 R2L/U2R류 라운드는 pseudo_ratio가 여전히 0.96~0.99대라 이
+    경로가 실제로 자주 발동함을 재확인했다. `pytorch_metric_learning`
+    (새 의존성 도입 위험 — 이 프로젝트의 기존 정책)을 설치하지 않고도,
+    배치 전체의 pseudo_labels가 단일 값이면(유효 triplet이 있을 수 없는
+    경우) 원문처럼 손실을 0으로 만든다 — 새 의존성 없이 원문의 "0개
+    triplet → 0 loss" 의미만 가져온 것이다."""
     n = z.shape[0]
     half = n // 2
     if half == 0:
+        return z.sum() * 0.0
+    if len(pseudo_labels.unique()) < 2:
         return z.sum() * 0.0
     left, right = z[:half], z[half:2 * half]
     left_l, right_l = pseudo_labels[:half], pseudo_labels[half:2 * half]
@@ -155,14 +262,22 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
 
     def __init__(self, lambda_r: float = 0.1, lambda_cl: float = 0.1,
                  triplet_margin: float = 2.0,
-                 cluster_fit_sample_size: Optional[int] = None):
+                 cluster_fit_sample_size: Optional[int] = None,
+                 max_normal_ref: int = 5000):
         self.lambda_r = lambda_r
         self.lambda_cl = lambda_cl
         self.margin = triplet_margin
         self.cluster_fit_sample_size = cluster_fit_sample_size
-        self._teacher: Optional[BaseCLModel] = None
+        self.max_normal_ref = max_normal_ref
+        self._teachers: List[BaseCLModel] = []
         self._kmeans = None
         self._normal_cluster_ids: Set[int] = set()
+        # 2026-08-26 추가 — normal_subset을 인스턴스 수명 전체에 걸쳐 누적한
+        # 정상 참조 풀(위 모듈 docstring "2026-08-26" 절 참고). 매 라운드
+        # 그 라운드 자신의 normal_subset "만"으로 참조를 다시 정의하면
+        # 공격이 희귀한 라운드에서 참조가 라운드 전체를 뒤덮는 문제가 있어,
+        # CADE의 `_category_refs`와 같은 패턴으로 누적한다.
+        self._normal_ref_pool: Optional[torch.Tensor] = None
         # _pseudo_labels_for_batch()가 매 미니배치마다 다시 계산할 수 있도록
         # 캐시해두는 값들 — on_experience_start()에서 한 번만 채운다.
         self._centers: Optional[torch.Tensor] = None
@@ -178,13 +293,39 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         클러스터 ID 집합을 구해둔다. CLClient가 학습 루프(step 4) 이전에
         호출한다. `normal_subset`은 이번 라운드 라벨 예산 안에서 선택된
         데이터 중 label=0인 것만 걸러낸 것이다(비어있지 않을 때만 호출됨 —
-        cl_client.py 참고)."""
+        cl_client.py 참고). 클러스터링 자체는 원문처럼 이번 라운드 데이터로
+        새로 fit하지만, "어떤 클러스터가 정상인가" 판정은 이번 라운드
+        normal_subset이 아니라 누적 정상 참조 풀로 한다(위 모듈 docstring
+        "2026-08-26" 절 참고)."""
         data_np = selected_data.detach().cpu().numpy()
         self._kmeans = _elbow_kmeans_fit(
             data_np, list(_CLUSTER_K_CANDIDATES),
             fit_sample_size=self.cluster_fit_sample_size)
 
-        ref_np = normal_subset.detach().cpu().numpy()
+        if self._normal_ref_pool is not None:
+            combined_ref = torch.cat([self._normal_ref_pool, normal_subset], dim=0)
+        else:
+            combined_ref = normal_subset
+        if len(combined_ref) > self.max_normal_ref:
+            # 2026-08-26 발견·수정(재감사) — `combined_ref[-cap:]`(꼬리
+            # 슬라이싱)는 사실상 "누적"이 전혀 아니었다: Track B는
+            # label_budget 없이 experience 전체를 쓰므로 `normal_subset`
+            # 자체가 매 라운드 이미 cap(5000)보다 크다(NSL-KDD 13468~59396,
+            # UNSW-NB15 11200~130541건) — 즉 `combined_ref`의 마지막
+            # `cap`개는 100% 이번 라운드 자신의 데이터였다(실측: 5라운드
+            # 전체에서 이전 라운드 표본 생존율 0%). 처음 관찰했던 개선
+            # (f1 0.889 등)은 "라운드를 넘어 기억한다"가 아니라 "정상
+            # 참조 표본 수가 우연히 줄어들어 K-Means 클러스터가 덜
+            # 뒤덮인다"는 전혀 다른, 원 논문과 무관한 부작용이었다.
+            # 무작위 표본으로 바꿔 combined_ref(이전 누적 + 이번 라운드)
+            # 전체에서 균등하게 뽑는다 — 이러면 이전 라운드 표본도 실제로
+            # (비율만큼) 살아남아 원래 의도한 "과거 정상도 계속 기억한다"
+            # 는 성질이 실제로 성립한다.
+            perm = torch.randperm(len(combined_ref), device=combined_ref.device)
+            combined_ref = combined_ref[perm[:self.max_normal_ref]]
+        self._normal_ref_pool = combined_ref.detach()
+
+        ref_np = self._normal_ref_pool.cpu().numpy()
         ref_clusters = self._kmeans.predict(ref_np)
         self._normal_cluster_ids = set(ref_clusters.tolist())
 
@@ -240,16 +381,25 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
             _, r_x_hat, _ = model(r_data)
             loss = loss + self.lambda_r * F.mse_loss(r_x_hat, r_data)
 
-        if self._teacher is not None:
-            with torch.no_grad():
-                teacher_z, _, _ = self._teacher(data)
-            lwf_loss = F.mse_loss(z, teacher_z)
-            loss = loss + self.lambda_cl * lwf_loss
+        if self._teachers:
+            # CND_IDS.py:54-69 LwFloss() — 누적된 과거 스냅샷 각각과 개별
+            # MSE(가중치 lambda_r)를 구해 합산한 뒤, 그 합계에 다시 lambda_cl을
+            # 곱한다(:159,180) — 항 하나당 실효 가중치는 lambda_r*lambda_cl.
+            lwf_sum = z.new_zeros(())
+            for teacher in self._teachers:
+                with torch.no_grad():
+                    teacher_z, _, _ = teacher(data)
+                lwf_sum = lwf_sum + self.lambda_r * F.mse_loss(z, teacher_z)
+            loss = loss + self.lambda_cl * lwf_sum
 
         return loss
 
     def on_task_end(self, model: BaseCLModel) -> None:
-        self._teacher = copy.deepcopy(model)
-        self._teacher.eval()
-        for p in self._teacher.parameters():
+        # CND_IDS.py:195 self.old_models.append(deepclone(self)) — 매
+        # experience 종료 시 누적만 하고 절대 비우지 않는다(직전 1개로
+        # 덮어쓰지 않음, 2026-08-12 정정).
+        teacher = copy.deepcopy(model)
+        teacher.eval()
+        for p in teacher.parameters():
             p.requires_grad_(False)
+        self._teachers.append(teacher)

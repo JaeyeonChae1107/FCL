@@ -4,7 +4,11 @@
 Recall은 TP/FP/FN을 직접 계산하는 방식으로 구현하고(3.1절), PR-AUC만
 `sklearn.metrics.average_precision_score`를 그대로 사용한다(재구현 금지).
 
-BWT는 CND-IDS 원 논문 공식 그대로 내부 로그·회귀 테스트용으로 계산한다(3.3절).
+BWT는 표준 continual-learning 문헌의 정의와 일치하는 공식으로 내부 로그·회귀
+테스트용으로 계산한다(3.3절). 이 공식은 CND-IDS 저자 자신의 제안 방법(라벨-프리
+CFE+클러스터링) 경로가 아니라, 같은 저장소에 포함된 ADCN 비교 베이스라인의
+평가 코드에서 가져온 것이다 — CND-IDS 자체 방법은 BWT를 계산하지 않는다.
+`bwt()` docstring 참고.
 """
 
 from typing import List, Sequence
@@ -57,14 +61,20 @@ def pr_auc(y_true: np.ndarray, y_score: np.ndarray) -> float:
 
 
 def bwt(r_matrix: Sequence[Sequence[float]]) -> float:
-    """Backward Transfer — CND-IDS 원 논문 공식 그대로 (PRD 3.3절).
+    """Backward Transfer (PRD 3.3절).
 
     BWT = (1 / (T-1)) * sum_{i=0}^{T-2} (R_{T-1,i} - R_{i,i})
 
-    CND-IDS 저장소(`AutonomousDCN/ADCNmainloop.py:418`)의 실제 구현
-    `BWT = 1/(nTask-1)*(sum(allTaskAccuracies)-sum(postTaskAcc))`을 그대로
-    옮긴 것이다 — `allTaskAccuracies`/`postTaskAcc` 둘 다 **마지막 태스크를
-    제외한** T-1개 태스크만 순회한다(같은 파일 406행 주석 "except the last
+    주의(2026-08-12 정정): 이 공식은 "CND-IDS 원 논문"이 아니라 CND-IDS
+    저장소에 포함된 **ADCN 비교 베이스라인**의 평가 코드
+    (`AutonomousDCN/ADCNmainloop.py:418`)에서 옮긴 것이다—
+    `BWT = 1/(nTask-1)*(sum(allTaskAccuracies)-sum(postTaskAcc))`.
+    CND-IDS 저자 자신의 제안 방법(라벨-프리 CFE+클러스터링) 경로는 BWT를
+    전혀 계산하지 않는다. 다만 이 공식 자체는 표준 continual-learning
+    문헌의 BWT 정의와 정확히 일치하므로(Lopez-Paz & Ranzato 2017 스타일),
+    "표준 정의를 그대로 구현했다"는 근거로는 유효하다 — 원 구현대로
+    `allTaskAccuracies`/`postTaskAcc` 둘 다 **마지막 태스크를 제외한**
+    T-1개 태스크만 순회한다(같은 파일 406행 주석 "except the last
     task. For calculating BWT"). 분모도 `(T-1)`이지 `T(T-1)/2`가 아니다 —
     이전 구현은 분모를 `T(T-1)/2`로 잘못 써서(값이 2.5배 작게 나옴, T=5 기준)
     실측 대조 없이 넘어간 버그였다.
