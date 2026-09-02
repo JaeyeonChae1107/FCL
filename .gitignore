@@ -4,3 +4,4 @@ __pycache__/
 .DS_Store
 CICIDS2018/
 CICIDS2018/
+testbed/data/.cache/

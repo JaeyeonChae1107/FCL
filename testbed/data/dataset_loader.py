@@ -67,7 +67,10 @@ Experience 분할의 test split은 로딩 시점에 한 번만 확정되고 실�
 """
 
 import glob
+import hashlib
+import io
 import os
+import pickle
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -591,8 +594,100 @@ def _class_incremental_split(
     return experiences, class_order
 
 
+def _source_csv_signature(name: str, base_dir: str) -> List[Tuple[str, int, int]]:
+    """이 데이터셋이 실제로 읽는 원본 CSV들의 (상대경로, 크기, mtime) 목록.
+
+    2026-09-02 추가 — 아래 캐시(`load_dataset`)가 "지금 코드로 다시 계산한
+    것과 같은가"뿐 아니라 "원본 CSV 자체가 그대로인가"까지 확인하기 위한
+    용도다. 코드는 안 바뀌었어도 원본 파일을 교체/재다운로드하면(예:
+    UNSW-NB15-raw를 나중에 받아 넣거나 CICIDS2018 CSV를 다시 받은 경우)
+    캐시가 낡은 데이터를 계속 돌려주면 안 된다. 내용 전체를 해시하면(특히
+    CICIDS2018 6.9GB) 캐시를 쓰는 의미가 없어지므로 크기+mtime만 본다 —
+    파일 교체 시 최소 mtime은 바뀐다는 가정(일반적인 파일시스템 동작)."""
+    if name == "nsl-kdd":
+        paths = [
+            os.path.join(base_dir, "SSF-Strategic-Selection-and-Forgetting",
+                         "NSL_pre_data", "PKDDTrain+.csv"),
+            os.path.join(base_dir, "SSF-Strategic-Selection-and-Forgetting",
+                         "NSL_pre_data", "PKDDTest+.csv"),
+        ]
+    elif name == "unsw-nb15":
+        paths = [
+            os.path.join(base_dir, "SSF-Strategic-Selection-and-Forgetting",
+                         "UNSW_pre_data", "UNSWTrain.csv"),
+            os.path.join(base_dir, "SSF-Strategic-Selection-and-Forgetting",
+                         "UNSW_pre_data", "UNSWTest.csv"),
+            os.path.join(base_dir, "UNSW-NB15-raw", "UNSW_NB15_training-set.csv"),
+            os.path.join(base_dir, "UNSW-NB15-raw", "UNSW_NB15_testing-set.csv"),
+        ]
+    elif name == "cicids2018":
+        paths = sorted(glob.glob(os.path.join(base_dir, "CICIDS2018", "*.csv")))
+    else:
+        paths = []
+    sig = []
+    for p in paths:
+        if os.path.exists(p):
+            st = os.stat(p)
+            sig.append((os.path.relpath(p, base_dir), st.st_size, int(st.st_mtime)))
+    return sorted(sig)
+
+
+def _dataset_cache_key(name: str, base_dir: str, n_experiences: int, seed: int,
+                        preserve_official_split: bool) -> str:
+    """이 모듈(dataset_loader.py) 코드 해시 + 인자 + 원본 CSV 서명을 합쳐
+    캐시 유효성 판단 키를 만든다. 이 중 하나라도 바뀌면 다른 해시가 나와
+    캐시를 못 찾고 자동으로 재계산한다(grid_runner.py의 code_version
+    캐시와 같은 원칙 — 절대 "낡았을 수도 있는 캐시"를 조용히 재사용하지
+    않는다)."""
+    with io.open(__file__, "rb") as f:
+        code_hash = hashlib.sha256(f.read()).hexdigest()
+    key_parts = repr((
+        name, n_experiences, seed, preserve_official_split, code_hash,
+        _source_csv_signature(name, base_dir),
+    ))
+    return hashlib.sha256(key_parts.encode("utf-8")).hexdigest()[:24]
+
+
+def _dataset_cache_path(base_dir: str, name: str, cache_key: str) -> str:
+    cache_dir = os.path.join(base_dir, "testbed", "data", ".cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, f"{name}_{cache_key}.pkl")
+
+
 def load_dataset(name: str, base_dir: str, n_experiences: int = 5,
                   seed: int = 42, preserve_official_split: bool = True) -> Dict:
+    """`_load_dataset_uncached()`의 결과를 디스크에 캐싱하는 래퍼.
+
+    2026-09-02 추가 — CICIDS2018은 10개 CSV(~1200만 행) 파싱+완전중복
+    제거+포트 빈도 버킷화를 매번 처음부터 다시 계산해, 스모크 테스트나
+    본 그리드를 다시 실행할 때마다(코드가 전혀 안 바뀌었어도) 몇 분씩
+    반복 소모됐다. 이 함수가 실제 로딩(`_load_dataset_uncached`) 전에
+    `_dataset_cache_key()`로 유효성을 확인하고, 일치하는 캐시가 있으면
+    그걸 그대로 반환한다 — 코드(이 파일 자체)나 원본 CSV가 하나라도
+    바뀌면 키가 달라져 자동으로 재계산되므로, 낡은 캐시를 잘못 재사용할
+    위험은 없다. NSL-KDD/UNSW-NB15도 같은 메커니즘을 타지만 원래도 로딩이
+    빨라 체감 효과는 CICIDS2018에서 가장 크다."""
+    cache_key = _dataset_cache_key(name, base_dir, n_experiences, seed, preserve_official_split)
+    cache_path = _dataset_cache_path(base_dir, name, cache_key)
+    if os.path.exists(cache_path):
+        print(f"{name}: 캐시에서 로드합니다 ({cache_path})")
+        with io.open(cache_path, "rb") as f:
+            return pickle.load(f)
+
+    result = _load_dataset_uncached(
+        name, base_dir, n_experiences=n_experiences, seed=seed,
+        preserve_official_split=preserve_official_split)
+
+    tmp_path = f"{cache_path}.tmp{os.getpid()}"
+    with io.open(tmp_path, "wb") as f:
+        pickle.dump(result, f, protocol=pickle.HIGHEST_PROTOCOL)
+    os.replace(tmp_path, cache_path)
+    print(f"{name}: 전처리 결과를 캐시에 저장했습니다 ({cache_path})")
+    return result
+
+
+def _load_dataset_uncached(name: str, base_dir: str, n_experiences: int = 5,
+                            seed: int = 42, preserve_official_split: bool = True) -> Dict:
     """PRD 9.1/9.2절 로드. `preserve_official_split=True`면 모듈 docstring의
     "원 논문과 동일한 문제" 프로토콜을 쓴다.
 
