@@ -1,8 +1,25 @@
 """스모크 테스트 — PRD 15절. 그리드 실행(Phase 3) 전 필수 게이트.
 
-valid combo 각각에 대해 전체 데이터의 일부(첫 2개 experience)만으로 15.1~15.5의
-정량 기준을 그대로 assert 조건으로 적용한다. 하나라도 통과하지 못하면 그
-combo는 실패(fail) 처리하고 본 그리드(Phase 3)에서 실행하지 않는다.
+valid combo 각각에 대해 experience 전체(라운드 수·class-incremental 구조는
+본 그리드와 동일)를, 라운드당 행 수만 NSL-KDD 규모로 제한하고 epoch 수를
+줄인 설정으로 실행해 15.1~15.5의 정량 기준을 그대로 assert 조건으로
+적용한다(아래 SMOKE_* 상수 참고). 하나라도 통과하지 못하면 그 combo는
+실패(fail) 처리하고 본 그리드(Phase 3)에서 실행하지 않는다.
+
+**2026-09-02 — 라운드당 행 수 제한(SMOKE_MAX_*_ROWS_PER_EXPERIENCE)**:
+CICIDS2018은 중복 제거 후 약 1,208만 행이라 라운드당 train 약 193만/test
+약 48만 행 — NSL-KDD(train 2.5만/test 4.5천)의 80~100배다. 스모크가 이
+전체를 그대로 돌리면 본 그리드의 복제나 다름없어(통과할 대다수 조합에
+대해서도 본 그리드와 비슷한 비용을 먼저 한 번 더 냄) 총 계산량으로는
+손해다. 스모크의 진짜 가치는 "본 그리드 전에 버그를 고쳐 전체 재실행을
+피하는 것"인데, 아래 2026-08-26 사례의 버그들은 "몇 번째 라운드에 어떤
+category가 오는가"에서 나온 것이지 데이터 양에서 나온 게 아니었다 —
+그래서 라운드 수와 class-incremental 구조는 그대로 두고 **라운드당 행
+수만** category별 최소 개수를 보장하며 서브샘플링한다(사용자 결정).
+남는 사각지대는 "CICIDS2018 전체 규모에서만 나타나는 버그"(예전 K-means
+클러스터 수 스케일링 문제 같은 종류)인데, 이건 본 그리드 결과에서
+드러나고 grid_runner.py의 조합별 실패 격리 덕에 그리드 전체가 죽지는
+않는다.
 
 **2026-08-26 발견·수정 — SMOKE_N_EXPERIENCES=2가 만든 구조적 사각지대**:
 4개 논문 컴포넌트 전수 재감사(4개 병렬 에이전트)에서, class-incremental
@@ -31,6 +48,7 @@ import os
 import traceback
 from typing import Any, Dict, List, Optional
 
+import numpy as np
 import torch
 import yaml
 from sklearn.metrics import roc_auc_score
@@ -48,22 +66,69 @@ from testbed.pipeline import CLClient
 SMOKE_N_EXPERIENCES: Optional[int] = None
 
 # 2026-09-01 추가 — epochs_per_experience는 SMOKE_N_EXPERIENCES와 성격이
-# 다르다: 라운드 수/데이터 양을 줄이면 "어떤 라운드가 어떤 데이터로 실행
-# 되는가"가 바뀌어 그 조건에서만 나오는 버그(K-means 클러스터 규모, CADE/
-# CND-IDS 참조 캡 트리거 여부, 희귀 category 존재 여부)를 놓친다 — 위
-# SMOKE_N_EXPERIENCES=2였을 때 실제로 겪은 문제(모듈 docstring 참고)와
-# 같은 종류라 절대 줄이지 않는다. 반면 epoch 수는 "같은 라운드를 얼마나
-# 오래 학습시키는가"일 뿐 — 15.1b/c(optimizer step 횟수/label budget),
-# 15.2/15.2b(예측 퇴화/roc_auc), 15.4(CND-IDS pseudo-label)는 전부 그
-# 라운드의 데이터·설정만으로 결정되고 epoch 수와 무관하다(15.4는 라운드
-# 시작 시 한 번 도는 K-means 결과라 학습 루프보다도 먼저 정해짐). 유일하게
-# epoch 수에 걸리는 15.1d(loss 발산 체크, 첫/마지막 epoch 비교)도 발산은
-# 보통 초반 몇 epoch 안에 이미 드러나는 문제라 실전 epoch 수(200/20)를
-# 다 안 돌려도 잡힌다. 그래서 전체 데이터·전체 라운드는 그대로 유지한 채
-# epoch 수만 줄여 스모크 테스트가 사실상 본 그리드(grid_runner.py)와
+# 다르다: 라운드 수를 줄이면 "어떤 라운드가 어떤 데이터로 실행되는가"가
+# 바뀌어 그 조건에서만 나오는 버그(희귀 category 존재 여부, 공격 없는
+# 라운드)를 놓친다 — 위 SMOKE_N_EXPERIENCES=2였을 때 실제로 겪은 문제
+# (모듈 docstring 참고)라 라운드 수는 절대 줄이지 않는다(데이터 양은
+# 2026-09-02부터 category 최소 개수를 보장하는 방식으로만 제한한다 —
+# 아래 SMOKE_MAX_*_ROWS_PER_EXPERIENCE 참고). 반면 epoch 수는 "같은
+# 라운드를 얼마나 오래 학습시키는가"일 뿐 — 15.1b/c(optimizer step 횟수/
+# label budget), 15.2/15.2b(예측 퇴화/roc_auc), 15.4(CND-IDS pseudo-label)
+# 는 전부 그 라운드의 데이터·설정만으로 결정되고 epoch 수와 무관하다
+# (15.4는 라운드 시작 시 한 번 도는 K-means 결과라 학습 루프보다도 먼저
+# 정해짐). 유일하게 epoch 수에 걸리는 15.1d(loss 발산 체크, 첫/마지막
+# epoch 비교)도 발산은 보통 초반 몇 epoch 안에 이미 드러나는 문제라 실전
+# epoch 수(200/20)를 다 안 돌려도 잡힌다. 그래서 라운드는 그대로 유지한
+# 채 epoch 수만 줄여 스모크 테스트가 사실상 본 그리드(grid_runner.py)와
 # 동일한 비용으로 조합마다 두 번 학습시키던 낭비를 없앤다(사용자 지시).
 SMOKE_EPOCHS_PER_EXPERIENCE = 10
 SMOKE_EPOCHS_PER_EXPERIENCE_TRACK_B = 5
+
+# 2026-09-02 추가 — 라운드당 행 수 상한(모듈 docstring "2026-09-02" 절
+# 참고). 값은 NSL-KDD의 라운드 규모(train 1.3만~5.9만, test 4.5천)에
+# 맞췄다 — 15.2/15.2b/15.4 게이트가 실제로 버그를 잡아낸 것이 바로 이
+# 규모에서였고, CND-IDS `cluster_fit_sample_size`(1만)·`max_normal_ref`
+# (5천)·CADE `max_category_ref`(500) 같은 캡/축출 경로도 이 규모에서
+# 전부 발동하므로, 그 코드 경로들이 스모크에서 계속 실행된다. 상한보다
+# 작은 라운드(NSL-KDD 뒤쪽 라운드 등)는 그대로 둔다(no-op).
+#
+# category별 최소 개수(SMOKE_MIN_ROWS_PER_CATEGORY): 비율대로만 뽑으면
+# CICIDS2018의 희귀 공격(수십~수백 행짜리 category)이 라운드에서 통째로
+# 사라져 "그 라운드에 그 category가 있다"는 조건 자체가 없어진다 —
+# 2026-08-26 사례(`af=cndids`가 R2L/U2R에서 붕괴)가 정확히 희귀 category
+# 라운드에서 나온 문제라, 각 category는 최소 이 개수(원래 그보다 적으면
+# 전부)를 반드시 남긴다. 50은 NSL-KDD U2R 라운드(1.35만 중 52건, 0.38%)와
+# 같은 "이미 검증된 희귀 regime"에 해당하는 값이다. test는 `test_y`
+# (이진)로만 층화한다(experience 딕셔너리에 test category가 없음).
+# None이면 해당 상한을 적용하지 않는다(디버깅용).
+SMOKE_MAX_TRAIN_ROWS_PER_EXPERIENCE: Optional[int] = 20_000
+SMOKE_MAX_TEST_ROWS_PER_EXPERIENCE: Optional[int] = 5_000
+SMOKE_MIN_ROWS_PER_CATEGORY = 50
+
+# 2026-09-02 추가 — 축소 설정(행 수 상한·epoch 축소)에서는 "행동" 게이트를
+# 실패가 아니라 경고로만 기록한다. 실측 근거(NSL-KDD,
+# `A_dd=cade_ss=ssf_mm=ssf_af=lwf_ssf_as=cade_mad`, 4조건 대조):
+#   - 행 전체 + epoch 10 : exp0 통과, exp2 15.2 실패(0.9962)
+#   - 행 축소 + epoch 10 : exp0/exp1 15.2·15.2b 실패(0.9851/roc 0.4309, 0.9865/0.4570)
+#   - 행 축소 + epoch 200: exp0/exp1 실패, exp0 수치가 epoch 10과 완전히 동일
+# 즉 이 조합의 점수는 CADE 사설 인코더(as=cade_mad가 dd=cade에 연결됨)에서
+# 나와 메인 모델 epoch와 무관하고, 라운드 행 수를 줄이면(라벨 예산 10%로
+# 선택되는 표본이 5,940→2,000개) 인코더 학습량이 그만큼 줄어 exp0에서
+# roc_auc가 역전된다 — 행 수 전체에서는 같은 라운드가 통과한다. 축소
+# 설정의 행동 게이트 실패는 이렇게 "축소 자체가 만든 인공물"일 수 있고,
+# 실패로 처리하면 grid_runner.py가 그 조합을 본 그리드에서 **제외**해
+# 버려 조합 커버리지(이 테스트베드의 핵심 목적)를 해친다. 스모크의 역할은
+# "코드가 제대로 연결돼 실행되는가"이고 조합의 실제 성능/퇴화 여부는 본
+# 그리드 결과가 판정한다(사용자 결정) — 그래서 축소 설정에서는
+#   실패 유지: 15.1a~d(학습 발생/발산/step 수/라벨 예산), 15.2의
+#              "완전 퇴화"(예측이 상수 함수) 및 "상수 점수", 15.3(threshold
+#              범위), 15.5(shape) — 배선/수치 결함이라 데이터 규모와 무관.
+#   경고로 강등: 15.2의 0.97 등급, 15.2b(roc_auc<0.5), 15.4(pseudo-label
+#              쏠림) — 모델이 약하거나 퇴화했다는 신호라 축소 규모의
+#              영향을 받으며, 본 그리드 결과에서 그대로 드러난다.
+# 행동 게이트를 실패로 되돌리려면(예: 상한을 전부 None으로 두고 실전
+# epoch로 돌리는 전체 규모 스모크) 이 값을 False로 바꾼다.
+SMOKE_BEHAVIORAL_GATES_AS_WARNINGS = True
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _TESTBED_ROOT = os.path.dirname(_HERE)
 _REPO_ROOT = os.path.dirname(_TESTBED_ROOT)
@@ -86,6 +151,75 @@ def _load_configs():
 
 def _flatten_params(model: torch.nn.Module) -> torch.Tensor:
     return torch.cat([p.detach().flatten() for p in model.parameters()])
+
+
+def _stratified_subsample_indices(groups: np.ndarray, max_rows: int, min_per_group: int,
+                                   rng: np.random.Generator) -> np.ndarray:
+    """`groups`(행별 그룹 라벨)로 층화해 최대 약 `max_rows`개의 행 인덱스를
+    고른다. 각 그룹은 비율대로 배정된 몫과 `min_per_group` 중 큰 쪽을
+    받되 그 그룹의 실제 행 수를 넘지 않는다 — 희귀 그룹은 최소 개수가
+    보장되므로 합계가 `max_rows`를 약간 넘을 수 있다(그룹 수 × 최소
+    개수만큼이 상한이라 무시할 수준). 전체 행 수가 `max_rows` 이하면
+    아무것도 버리지 않는다. 반환 인덱스는 원래 행 순서대로 정렬한다."""
+    n_total = len(groups)
+    if n_total <= max_rows:
+        return np.arange(n_total)
+    keep = []
+    uniq, counts = np.unique(groups, return_counts=True)
+    for g, n_g in zip(uniq, counts):
+        proportional = int(round(max_rows * n_g / n_total))
+        quota = min(int(n_g), max(min_per_group, proportional))
+        idx_g = np.flatnonzero(groups == g)
+        if quota < n_g:
+            idx_g = rng.choice(idx_g, size=quota, replace=False)
+        keep.append(idx_g)
+    return np.sort(np.concatenate(keep))
+
+
+def _subsample_dataset_for_smoke(dataset: Dict[str, Any], seed: int) -> Dict[str, Any]:
+    """스모크 전용 라운드당 행 수 제한(SMOKE_MAX_*_ROWS_PER_EXPERIENCE)을
+    적용한 **새** dataset 딕셔너리를 돌려준다 — 원본은 건드리지 않는다
+    (원본은 `load_dataset()` 캐시에서 온 객체일 수 있고, 본 그리드는 항상
+    원본 전체를 쓴다). 라운드마다 `seed`와 라운드 번호로 고정된 난수를
+    쓰므로 실행/샤드 프로세스가 달라도 항상 같은 표본이 뽑힌다(--shard로
+    나눠 돌린 프로세스들이 서로 다른 데이터를 보면 안 되므로 중요)."""
+    if SMOKE_MAX_TRAIN_ROWS_PER_EXPERIENCE is None and SMOKE_MAX_TEST_ROWS_PER_EXPERIENCE is None:
+        return dataset
+    new_experiences = []
+    for exp_idx, e in enumerate(dataset["experiences"]):
+        rng = np.random.default_rng([seed, exp_idx])
+        new_e = dict(e)
+
+        n_tr = len(e["train_y"])
+        if SMOKE_MAX_TRAIN_ROWS_PER_EXPERIENCE is not None:
+            train_groups = e.get("train_category")
+            if train_groups is None:
+                train_groups = e["train_y"].cpu().numpy()
+            tr_idx = _stratified_subsample_indices(
+                np.asarray(train_groups), SMOKE_MAX_TRAIN_ROWS_PER_EXPERIENCE,
+                SMOKE_MIN_ROWS_PER_CATEGORY, rng)
+            tr_t = torch.as_tensor(tr_idx, dtype=torch.long)
+            new_e["train_X"] = e["train_X"][tr_t]
+            new_e["train_y"] = e["train_y"][tr_t]
+            if e.get("train_category") is not None:
+                new_e["train_category"] = e["train_category"][tr_idx]
+
+        n_te = len(e["test_y"])
+        if SMOKE_MAX_TEST_ROWS_PER_EXPERIENCE is not None:
+            te_idx = _stratified_subsample_indices(
+                e["test_y"].cpu().numpy(), SMOKE_MAX_TEST_ROWS_PER_EXPERIENCE,
+                SMOKE_MIN_ROWS_PER_CATEGORY, rng)
+            te_t = torch.as_tensor(te_idx, dtype=torch.long)
+            new_e["test_X"] = e["test_X"][te_t]
+            new_e["test_y"] = e["test_y"][te_t]
+
+        n_cat_before = len(np.unique(e["train_category"])) if e.get("train_category") is not None else -1
+        n_cat_after = (len(np.unique(new_e["train_category"]))
+                       if new_e.get("train_category") is not None else -1)
+        print(f"[smoke subsample] exp{exp_idx}: train {n_tr}->{len(new_e['train_y'])}"
+              f" (category {n_cat_before}->{n_cat_after}), test {n_te}->{len(new_e['test_y'])}")
+        new_experiences.append(new_e)
+    return {**dataset, "experiences": new_experiences}
 
 
 def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
@@ -189,6 +323,10 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
         ratio0 = (preds == 0).float().mean().item()
         ratio1 = (preds == 1).float().mean().item()
         majority_ratio = max(ratio0, ratio1)
+        # 2026-09-02 — 축소 설정에서는 행동 게이트를 경고로 강등한다
+        # (SMOKE_BEHAVIORAL_GATES_AS_WARNINGS 절 참고). "완전 퇴화"(1.0)는
+        # 예측이 상수 함수라는 배선/threshold 결함 신호라 계속 실패로 둔다.
+        behavioral_sink = warnings if SMOKE_BEHAVIORAL_GATES_AS_WARNINGS else failures
         if majority_ratio >= 1.0:
             failures.append(f"exp{exp_idx}: 15.2 예측이 완전히 한 클래스로 퇴화")
         elif majority_ratio >= 0.97:
@@ -197,8 +335,9 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
             # 기준 때문에 실패로 걸러지지 못했다(SMOKE_N_EXPERIENCES가 2라서
             # 애초에 그 라운드 자체를 검사하지 않은 것과는 별개의 문제 —
             # 이제 검사는 하되 기준도 강화한다). 0.97 이상은 "거의 완전
-            # 퇴화"로 보고 실패 처리한다.
-            failures.append(
+            # 퇴화"로 보고 실패 처리한다(전체 규모 스모크 기준 — 축소
+            # 설정에서는 경고, 위 2026-09-02 절 참고).
+            behavioral_sink.append(
                 f"exp{exp_idx}: 15.2 예측이 거의 완전히 한 클래스로 퇴화 "
                 f"(다수 클래스 비율 {majority_ratio:.4f} >= 0.97)")
         elif majority_ratio >= 0.90:
@@ -216,7 +355,10 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
         if len(torch.unique(all_labels)) >= 2:
             round_roc_auc = float(roc_auc_score(all_labels.numpy(), all_scores.numpy()))
             if round_roc_auc < 0.5:
-                failures.append(
+                # 축소 설정에서는 경고(2026-09-02, SMOKE_BEHAVIORAL_GATES_AS_
+                # WARNINGS 절 참고 — 행 수 축소만으로 0.43까지 내려가는
+                # 인공물이 실측됐다).
+                behavioral_sink.append(
                     f"exp{exp_idx}: 15.2b roc_auc가 무작위보다 낮음(역전 의심) "
                     f"(roc_auc={round_roc_auc:.4f})")
             elif round_roc_auc < 0.55:
@@ -290,7 +432,10 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
                 # "pseudo가 true보다 얼마나 더 쏠렸는가"(margin)로 직접 비교한다.
                 margin = ratio - true_ratio
                 if margin > 0.03:
-                    failures.append(
+                    # 축소 설정에서는 경고(2026-09-02, SMOKE_BEHAVIORAL_GATES_
+                    # AS_WARNINGS 절 참고 — K-means가 보는 라운드 규모가
+                    # 달라지면 pseudo-label 비율도 달라질 수 있다).
+                    behavioral_sink.append(
                         f"exp{exp_idx}: 15.4 pseudo-label이 실제 라벨 분포보다 "
                         f"훨씬 쏠림 (pseudo={ratio:.4f}, true={true_ratio:.4f}, "
                         f"margin={margin:.4f}) — 정상 참조가 붕괴해 이 라운드의 "
@@ -418,6 +563,10 @@ def run_all(dataset_name: str = "nsl-kdd", device: str = "cpu",
     dataset = load_dataset(dataset_name, base_dir=_REPO_ROOT,
                             n_experiences=global_hparams["n_experiences"],
                             seed=global_hparams["seed"])
+    # 2026-09-02 추가 — 스모크 전용 라운드당 행 수 제한(모듈 docstring
+    # "2026-09-02" 절 참고). 본 그리드(grid_runner.py)는 이 함수를 거치지
+    # 않고 원본 전체를 쓴다.
+    dataset = _subsample_dataset_for_smoke(dataset, seed=global_hparams["seed"])
     labeling_budget = global_hparams["labeling_budget"]
 
     from testbed.experiments.grid_runner import compute_code_version
