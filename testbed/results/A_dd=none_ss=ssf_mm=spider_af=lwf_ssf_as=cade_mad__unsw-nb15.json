@@ -1,0 +1,216 @@
+{
+  "combo_id": "A_dd=none_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad",
+  "exp_name": "A_dd=none_ss=ssf_mm=spider_af=lwf_ssf_as=cade_mad__unsw-nb15",
+  "dataset": "unsw-nb15",
+  "drift_detector": "none",
+  "sample_selector": "ssf",
+  "memory_manager": "spider",
+  "anti_forgetting": "lwf_ssf",
+  "anomaly_scorer": "cade_mad",
+  "track": "A",
+  "f1": 0.7393317461620557,
+  "precision": 0.5887837025026805,
+  "recall": 0.9933159798817612,
+  "pr_auc": 0.6694943876432534,
+  "bwt": -0.0005610116171555213,
+  "perf_matrix": [
+    [
+      0.8617656783864213,
+      0.5640528756315315,
+      0.5864018937401367,
+      0.7797687659366377,
+      0.6440359882982833
+    ],
+    [
+      0.8618416701571836,
+      0.5644435210194612,
+      0.5868263473053892,
+      0.7799867230355334,
+      0.6442812172088143
+    ],
+    [
+      0.8616205254805149,
+      0.5639711991138189,
+      0.5862545215389674,
+      0.7795710193530357,
+      0.6436654706044714
+    ],
+    [
+      0.8612218819537774,
+      0.5629578438147893,
+      0.585615763546798,
+      0.7789723540910359,
+      0.6430580837332451
+    ],
+    [
+      0.8611459916727249,
+      0.563308208284351,
+      0.5857537127086344,
+      0.7789841159015534,
+      0.6408003095119659
+    ]
+  ],
+  "roc_auc": 0.6724416178178532,
+  "labeling_cost": 0.09999942968273251,
+  "training_time_sec": 346.3626685142517,
+  "memory_footprint": 1000,
+  "memory_footprint_peak": 1000,
+  "memory_footprint_avg": 1000.0,
+  "avg_inference_latency_ms": 0.0012638599805521941,
+  "best_f1_reference": 0.7534120061570035,
+  "seed": 42,
+  "code_version": "8c086d2c61eb",
+  "drift_detected_per_round": [
+    false,
+    false,
+    false,
+    false,
+    false
+  ],
+  "drift_score_per_round": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "n_drift_detected": 0,
+  "per_category_final": {
+    "Analysis": {
+      "n_test": 677,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.9985228951255539,
+      "recall_final": 0.9955686853766618,
+      "forgetting": 0.002954209748892156
+    },
+    "Backdoor": {
+      "n_test": 583,
+      "first_seen_round": 1,
+      "recall_at_first_seen": 1.0,
+      "recall_final": 0.9965694682675815,
+      "forgetting": 0.0034305317324184736
+    },
+    "DoS": {
+      "n_test": 4089,
+      "first_seen_round": 2,
+      "recall_at_first_seen": 0.9977989728539985,
+      "recall_final": 0.9977989728539985,
+      "forgetting": 0.0
+    },
+    "Exploits": {
+      "n_test": 11132,
+      "first_seen_round": 3,
+      "recall_at_first_seen": 0.9983830398850162,
+      "recall_final": 0.998293208767517,
+      "forgetting": 8.983111749916173e-05
+    },
+    "Fuzzers": {
+      "n_test": 6062,
+      "first_seen_round": 4,
+      "recall_at_first_seen": 0.9562850544374794,
+      "recall_final": 0.9562850544374794,
+      "forgetting": 0.0
+    },
+    "Generic": {
+      "n_test": 18871,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 1.0,
+      "recall_final": 1.0,
+      "forgetting": 0.0
+    },
+    "Reconnaissance": {
+      "n_test": 3496,
+      "first_seen_round": 1,
+      "recall_at_first_seen": 0.9988558352402745,
+      "recall_final": 0.9988558352402745,
+      "forgetting": 0.0
+    },
+    "Shellcode": {
+      "n_test": 378,
+      "first_seen_round": 2,
+      "recall_at_first_seen": 0.9973544973544973,
+      "recall_final": 0.9973544973544973,
+      "forgetting": 0.0
+    },
+    "Worms": {
+      "n_test": 44,
+      "first_seen_round": 3,
+      "recall_at_first_seen": 1.0,
+      "recall_final": 1.0,
+      "forgetting": 0.0
+    }
+  },
+  "per_category_recall_history": {
+    "Analysis": [
+      0.9985228951255539,
+      0.9985228951255539,
+      0.9955686853766618,
+      0.9955686853766618,
+      0.9955686853766618
+    ],
+    "Backdoor": [
+      1.0,
+      1.0,
+      0.9965694682675815,
+      0.9965694682675815,
+      0.9965694682675815
+    ],
+    "DoS": [
+      0.9982880899975544,
+      0.9982880899975544,
+      0.9977989728539985,
+      0.9980435314257765,
+      0.9977989728539985
+    ],
+    "Exploits": [
+      0.9987423643550126,
+      0.9987423643550126,
+      0.9983830398850162,
+      0.9983830398850162,
+      0.998293208767517
+    ],
+    "Fuzzers": [
+      0.9623886506103596,
+      0.9622236885516331,
+      0.9617288023754537,
+      0.9615638403167271,
+      0.9562850544374794
+    ],
+    "Generic": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "Reconnaissance": [
+      0.9988558352402745,
+      0.9988558352402745,
+      0.9988558352402745,
+      0.9988558352402745,
+      0.9988558352402745
+    ],
+    "Shellcode": [
+      0.9973544973544973,
+      0.9973544973544973,
+      0.9973544973544973,
+      0.9973544973544973,
+      0.9973544973544973
+    ],
+    "Worms": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "normal_fpr": 0.8499729729729729,
+  "normal_fpr_history": [
+    0.8475405405405405,
+    0.8464054054054054,
+    0.8476486486486486,
+    0.8504324324324324,
+    0.8499729729729729
+  ]
+}

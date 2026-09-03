@@ -1,0 +1,216 @@
+{
+  "combo_id": "A_dd=ssf_ss=ssf_mm=ssf_af=gpm_as=cade_mad",
+  "exp_name": "A_dd=ssf_ss=ssf_mm=ssf_af=gpm_as=cade_mad__unsw-nb15",
+  "dataset": "unsw-nb15",
+  "drift_detector": "ssf",
+  "sample_selector": "ssf",
+  "memory_manager": "ssf",
+  "anti_forgetting": "gpm",
+  "anomaly_scorer": "cade_mad",
+  "track": "A",
+  "f1": 0.726614092453677,
+  "precision": 0.5706157796686975,
+  "recall": 1.0,
+  "pr_auc": 0.6685361876980976,
+  "bwt": -0.016539305043133917,
+  "perf_matrix": [
+    [
+      0.8733552264146729,
+      0.5861993428258488,
+      0.610676547275971,
+      0.7977981913714837,
+      0.6409446977668655
+    ],
+    [
+      0.8523775263261169,
+      0.5452844061225853,
+      0.5669501205736769,
+      0.7674242944448258,
+      0.6399915540540541
+    ],
+    [
+      0.8928597405746151,
+      0.5073180579388311,
+      0.6067722555980338,
+      0.8276229508196721,
+      0.6633165829145728
+    ],
+    [
+      0.854165301173232,
+      0.5485107241309756,
+      0.5710450623202301,
+      0.7699090658583633,
+      0.6417767362590541
+    ],
+    [
+      0.8518018214301277,
+      0.5443021083533494,
+      0.5662673512074539,
+      0.7667924528301887,
+      0.6393503137689184
+    ]
+  ],
+  "roc_auc": 0.7047231712101231,
+  "labeling_cost": 0.09999942968273251,
+  "training_time_sec": 141.68909311294556,
+  "memory_footprint": 1000,
+  "memory_footprint_peak": 1000,
+  "memory_footprint_avg": 1000.0,
+  "avg_inference_latency_ms": 0.0011909461511395933,
+  "best_f1_reference": 0.8139609835630462,
+  "seed": 42,
+  "code_version": "8c086d2c61eb",
+  "drift_detected_per_round": [
+    false,
+    true,
+    true,
+    true,
+    true
+  ],
+  "drift_score_per_round": [
+    0.0,
+    0.6821951614967786,
+    0.43764129771923405,
+    0.42616302573619835,
+    0.41769479989109715
+  ],
+  "n_drift_detected": 4,
+  "per_category_final": {
+    "Analysis": {
+      "n_test": 677,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.9985228951255539,
+      "recall_final": 1.0,
+      "forgetting": -0.001477104874446078
+    },
+    "Backdoor": {
+      "n_test": 583,
+      "first_seen_round": 1,
+      "recall_at_first_seen": 1.0,
+      "recall_final": 1.0,
+      "forgetting": 0.0
+    },
+    "DoS": {
+      "n_test": 4089,
+      "first_seen_round": 2,
+      "recall_at_first_seen": 0.7681584739545121,
+      "recall_final": 1.0,
+      "forgetting": -0.2318415260454879
+    },
+    "Exploits": {
+      "n_test": 11132,
+      "first_seen_round": 3,
+      "recall_at_first_seen": 1.0,
+      "recall_final": 1.0,
+      "forgetting": 0.0
+    },
+    "Fuzzers": {
+      "n_test": 6062,
+      "first_seen_round": 4,
+      "recall_at_first_seen": 1.0,
+      "recall_final": 1.0,
+      "forgetting": 0.0
+    },
+    "Generic": {
+      "n_test": 18871,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 1.0,
+      "recall_final": 1.0,
+      "forgetting": 0.0
+    },
+    "Reconnaissance": {
+      "n_test": 3496,
+      "first_seen_round": 1,
+      "recall_at_first_seen": 1.0,
+      "recall_final": 1.0,
+      "forgetting": 0.0
+    },
+    "Shellcode": {
+      "n_test": 378,
+      "first_seen_round": 2,
+      "recall_at_first_seen": 0.5079365079365079,
+      "recall_final": 1.0,
+      "forgetting": -0.4920634920634921
+    },
+    "Worms": {
+      "n_test": 44,
+      "first_seen_round": 3,
+      "recall_at_first_seen": 1.0,
+      "recall_final": 1.0,
+      "forgetting": 0.0
+    }
+  },
+  "per_category_recall_history": {
+    "Analysis": [
+      0.9985228951255539,
+      1.0,
+      0.6307237813884786,
+      1.0,
+      1.0
+    ],
+    "Backdoor": [
+      1.0,
+      1.0,
+      0.6380789022298456,
+      1.0,
+      1.0
+    ],
+    "DoS": [
+      0.9977989728539985,
+      1.0,
+      0.7681584739545121,
+      1.0,
+      1.0
+    ],
+    "Exploits": [
+      0.9986525332375135,
+      1.0,
+      0.9036112109234639,
+      1.0,
+      1.0
+    ],
+    "Fuzzers": [
+      0.9043220059386341,
+      1.0,
+      0.7512372154404487,
+      0.9938964038271197,
+      1.0
+    ],
+    "Generic": [
+      1.0,
+      1.0,
+      0.9531026442689842,
+      1.0,
+      1.0
+    ],
+    "Reconnaissance": [
+      0.9814073226544623,
+      1.0,
+      0.6124141876430206,
+      1.0,
+      1.0
+    ],
+    "Shellcode": [
+      0.9788359788359788,
+      1.0,
+      0.5079365079365079,
+      1.0,
+      1.0
+    ],
+    "Worms": [
+      0.9772727272727273,
+      1.0,
+      0.8636363636363636,
+      1.0,
+      1.0
+    ]
+  },
+  "normal_fpr": 0.9219459459459459,
+  "normal_fpr_history": [
+    0.7602702702702703,
+    0.9187027027027027,
+    0.4331621621621622,
+    0.9045945945945946,
+    0.9219459459459459
+  ]
+}
