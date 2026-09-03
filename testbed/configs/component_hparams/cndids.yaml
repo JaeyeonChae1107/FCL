@@ -56,3 +56,24 @@ latent_dim: 30
 # 단, 이 테스트베드는 10.1절에 따라 공유 백본의 latent_dim(2026-08-11부터
 # SSF 공식으로 데이터셋마다 계산 — global_hparams.yaml 참고)을 모든 조합에
 # 동일 적용하므로, 이 값은 실제로는 그 계산값으로 덮어써진다(참고용 기록).
+
+elbow_n_jobs: 1
+# 원문 근거 없음 — 이 테스트베드 고유의 성능 최적화(2026-09-04 추가).
+# _elbow_kmeans_fit()의 K 후보(최대 5개, 서로 완전히 독립적인 계산)를
+# joblib.Parallel로 동시에 fit한다. 1(기본값)이면 지금까지와 완전히 동일한
+# 순차 루프다. 값을 키워도 elbow가 선택하는 K 자체(optimal_k)는 순차
+# 실행과 동일함을 실측 확인했지만, 최종 KMeans의 cluster_centers_ 좌표는
+# elbow_n_jobs 값과 무관하게(1끼리 비교해도) 실행마다 미세하게 달라질 수
+# 있다 — sklearn KMeans 자체의 기존 비결정성(멀티스레드 Lloyd 알고리즘의
+# 부동소수점 합산 순서 문제로 추정)이지 이 병렬화가 새로 만드는 문제가
+# 아니다(cndids_anti_forgetting.py `_fit_one_candidate` "2026-09-04 정정"
+# 절 참고).
+#
+# 이 값을 grid_runner.py/smoke_test.py의 --shard와 함께 쓸 때는 서버
+# 전체 코어 수를 (샤드 프로세스 수) × (elbow_n_jobs)로 나눠 잡아야
+# 과다 점유(oversubscription)를 피한다 — 예: 8코어 서버라면
+#   - --shard로 8개 프로세스 띄우고 elbow_n_jobs=1(기본값, 이 파일 그대로)
+#   - --shard로 4개 프로세스 띄우고 elbow_n_jobs=2
+#   - --shard 없이 프로세스 1개, elbow_n_jobs=5(K 후보 최대 개수)
+# 중 서버 자원 상황에 맞는 조합을 고른다. --shard를 안 쓰고 Track B
+# 콤보만 실행할 때(예: --track B) elbow_n_jobs를 늘리는 게 가장 안전하다.
