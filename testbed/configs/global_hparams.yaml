@@ -48,11 +48,19 @@ batch_size_track_b: 64
 # track_b와 같은 이유(각 트랙이 자기 근거 논문의 실제 값을 그대로 따름)로
 # Track 단위 예외를 둔다.
 
-n_experiences: 5            # CND-IDS 원 논문 근거 — X-IIoTID/CICIDS2017(2018 아님)/
-                            # UNSW-NB15를 5개 experience로 분할한다고 명시(CND-IDS
-                            # utils.py 다수 위치에서 확인). CICIDS2018은 이 근거의
-                            # 직접 대상이 아니지만, 그리드 전체에 동일 적용한다는
-                            # 원칙에 따라 같은 값을 그대로 쓴다.
+# n_experiences는 더 이상 여기 고정값으로 두지 않는다(2026-09-03 결정, 예전 값
+# 5는 CND-IDS 원 논문이 X-IIoTID/CICIDS2017(2018 아님)/UNSW-NB15를 5개
+# experience로 나눈다는 근거를 "그리드 전체에 동일 적용한다"는 원칙으로
+# NSL-KDD·CICIDS2018에까지 확장 적용한 것이었다). n_experiences가 데이터셋
+# 간에 일치해야 할 필요가 없다는 게 확인됐다 — 리더보드가 데이터셋별로 완전히
+# 분리되어 있어 데이터셋을 가로질러 비교하는 일 자체가 없기 때문이다
+# (leaderboard_builder.py 참고). 반면 데이터셋 자신의 공격 유형 수와 라운드
+# 수가 어긋나면(예전 NSL-KDD 4종/5라운드, CICIDS2018 14종/5라운드) 한 라운드에
+# 여러 공격이 섞이거나 공격이 아예 없는 라운드가 생겨 category별 forgetting
+# 지표가 흐려진다. 이제 `data/dataset_loader.py`의 `load_dataset()`이
+# n_experiences=None(기본)일 때 데이터셋 자신의 실제 공격 category 수로
+# 자동 결정한다("라운드 하나 = 새 공격 유형 하나") — `_count_attack_categories()`
+# 참고. NSL-KDD 4라운드, UNSW-NB15/CICIDS2018은 실제 원본 category 수만큼.
 # 2026-08-11 재검토: hidden_dim/latent_dim은 더 이상 여기 고정값으로 두지
 # 않는다. SSF 원 논문(utils.py:32-36, nearest_pow2=2**round(log2(input_dim));
 # hidden=nearest_pow2//2; latent=nearest_pow2//4)은 이 공식을 데이터셋을
