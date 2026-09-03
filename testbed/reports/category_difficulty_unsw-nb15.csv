@@ -1,0 +1,10 @@
+﻿category,recall_final_mean,recall_final_min,recall_final_max,n_combos,best_combo_id,best_recall_final
+Fuzzers,0.43055499674099346,0.003299241174529858,0.9849884526558892,41,A_dd=ssf_ss=random_mm=ssf_af=none_as=none,0.9849884526558892
+Shellcode,0.47199638663053295,0.0,1.0,41,A_dd=cade_ss=random_mm=none_af=gpm_as=none,1.0
+Reconnaissance,0.5040464363453704,0.008295194508009153,0.9988558352402745,41,A_dd=none_ss=random_mm=spider_af=gpm_as=none,0.9988558352402745
+Worms,0.5399113082039911,0.0,1.0,41,A_dd=none_ss=random_mm=spider_af=none_as=none,1.0
+Exploits,0.5438463493510249,0.04195113187208049,0.9891304347826086,41,A_dd=none_ss=random_mm=spider_af=none_as=none,0.9891304347826086
+DoS,0.6513847383521524,0.022499388603570557,0.9938860357055515,41,A_dd=none_ss=random_mm=spider_af=none_as=none,0.9938860357055515
+Analysis,0.6739561191771445,0.0029542097488921715,0.9985228951255539,41,A_dd=ssf_ss=random_mm=ssf_af=none_as=none,0.9985228951255539
+Backdoor,0.6912939798351672,0.0,1.0,41,A_dd=none_ss=random_mm=spider_af=none_as=none,1.0
+Generic,0.8872873721583382,0.5335700280854221,0.9992051295638811,41,A_dd=cade_ss=random_mm=none_af=gpm_as=none,0.9992051295638811

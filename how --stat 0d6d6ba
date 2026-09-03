@@ -1,0 +1,8 @@
+[33m71fe055[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m 그리드에 drift 감지 횟수, no-CL 기준선 비교, 공격 category별 recall 리포팅 추가
+[33medeff92[m 스모크 테스트를 배선 검증으로 축소 - 라운드당 행 수 상한 + 행동 게이트를 경고로
+[33mfff61e5[m load_dataset()에 디스크 캐싱 추가 - CICIDS2018 반복 로딩 낭비 제거
+[33mc112146[m 스모크 테스트 epoch 수를 축소(200/20 -> 10/5), 데이터/라운드는 그대로 유지
+[33mfe9687d[m 낡은 로컬 스모크 테스트 결과 삭제
+[33me75edd6[m smoke_test.py에 --shard/--merge-shards 추가 (병렬 실행으로 GPU/CPU 활용도 개선)
+[33m3ca18de[m Track B에 anomaly_scorer=cade_mad 추가, GPU 실행 전 전문가 감사로 안전성 결함 수정
+[33m3137a91[m SSF/CADE/CND-IDS/SPIDER 하이퍼파라미터·전처리를 원 논문 근거로 재검증

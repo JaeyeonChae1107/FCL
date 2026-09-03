@@ -1,0 +1,9 @@
+﻿# detect_rate_exp0/mm=none 조합은 구조적으로 항상 0 (write_drift_summary() docstring 참고)
+drift_detector,sample_selector,memory_manager,n_combos,n_drift_detected_mean,n_drift_detected_max,detect_rate_exp0,avg_drift_score_exp0,detect_rate_exp1,avg_drift_score_exp1,detect_rate_exp2,avg_drift_score_exp2,detect_rate_exp3,avg_drift_score_exp3,detect_rate_exp4,avg_drift_score_exp4
+cade,random,none,6,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+cade,random,spider,6,0.0,0,0.0,0.0,0.0,0.4307575523853302,0.0,0.606632649898529,0.0,0.6885489225387573,0.0,0.7957903742790222
+cade,random,ssf,5,0.0,0,0.0,0.0,0.0,0.4307575523853302,0.0,0.7051054835319519,0.0,0.6537193059921265,0.0,0.9189594388008118
+none,random,none,6,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+none,random,spider,6,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+none,random,ssf,6,0.0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+ssf,random,ssf,6,4.0,4,0.0,0.0,1.0,0.7740521255564564,1.0,0.19986281524847202,1.0,0.25746503290626,1.0,0.43340176059533536

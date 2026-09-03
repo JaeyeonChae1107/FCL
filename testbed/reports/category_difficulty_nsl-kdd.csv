@@ -1,0 +1,5 @@
+﻿category,recall_final_mean,recall_final_min,recall_final_max,n_combos,best_combo_id,best_recall_final
+R2L,0.1574074074074074,0.0,0.8696441539578794,96,B_dd=none_ss=random_mm=spider_af=cndids_as=cade_mad,0.8696441539578794
+U2R,0.24083333333333334,0.0,0.975,96,B_dd=none_ss=random_mm=cndids_af=cndids_as=cade_mad,0.975
+Probe,0.40712773647253203,0.0020652622883106154,0.9975216852540273,96,B_dd=none_ss=random_mm=spider_af=cndids_as=pca,0.9975216852540273
+DoS,0.46166588450880486,0.0005363368195226602,0.940734781442746,96,B_dd=none_ss=random_mm=none_af=cndids_as=cade_mad,0.940734781442746
