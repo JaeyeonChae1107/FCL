@@ -709,7 +709,11 @@ def _load_dataset_uncached(name: str, base_dir: str, n_experiences: int = 5,
         배열(정상="normal"/"Benign"/데이터셋별 표기, 공격은 family 이름) —
         train_y와 같은 행 순서, 길이만 대응. CADE의 다중클래스 centroid
         구성에만 쓰이고(선택적 소비, `pipeline/cl_client.py` 참고) 다른
-        컴포넌트는 이 키를 몰라도 된다.
+        컴포넌트는 이 키를 몰라도 된다. `test_category`(2026-09-03 추가)는
+        test_y와 같은 행 순서의 category 배열 — 분할/셔플 로직은 그대로 두고
+        `train_test_split`이 이미 만들어 버리던 값을 담기만 한 것이다.
+        학습 경로(`CLClient`)는 이 키를 읽지 않고, `experiments/grid_runner.py`
+        가 공격 category별 recall 리포팅에만 쓴다.
     """
     port_full = protocol_full = None
     if name == "nsl-kdd":
@@ -763,6 +767,7 @@ def _load_dataset_uncached(name: str, base_dir: str, n_experiences: int = 5,
                 "test_X": torch.tensor(X_te_scaled, dtype=torch.float32),
                 "test_y": torch.tensor(y_te, dtype=torch.long),
                 "train_category": cat_tr,
+                "test_category": cat_te,
             })
         input_dim = X_train.shape[1]
     else:
@@ -799,7 +804,7 @@ def _load_dataset_uncached(name: str, base_dir: str, n_experiences: int = 5,
             # 적용(transform)한다.
             if port_bucketer is not None:
                 X_exp_raw, y_exp, cat_exp, port_exp, protocol_exp = chunk
-                (X_tr_raw, X_te_raw, y_tr, y_te, cat_tr, _cat_te,
+                (X_tr_raw, X_te_raw, y_tr, y_te, cat_tr, cat_te,
                  port_tr, _port_te, protocol_tr, protocol_te) = train_test_split(
                     X_exp_raw, y_exp, cat_exp, port_exp, protocol_exp,
                     test_size=0.2, stratify=y_exp, random_state=seed)
@@ -818,7 +823,7 @@ def _load_dataset_uncached(name: str, base_dir: str, n_experiences: int = 5,
                     [port_onehot_te, protocol_onehot_te, X_te_raw], axis=1).astype(np.float32)
             else:
                 X_exp_raw, y_exp, cat_exp = chunk
-                X_tr_raw, X_te_raw, y_tr, y_te, cat_tr, _cat_te = train_test_split(
+                X_tr_raw, X_te_raw, y_tr, y_te, cat_tr, cat_te = train_test_split(
                     X_exp_raw, y_exp, cat_exp, test_size=0.2, stratify=y_exp, random_state=seed)
 
             scaler.partial_fit(X_tr_raw)
@@ -830,6 +835,7 @@ def _load_dataset_uncached(name: str, base_dir: str, n_experiences: int = 5,
                 "test_X": torch.tensor(X_te, dtype=torch.float32),
                 "test_y": torch.tensor(y_te, dtype=torch.long),
                 "train_category": cat_tr,
+                "test_category": cat_te,
             })
             input_dim = X_tr.shape[1]
 

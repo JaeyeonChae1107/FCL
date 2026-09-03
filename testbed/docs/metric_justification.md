@@ -1994,3 +1994,79 @@ GPU 서버에서 CICIDS2018 스모크가 지나치게 오래 걸린다는 사용
 실전 epoch)로 되돌리면 `SMOKE_BEHAVIORAL_GATES_AS_WARNINGS=False`로
 행동 게이트를 다시 실패로 둘 수 있다. `--shard`로 나눠 돌릴 때는
 서브샘플이 seed·라운드 번호로 고정되어 모든 샤드가 같은 데이터를 본다.
+
+## 부가 분석 필드 3종 추가 — drift 횟수·no-CL 기준선·category별 recall (2026-09-03)
+
+사용자 요청: "데이터별로 drift detection을 몇 번 했는지, 지속적 학습을
+사용하지 않았을 경우와의 비교, 어떤 공격을 잘 감지하고 잘 감지하지 못했는지"를
+학습 과정은 건드리지 않고 부가 기능으로만 추가.
+
+### 학습 경로 무변경
+
+`pipeline/cl_client.py`, `components/**`, `base/**`, `configs/**`,
+`pipeline/component_registry.py`는 전혀 건드리지 않았다. 세 기능 모두 이미
+계산되어 있던 값을 집계·기록만 한다:
+- drift 횟수: `CLClient.run_experience()`가 처음부터 매 라운드
+  `drift_detected`/`drift_score`를 반환하고 있었는데 `grid_runner.py`가
+  버리고 있었다 — 리스트에 모으기만 함.
+- no-CL 기준선: 그리드에 이미 있는 `A_dd=none_ss=random_mm=none_af=none_as=none`
+  조합(naive fine-tuning — backbone이 매 experience BCE로 계속 학습, drift/
+  메모리/리플레이/망각방지/별도 scorer 없음, 판정은 분류기 sigmoid 0.5)을
+  `common/compatibility.py`의 `NO_CL_BASELINE_COMBO` 상수로 지정해 리더보드가
+  참조하게 했을 뿐 — 새 실행 없음.
+- category별 recall: `data/dataset_loader.py`가 train 쪽만 보존하던
+  category(공격 family) 문자열을 test 쪽(`test_category`)도 함께 보존하도록
+  키 하나를 추가했다. 분할/셔플 로직 자체는 그대로 두고, `train_test_split`이
+  이미 만들어 버리던 test category 배열을 담기만 했다. `CLClient`는 이 키를
+  전혀 읽지 않는다 — `grid_runner.py`가 이미 계산된 `eval_scores`/`threshold`로
+  라운드마다 category별 recall을 재계산할 때만 쓴다(추가 forward 없음).
+
+### no-CL 기준선 정의에 대한 사용자와의 논의
+
+처음엔 "지속학습 없음"을 experience 0에서 한 번만 학습하고 이후는 평가만
+하는 정적 모델로 제안했으나, 사용자가 "초반 라운드를 잊는지 보고 싶다,
+backbone의 딥러닝/머신러닝 기법만 순수하게 보고 싶다"고 정정 — 매 라운드
+새 데이터로 계속 학습하되 지속학습 메커니즘(drift/메모리/망각방지/scorer)만
+없는 naive fine-tuning으로 확정했다. 이는 그리드에 이미 존재하는 조합과
+정확히 일치해 새 실행이 필요 없었다.
+
+### 회귀 확인
+
+변경 전/후 NSL-KDD에서 두 조합
+(`A_dd=none_ss=random_mm=none_af=none_as=none`,
+`A_dd=ssf_ss=random_mm=ssf_af=lwf_ssf_as=none` — 후자는 drift가 실제로
+감지되는 조합)을 CPU로 돌려 f1/precision/recall/pr_auc/bwt/perf_matrix가
+변경 전후 소수점까지 완전히 일치함을 확인했다(스크래치패드
+`before/`·`after/` 비교, 이 세션 실행 로그 참고). 새 필드
+(`drift_detected_per_round` 등)만 추가되고 기존 필드값은 전혀 달라지지
+않았다.
+
+### code_version 변경으로 인한 재계산 고지
+
+`grid_runner.py`/`common/`/`data/dataset_loader.py`가 `_VERSIONED_PATHS`에
+포함되어 있어 `code_version`이 바뀐다 — GPU 서버의 기존 `results/*.json`은
+전부 재계산 대상이 된다(로컬 `testbed/results/`는 이 변경 시점에 비어
+있었음). 데이터셋 캐시(`data/.cache/`)도 `dataset_loader.py` 해시가 바뀌어
+1회 재생성된다(내용은 동일 — `test_category` 키만 추가). 스모크 결과 파일도
+code_version이 달라 `smoke_test.run_all()`이 재실행하려 하지만,
+`grid_runner.run_grid()`는 스모크 파일의 `passed`만 보고 `code_version`은
+검사하지 않으므로 스모크 재실행은 본 그리드 실행의 필수 전제조건이 아니다
+(다만 최신 게이트 결과를 원하면 재실행 권장).
+
+### drift 감지 라운드 수 관련 별도 논의 (변경 없음, 기록만)
+
+이 작업 중 사용자가 "라운드 수(`n_experiences=5`)가 너무 적지 않은가,
+SSF 논문은 라운드가 더 많지 않았나"라고 질의했다. 확인 결과 SSF
+원문(`SSF-Strategic-Selection-and-Forgetting/ssf.py`)은 고정 라운드 수가
+아니라 `--epochs`(외부 스트림 반복 횟수, README 예시 200) ×
+`--sample_interval`(청크 크기, 예시 5000)로 정해지는 가변 개수의 drift
+청크를 순회하며, `--epoch_1`(예시 20)은 청크 하나당 로컬 재학습 epoch
+수일 뿐 라운드 수가 아니다. 이 테스트베드가 SSF의 가변 스트리밍 구조
+대신 CND-IDS의 `n_experiences=5` 고정 class-incremental 분할을 쓰는
+이유(데이터 크기와 무관한 고정 라운드 구조 필요, SSF 고유 알고리즘을
+전체 그리드에 강제하지 않기 위함)는 `data/dataset_loader.py` 모듈
+docstring의 "2026-08-12 재검토" 절에 이미 기록되어 있다. 라운드 수는
+공격 category 수와 나머지 연산(`i % n_experiences`)으로 묶여 있어
+(`_class_incremental_split`), NSL-KDD(공격 4종)처럼 category가 적은
+데이터셋은 라운드를 5보다 늘려도 빈 라운드만 늘어난다 — 이 관찰은
+기록만 하고 `n_experiences` 자체는 이번 변경 범위 밖이라 건드리지 않았다.

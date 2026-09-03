@@ -11,7 +11,7 @@ CFE+클러스터링) 경로가 아니라, 같은 저장소에 포함된 ADCN 비
 `bwt()` docstring 참고.
 """
 
-from typing import List, Sequence
+from typing import Dict, List, Sequence
 
 import numpy as np
 from sklearn.metrics import average_precision_score
@@ -117,3 +117,57 @@ def build_r_matrix(f1_grid: List[List[float]]) -> np.ndarray:
     if R.ndim != 2 or R.shape[0] != R.shape[1]:
         raise ValueError(f"R matrix must be square (T, T), got shape {R.shape}")
     return R
+
+
+def per_category_counts(y_true: np.ndarray, y_pred: np.ndarray,
+                        category: np.ndarray) -> Dict[str, Dict[str, int]]:
+    """category(문자열 라벨)별 혼동 계수 — 2026-09-03 추가(공격 유형별 탐지
+    성능 리포팅용, 리더보드 정렬에는 쓰지 않는다).
+
+    정상/공격 판정은 category 문자열이 아니라 `y_true`(0=정상, 1=공격)로 한다
+    — 데이터셋마다 정상 표기가 다르고("normal"/"Benign"), UNSW-NB15는 정상
+    행의 attack_cat이 비어 있어 로더가 임의 문자열로 채운다(dataset_loader.py
+    `_load_unsw_attack_cat` 참고). 그래서 한 category 안에 y=0/1이 섞여
+    있어도(원칙적으로는 없어야 하지만) 정상 행은 fp/n에, 공격 행은
+    tp/n_attack에 각각 정확히 들어간다.
+
+    Returns:
+        {category: {"n": 행 수, "n_attack": y==1 수, "tp": y==1 & pred==1,
+                    "fp": y==0 & pred==1}}
+    """
+    y_true = np.asarray(y_true).reshape(-1).astype(int)
+    y_pred = np.asarray(y_pred).reshape(-1).astype(int)
+    category = np.asarray(category).reshape(-1)
+    if not (len(y_true) == len(y_pred) == len(category)):
+        raise ValueError(
+            f"per_category_counts: 길이 불일치 y_true={len(y_true)} "
+            f"y_pred={len(y_pred)} category={len(category)}")
+    counts: Dict[str, Dict[str, int]] = {}
+    for cat in np.unique(category):
+        m = category == cat
+        yt, yp = y_true[m], y_pred[m]
+        counts[str(cat)] = {
+            "n": int(m.sum()),
+            "n_attack": int((yt == 1).sum()),
+            "tp": int(((yt == 1) & (yp == 1)).sum()),
+            "fp": int(((yt == 0) & (yp == 1)).sum()),
+        }
+    return counts
+
+
+def per_category_recall(counts: Dict[str, Dict[str, int]]) -> Dict[str, float]:
+    """`per_category_counts()` 결과에서 **공격 행이 있는** category만 골라
+    recall(tp / n_attack)을 돌려준다. 공격 행이 하나도 없는 category(정상
+    category)는 제외한다 — 정상 쪽은 `per_category_fpr()`로 본다."""
+    return {
+        cat: float(c["tp"] / c["n_attack"])
+        for cat, c in counts.items() if c["n_attack"] > 0
+    }
+
+
+def per_category_fpr(counts: Dict[str, Dict[str, int]]) -> Dict[str, float]:
+    """정상 행(y=0)이 있는 category의 FPR(fp / 정상 행 수)."""
+    return {
+        cat: float(c["fp"] / (c["n"] - c["n_attack"]))
+        for cat, c in counts.items() if (c["n"] - c["n_attack"]) > 0
+    }

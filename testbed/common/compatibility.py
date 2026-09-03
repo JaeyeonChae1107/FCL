@@ -120,6 +120,26 @@ TRACK_B_GRID: Dict[str, List[str]] = {
 SLOTS = ["drift_detector", "sample_selector", "memory_manager",
          "anti_forgetting", "anomaly_scorer"]
 
+# 2026-09-03 추가 — "지속학습을 전혀 쓰지 않은" 기준선(사용자 결정). backbone
+# (FCLAutoEncoder)이 매 experience 새 데이터로 BCE만으로 계속 학습하고
+# drift 감지·메모리/리플레이·망각방지·별도 anomaly scorer가 전부 없는 naive
+# fine-tuning — 판정은 분류기 sigmoid 0.5(SSF/SPIDER 원 논문 방식). 그리드에
+# 이미 포함된 조합이라(ss=random/mm=none은 dd-비활성 조합이라 dd=none이
+# 순회됨) 별도 실행이 필요 없고, leaderboard_builder.py가 이 조합의 결과를
+# 기준선으로 삼아 다른 조합의 f1/pr_auc/bwt 차이와 라운드별 망각을
+# 나란히 보여준다. "억지로 성능을 낮춘" 기준선이 아니다 — Track A 공통
+# 조건(라벨 예산 10%, epoch 200)을 다른 Track A 조합과 똑같이 받는다. Track B
+# (라벨 없이 experience 전체 사용)와의 비교는 학습 조건이 다름을 리포트에
+# 명시한다.
+NO_CL_BASELINE_COMBO: Dict[str, str] = {
+    "track": "A",
+    "drift_detector": "none",
+    "sample_selector": "random",
+    "memory_manager": "none",
+    "anti_forgetting": "none",
+    "anomaly_scorer": "none",
+}
+
 
 def enumerate_valid_combos() -> List[dict]:
     """Track A(90개)와 Track B(6개)를 각각 직접 구성해 concat한 96개만
@@ -153,6 +173,7 @@ def enumerate_valid_combos() -> List[dict]:
         combo["track"] = "B"
         combos.append(combo)
     assert len(combos) == 96, f"expected 96 valid combos, got {len(combos)}"
+    assert NO_CL_BASELINE_COMBO in combos, "NO_CL_BASELINE_COMBO가 유효 조합에 없음"
     return combos
 
 

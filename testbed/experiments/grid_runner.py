@@ -26,6 +26,9 @@ from testbed.common.metrics import (
     bwt,
     build_r_matrix,
     f1_score,
+    per_category_counts,
+    per_category_fpr,
+    per_category_recall,
     pr_auc,
     precision_score,
     recall_score,
@@ -190,8 +193,30 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
 
     experiences = dataset["experiences"]
     all_test_splits = [(e["test_X"], e["test_y"]) for e in experiences]
+    # 2026-09-03 추가 — 공격 category별 recall 리포팅용. dataset_loader.py가
+    # 이제 test_category를 보존한다(없으면 None → category 분석 생략). 학습
+    # 경로(CLClient)에는 넘기지 않는다.
+    all_test_categories = [e.get("test_category") for e in experiences]
+    has_category = all(c is not None for c in all_test_categories)
+    pooled_test_category = (
+        np.concatenate([np.asarray(c) for c in all_test_categories]) if has_category else None)
 
     f1_rows: List[List[float]] = []
+    # 2026-09-03 추가 — 부가 분석 필드(학습 경로 무변경). CLClient.run_experience()
+    # 는 처음부터 drift_detected/drift_score를 라운드마다 돌려주고 있었는데
+    # 여기서 버려지고 있었다 — "데이터셋별로 drift가 몇 번 감지됐는가"를
+    # 답하려면 기록만 하면 된다. 해석 주의: 라운드 0은 비교할 버퍼가 없어
+    # 구조적으로 False, memory_manager=none이면 buf_ref가 항상 None이라
+    # 매 라운드 False(base/drift_detector.py 계약), dd=none은 항상 False.
+    # 즉 실질적으로 의미 있는 값은 Track A의 dd∈{ssf,cade} × mm∈{spider,ssf}
+    # 조합에서만 나온다(common/compatibility.py "조건부 제약" 절 참고).
+    drift_detected_per_round: List[bool] = []
+    drift_score_per_round: List[float] = []
+    # category별 recall의 라운드 이력 — 라운드 t의 모델·threshold로 pooled
+    # test(0..T-1 전부)를 채점한 뒤 category별로 나눈 것. 이미 계산된
+    # out["eval_scores"]를 재사용하므로 추가 forward도, RNG 소비도 없다.
+    per_category_recall_history: Dict[str, List[float]] = {}
+    normal_fpr_history: List[float] = []
     total_selected = 0
     total_available = 0
     training_time_sec = 0.0
@@ -217,6 +242,19 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
             for scores, labels in zip(out["eval_scores"], out["eval_labels"])
         ]
         f1_rows.append(row)
+        drift_detected_per_round.append(bool(out["drift_detected"]))
+        drift_score_per_round.append(float(out["drift_score"]))
+        if has_category:
+            round_preds = (torch.cat(out["eval_scores"]) > threshold).long().numpy()
+            round_labels = torch.cat(out["eval_labels"]).numpy()
+            counts = per_category_counts(round_labels, round_preds, pooled_test_category)
+            for cat, rec in per_category_recall(counts).items():
+                per_category_recall_history.setdefault(cat, []).append(rec)
+            # 정상 행은 y==0 기준으로 category와 무관하게 하나로 합쳐 FPR을 본다
+            # (정상 category 표기가 데이터셋마다 다르고 하나뿐이라 합쳐도 같다).
+            n_normal = int((round_labels == 0).sum())
+            n_fp = int(((round_labels == 0) & (round_preds == 1)).sum())
+            normal_fpr_history.append(float(n_fp / n_normal) if n_normal > 0 else 0.0)
         total_selected += out["n_selected"]
         total_available += len(e["train_X"])
         last_out = out
@@ -284,6 +322,28 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
         if memory_footprint_history else 0.0
     )
 
+    # 2026-09-03 추가 — category별 최종 요약. first_seen_round는 그 category가
+    # test에 처음 등장하는 experience(class-incremental 분할이라 공격 category당
+    # 정확히 하나의 experience에만 배정된다 — data/dataset_loader.py
+    # `_class_incremental_split` 참고). forgetting = 처음 등장한 라운드의
+    # recall - 마지막 라운드의 recall(양수면 그만큼 잊었다는 뜻).
+    per_category_final: Dict[str, Dict[str, Any]] = {}
+    if has_category:
+        n_rounds = len(experiences)
+        for cat, history in per_category_recall_history.items():
+            first_seen = next(
+                (j for j, c in enumerate(all_test_categories)
+                 if bool(np.any(np.asarray(c) == cat))), 0)
+            n_test = int(np.sum(pooled_test_category == cat))
+            per_category_final[cat] = {
+                "n_test": n_test,
+                "first_seen_round": int(first_seen),
+                "recall_at_first_seen": float(history[first_seen]),
+                "recall_final": float(history[n_rounds - 1]),
+                "forgetting": float(history[first_seen] - history[n_rounds - 1]),
+            }
+    normal_fpr = float(normal_fpr_history[-1]) if normal_fpr_history else float("nan")
+
     result = {
         "combo_id": make_combo_id(combo),
         "exp_name": f"{make_combo_id(combo)}__{dataset_name}",
@@ -310,6 +370,14 @@ def run_combo_full(combo: Dict[str, Any], dataset_name: str, dataset: Dict[str, 
         "best_f1_reference": best_f1_reference,
         "seed": seed,
         "code_version": code_version if code_version is not None else compute_code_version(),
+        # 2026-09-03 추가 — 부가 분석 필드(위 "2026-09-03" 주석 참고).
+        "drift_detected_per_round": drift_detected_per_round,
+        "drift_score_per_round": drift_score_per_round,
+        "n_drift_detected": int(sum(drift_detected_per_round)),
+        "per_category_final": per_category_final,
+        "per_category_recall_history": per_category_recall_history,
+        "normal_fpr": normal_fpr,
+        "normal_fpr_history": normal_fpr_history,
     }
     validate_result(result)
     return result

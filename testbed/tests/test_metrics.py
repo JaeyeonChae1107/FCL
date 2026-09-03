@@ -84,3 +84,41 @@ def test_build_r_matrix_rejects_non_square():
 def test_build_r_matrix_accepts_square():
     R = build_r_matrix([[0.1, 0.2], [0.3, 0.4]])
     assert R.shape == (2, 2)
+
+
+def test_per_category_counts_and_recall():
+    from testbed.common.metrics import per_category_counts, per_category_recall, per_category_fpr
+
+    # 3행: DoS 공격 탐지 성공, Probe 공격 놓침, normal 오탐 1건
+    y_true = [1, 1, 0]
+    y_pred = [1, 0, 1]
+    category = ["DoS", "Probe", "normal"]
+    counts = per_category_counts(y_true, y_pred, category)
+    assert counts["DoS"] == {"n": 1, "n_attack": 1, "tp": 1, "fp": 0}
+    assert counts["Probe"] == {"n": 1, "n_attack": 1, "tp": 0, "fp": 0}
+    assert counts["normal"] == {"n": 1, "n_attack": 0, "tp": 0, "fp": 1}
+
+    recall = per_category_recall(counts)
+    assert recall == {"DoS": pytest.approx(1.0), "Probe": pytest.approx(0.0)}
+    assert "normal" not in recall  # 공격 행이 없는 category는 recall 대상 아님
+
+    fpr = per_category_fpr(counts)
+    assert fpr == {"normal": pytest.approx(1.0)}
+    assert "DoS" not in fpr  # 정상 행이 없는 category는 FPR 대상 아님
+
+
+def test_per_category_recall_zero_when_no_true_positives():
+    from testbed.common.metrics import per_category_counts, per_category_recall
+
+    y_true = [1, 1]
+    y_pred = [0, 0]
+    category = ["U2R", "U2R"]
+    counts = per_category_counts(y_true, y_pred, category)
+    assert per_category_recall(counts) == {"U2R": 0.0}
+
+
+def test_per_category_counts_length_mismatch_raises():
+    from testbed.common.metrics import per_category_counts
+
+    with pytest.raises(ValueError):
+        per_category_counts([1, 0], [1], ["a", "b"])

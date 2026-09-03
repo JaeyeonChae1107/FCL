@@ -212,6 +212,12 @@ def _subsample_dataset_for_smoke(dataset: Dict[str, Any], seed: int) -> Dict[str
             te_t = torch.as_tensor(te_idx, dtype=torch.long)
             new_e["test_X"] = e["test_X"][te_t]
             new_e["test_y"] = e["test_y"][te_t]
+            # 2026-09-03 — test_category(dataset_loader.py가 이제 보존)도 같은
+            # 인덱스로 슬라이싱해 test_y와의 정렬을 유지한다. 층화 기준은
+            # 그대로 test_y(이진) — category 층화로 바꾸면 스모크가 뽑는 행이
+            # 달라져 기존 스모크 결과와 비교가 안 되므로 바꾸지 않는다.
+            if e.get("test_category") is not None:
+                new_e["test_category"] = e["test_category"][te_idx]
 
         n_cat_before = len(np.unique(e["train_category"])) if e.get("train_category") is not None else -1
         n_cat_after = (len(np.unique(new_e["train_category"]))
