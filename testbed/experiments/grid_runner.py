@@ -356,14 +356,27 @@ def run_grid(datasets: List[str] = ("nsl-kdd", "unsw-nb15"),
              smoke_results_path: Optional[str] = None,
              device: str = "cpu",
              shard: Optional[tuple] = None,
-             track: Optional[str] = None) -> List[Dict[str, Any]]:
+             track: Optional[str] = None,
+             ignore_smoke: bool = False) -> List[Dict[str, Any]]:
     global_hparams, component_hparams = _load_configs()
     code_version = compute_code_version()
     print(f"code_version={code_version} (components/base/pipeline/dataset_loader 해시 — "
           f"이 값이 캐시된 결과 파일과 다르면 재계산합니다)")
-    if smoke_results_path is None:
-        smoke_results_path = os.path.join(_TESTBED_ROOT, "experiments", "smoke_test_results.json")
-    passed_by_dataset = load_smoke_passed_combo_ids(smoke_results_path)
+    # 2026-09-04 추가 — 스모크 테스트가 일부 조합을 실패로 걸러도(예:
+    # 데이터 규모/난이도가 데이터셋마다 달라 CICIDS2018만 유독 몇 개가
+    # 실패하는 경우) 사용자가 96개 유효 조합 전체를 강제로 돌려보고 싶을
+    # 때를 위한 탈출구다 — 스모크 게이트 자체(15절)를 없애는 게 아니라,
+    # 이번 실행 한 번만 그 필터링을 건너뛴다. `passed_by_dataset=None`으로
+    # 두면 아래 루프가 "스모크 결과 파일이 없을 때"와 완전히 같은 경로
+    # (전체 조합 실행)를 타므로 별도 분기를 새로 만들 필요가 없다.
+    if ignore_smoke:
+        passed_by_dataset = None
+        print("경고: --ignore-smoke로 스모크 테스트 필터링을 건너뜁니다 — "
+              "유효 조합 전체(96개)를 실행합니다.")
+    else:
+        if smoke_results_path is None:
+            smoke_results_path = os.path.join(_TESTBED_ROOT, "experiments", "smoke_test_results.json")
+        passed_by_dataset = load_smoke_passed_combo_ids(smoke_results_path)
 
     all_combos = enumerate_valid_combos()
     total_combos = len(all_combos)
@@ -506,6 +519,12 @@ if __name__ == "__main__":
              "Track만 코드가 바뀌어 재계산이 필요할 때(예: Track B), 다른 "
              "Track의 결과 파일이 우연히 없어도 실행되지 않도록 명시적으로 "
              "막아준다. 생략하면 두 Track 다 대상이 된다(기존 동작).")
+    parser.add_argument(
+        "--ignore-smoke", action="store_true",
+        help="스모크 테스트 결과와 무관하게 enumerate_valid_combos()의 96개 "
+             "조합 전체를 실행한다(2026-09-04 추가). 예: CICIDS2018에서만 "
+             "96개 중 일부가 스모크 게이트에 걸려도 전체를 강행하고 싶을 때. "
+             "생략하면 기존처럼 smoke_test_results.json으로 필터링한다.")
     args = parser.parse_args()
     dataset_list = [d.strip() for d in args.datasets.split(",") if d.strip()]
     shard_arg = None
@@ -514,4 +533,5 @@ if __name__ == "__main__":
         shard_idx, n_shards = int(shard_idx_str), int(n_shards_str)
         assert 0 <= shard_idx < n_shards, "--shard 는 0 <= i < n 이어야 함"
         shard_arg = (shard_idx, n_shards)
-    run_grid(datasets=dataset_list, device=args.device, shard=shard_arg, track=args.track)
+    run_grid(datasets=dataset_list, device=args.device, shard=shard_arg, track=args.track,
+             ignore_smoke=args.ignore_smoke)
