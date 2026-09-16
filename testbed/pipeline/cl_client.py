@@ -1,59 +1,50 @@
-"""CLClient — PRD 13절의 8단계 실행 흐름을 그대로 구현한다.
+"""CLClient — PRD 13절의 8단계 실행 흐름.
 
   1. 새 데이터 도착
   2. Drift 감지 (buf_ref = 이전 experience까지의 버퍼)
-  3. 샘플 선택과 라벨 예산 확정 (label_budget_int → select → slice →
-     drift_detector.fit(selected_data, selected_labels))
+  3. 샘플 선택과 라벨 예산 확정 (select → slice → drift_detector.fit)
   4. 모델 학습 (epochs_per_experience, replay_batch는 "이전" 버퍼에서,
-     selected_data만 사용 — experience 전체가 아니다)
-  5. 메모리 갱신 (학습 이후, selected_data 그대로)
+     selected_data만 사용)
+  5. 메모리 갱신 (학습 이후, selected_data)
   6. Anomaly Scorer 재보정 (refit_on_update, s_ref 계산·캐싱)
-  7. 평가 (experience 0..T-1 전부의 test split, anomaly_scorer.threshold_needs_labels
-     에 따른 threshold 결정방식 — 2026-09-01 이전엔 Track별로 분기했으나
-     Track B에 as=cade_mad가 추가되며 scorer 자체의 속성으로 일반화했다,
-     base/anomaly_scorer.py 참고)
+  7. 평가 (experience 0..T-1 test split, threshold는
+     anomaly_scorer.threshold_needs_labels로 분기 — base/anomaly_scorer.py)
   8. 다음 라운드 준비 (anti_forgetting.on_task_end)
 
-Step 4→5 순서(학습 후 메모리 갱신)는 "각 논문에서 그대로 도출"된 것이 아니라,
-이 파이프라인이 공유하는 리플레이 버퍼 계약(BaseMemoryManager.get_replay_batch)이
-강제하는 순서다: Step 4의 매 미니배치가 get_replay_batch()로 "이전" 버퍼를
-읽는데, 만약 Step 5를 Step 4보다 앞에 두면 그 라운드 자신의 selected_data가
-먼저 버퍼에 들어가 버려 같은 라운드 안에서 자기 자신을 리플레이하는 꼴이 된다
-(SPIDER/CNDIDSMemoryManager처럼 get_replay_batch를 실제로 소비하는 컴포넌트에서
-치명적). 이 순서는 SPIDER·CND-IDS 방향 메모리 매니저의 실제 사용 패턴과는
-맞지만, SSF 원문(`ssf.py:236-291`)과는 반대다 — SSF는 대표 표본 재선택
-(select_and_update_representative_samples[_when_drift]())을 먼저 수행해
-`x_train_this_epoch`(메모리이자 곧 이번 라운드 학습 데이터 그 자체)를 갱신한
-뒤 그 갱신된 세트로 학습한다. SSF에서는애초에 "메모리"와 "이번 라운드
-학습 데이터"가 하나의 객체라 이 구분 자체가 없다. 이 구조적 차이는 의도적으로
-되돌리지 않았다(docs/metric_justification.md "SSF 대표 표본 재선택" 절 참고) —
-공유 리플레이 계약을 깨지 않으면서 4개 논문 전부를 하나의 파이프라인에 태우기
-위한 불가피한 절충이다.
+Step 4→5 순서는 리플레이 버퍼 계약(BaseMemoryManager.get_replay_batch)이
+강제한다 — 5를 4보다 앞에 두면 이번 라운드 selected_data가 먼저 버퍼에
+들어가 같은 라운드 안에서 자기 자신을 리플레이하게 된다(SPIDER/
+CNDIDSMemoryManager에서 치명적). SSF 원문(`ssf.py:236-291`)은 대표 표본
+재선택을 먼저 하고 갱신된 세트로 학습하는 반대 순서다 — SSF는 "메모리"와
+"이번 라운드 학습 데이터"가 하나의 객체라 이 구분 자체가 없다
+(docs/metric_justification.md "SSF 대표 표본 재선택" 절).
 
-**2026-08-14 추가 — CADEMADScorer/CADEDriftDetector 연결**: 5-슬롯 독립
-설계(drift_detector/anomaly_scorer가 서로 다른 축)의 부작용으로, "순정
-CADE" 조합에서도 CADE의 실제 발명(대조학습 latent space 위에서 MAD
-판정)이 한 번도 통합되어 실행되지 않는 문제를 구조 전수 감사에서 발견했다
-— `CADEDriftDetector`가 학습시키는 사설 대조학습 인코더의 출력이 어디에도
-안 쓰이고, `CADEMADScorer`는 무관한 공유 backbone의 z에 MAD 공식만
-적용하고 있었다. `dd=cade`와 `as=cade_mad`가 함께 선택된 콤보에서만
-`__init__`이 `CADEMADScorer.set_private_encoder()`로 둘을 연결한다
-(`drift_detector.uses_shared_representation`과 대칭인
-`anomaly_scorer.uses_shared_representation` 플래그로 Step 6/7의 인코딩
-경로를 분기 — `components/cade/cade_anomaly_scorer.py` 참고). A/B
-실측(NSL-KDD, 순정 CADE 콤보)으로 f1 0.6482→0.7898(+22%), bwt
--0.1403→-0.0810로 전 지표가 크게 개선됨을 확인했다.
+`dd=cade`+`as=cade_mad` 조합에서 `__init__`이 `CADEMADScorer.
+set_private_encoder()`로 둘을 연결한다(`uses_shared_representation` 플래그로
+Step 6/7 인코딩 경로 분기 — `components/cade/cade_anomaly_scorer.py`).
+NSL-KDD 순정 CADE 콤보 A/B: f1 0.6482→0.7898, bwt
+-0.1403→-0.0810.
 
-**2026-08-25 추가 — CADE 다중클래스(family) 연결**: 위 연결은 인코더/
-centroid 파이프라인 자체는 이었지만, `drift_detector.fit()`에 넘기는
-`selected_labels`가 여전히 이진이라 CADE의 실제 단위(정상 + 공격 family)가
-빠져 있었다(`components/cade/cade_drift_detector.py` 모듈 docstring
-"2026-08-25" 절 참고). `run_experience()`가 이제 `data/dataset_loader.py`가
-노출하는 `train_category`를 받아 `selected_idx`와 같은 인덱스로 슬라이싱한
-뒤, `drift_detector.fit_with_category()`가 있으면(hasattr, CADEDriftDetector
-전용) 그걸로 pairing/centroid를 만든다 — 없으면 기존 이진 `fit()`으로
-폴백한다(다른 drift_detector는 이 인자를 모른 채 그대로 동작). A/B 실측
-결과는 위 파일과 `docs/metric_justification.md`에 기록한다.
+`run_experience()`는 `data/dataset_loader.py`의 `train_category`를
+`selected_idx`로 슬라이싱해, `drift_detector.fit_with_category()`가 있으면
+(CADEDriftDetector 전용) family 단위 pairing/centroid를 만든다 — 없으면
+이진 `fit()`으로 폴백(`components/cade/cade_drift_detector.py`).
+
+**전역 RNG 오염(2026-09-14 재검토로 발견, 수정)**: `torch.manual_seed(seed)`는
+콤보당 1회만(`grid_runner.py`) 호출되고 라운드마다 재시드하지 않는다.
+`_compute_ssf_masks()`가 호출하는 `optimize_ssf_masks()`(`ssf_masks.py`)
+내부의 `M_c`/`M_t` 초기화(`torch.rand`)가 전역 RNG를 소비하는데, 이 호출은
+`ss=ssf`/`mm=ssf`일 때만 발동한다(Step 2) — 즉 이 슬롯 값 하나 때문에
+그 뒤 Step 4의 메인 공유 모델 셔플이 보는 난수 시퀀스 자체가 달라진다.
+같은 문제가 `CADEDriftDetector`(사설 encoder 초기화·매 라운드 학습)와
+GPM/SPIDER의 `randperm`에도 있어(각 파일 docstring 참고) 국지적 버그가
+아니라 설계 패턴 자체의 문제였다 — "슬롯 값만 바꿔 통제된 비교를 한다"는
+이 벤치마크의 핵심 전제를 직접 위협하는 문제라 우선 수정했다.
+`torch.random.fork_rng()`로 각 사설 랜덤성 소비를 격리해, 그 컴포넌트
+자신의 결과는 재현 가능하게 유지하면서 바깥 RNG 스트림은 그 컴포넌트가
+있든 없든 동일하게 만든다. 파생 시드는 `testbed/common/rng_utils.py`의
+`derived_seed(seed, tag, counter)`(해시 기반, 2026-09-14부로 정수 오프셋
+방식에서 교체 — `rng_utils.py` docstring 참고)를 쓴다.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -62,6 +53,8 @@ import numpy as np
 import torch
 
 from testbed.base.models import BaseCLModel
+from testbed.common.rng_utils import derived_seed
+from testbed.components.ssf.ssf_masks import SSFMaskContext, optimize_ssf_masks
 from testbed.pipeline.component_registry import build
 
 
@@ -69,7 +62,8 @@ class CLClient:
     def __init__(self, model: BaseCLModel, combo: Dict[str, Any],
                  global_hparams: Dict[str, Any],
                  component_hparams: Optional[Dict[str, Dict[str, Any]]] = None,
-                 device: str = "cpu"):
+                 device: str = "cpu",
+                 held_out_normal_reference: Optional[List[torch.Tensor]] = None):
         """
         Args:
             model: BaseCLModel(FCLAutoEncoder) 인스턴스.
@@ -80,6 +74,11 @@ class CLClient:
             component_hparams: {'cade': {...}, 'gpm': {...}, 'cndids': {...},
                                  'ssf': {...}} — configs/component_hparams/*.yaml.
             device: torch device 문자열.
+            held_out_normal_reference: CND-IDS N_c(원문 `init_normal`) 이식 —
+                `data/dataset_loader.py`의 `held_out_normal_reference` 키
+                (라운드별 List[Tensor], 없으면 None). `consumes_held_out_
+                reference=True`를 선언한 anomaly_scorer(PCAScorer)만
+                소비한다 — Step 6 참고.
         """
         self.device = torch.device(device)
         self.model = model.to(self.device)
@@ -91,46 +90,60 @@ class CLClient:
         hidden_dim = global_hparams["hidden_dim"]
         latent_dim = global_hparams["latent_dim"]
 
-        # 모든 component_hparams/*.yaml을 하나로 병합한다. build()가 각 클래스의
-        # 실제 생성자 시그니처로 필터링하므로(component_registry.py), 서로 다른
-        # 컴포넌트의 하이퍼파라미터가 섞여 있어도 안전하다 — 파라미터 이름이
-        # 컴포넌트 간에 겹치지 않기 때문. 단, input_dim/hidden_dim/latent_dim은
-        # global_hparams(10.1절, 모든 조합에 동일 적용)가 항상 우선하도록
-        # 마지막에 덮어쓴다(cndids.yaml의 latent_dim=30은 참고용 기록일 뿐).
+        # component_hparams/*.yaml 전체 병합. build()가 생성자 시그니처로
+        # 필터링(component_registry.py). input_dim/hidden_dim/latent_dim은
+        # global_hparams가 항상 우선(10.1절).
         merged_component_kwargs: Dict[str, Any] = {}
         for hp in component_hparams.values():
             merged_component_kwargs.update(hp)
         merged_component_kwargs.update(
             input_dim=input_dim, hidden_dim=hidden_dim, latent_dim=latent_dim,
-            batch_size=global_hparams["batch_size"])
-        # batch_size는 CADEDriftDetector의 사설 encoder 미니배치 학습에만 쓰인다
-        # (2026-08-11 추가) — 다른 컴포넌트는 이 이름의 생성자 인자가 없어
-        # build()의 시그니처 필터링으로 자동으로 무시된다.
+            batch_size=global_hparams["batch_size"],
+            seed=global_hparams.get("seed", 42))
+        # seed(2026-09-14 추가) — CADEDriftDetector(사설 encoder 초기화·매
+        # 라운드 학습)/SPIDERMemoryManager/GPMAntiForgetting처럼 전역 RNG를
+        # 소비하는 컴포넌트가 자기 전용 torch.random.fork_rng() 파생 시드를
+        # 만드는 데 쓴다(각 컴포넌트 docstring 참고) — 이 값 자체를 그대로
+        # 쓰는 게 아니라 컴포넌트별 고정 오프셋을 더해 파생한다.
+        # batch_size는 CADEDriftDetector 사설 encoder 미니배치 학습에만 쓰임
+        # . 다른 컴포넌트는 생성자에 이 인자가 없어 무시됨.
 
         self.drift_detector = build(
             "drift_detector", combo["drift_detector"], **merged_component_kwargs)
-        # CADEDriftDetector 전용 훅 — 유일하게 자기 소유의 nn.Module(사설
-        # ContrastiveAutoEncoder)을 갖는 컴포넌트라, self.model처럼 명시적으로
-        # 디바이스를 옮겨줘야 한다(components/cade/cade_drift_detector.py 참고).
+        # CADEDriftDetector만 자기 소유 nn.Module(사설 ContrastiveAutoEncoder)이
+        # 있어 명시적 device 이동 필요(components/cade/cade_drift_detector.py).
         if hasattr(self.drift_detector, "to"):
             self.drift_detector.to(self.device)
         self.sample_selector = build(
             "sample_selector", combo["sample_selector"], **merged_component_kwargs)
-        self.memory_manager = build("memory_manager", combo["memory_manager"])
+        # 2026-09-14 재검토로 발견·수정 — 다른 4개 슬롯은 전부
+        # **merged_component_kwargs를 넘기는데 이 줄만 빠져 있었다. 그
+        # 결과 SPIDERMemoryManager/SSFMemoryManager/CNDIDSMemoryManager가
+        # 추가한 `seed` 파라미터(전역 RNG 오염 격리용)가 실제로는 전달되지
+        # 않고 항상 생성자 기본값(42)에 고정돼 있었다 — 지금(seed=42)
+        # 단일 시드 실행에는 하드코딩 기본값과 우연히 같아 결과에 영향이
+        # 없었지만, 멀티시드 재실행 시 이 세 클래스의 무작위성(버퍼
+        # 교체·리플레이 샘플링)만 조용히 seed=42에 머물렀을 것이다.
+        self.memory_manager = build(
+            "memory_manager", combo["memory_manager"], **merged_component_kwargs)
         self.anti_forgetting = build(
             "anti_forgetting", combo["anti_forgetting"], **merged_component_kwargs)
         self.anomaly_scorer = build(
             "anomaly_scorer", combo["anomaly_scorer"], **merged_component_kwargs)
-        # NoAnomalyScorer 전용 훅 — 표준 계약(z 소비) 밖에서 model 참조가
-        # 필요한 유일한 컴포넌트 (pipeline/common_baselines.py 참고).
+        # NoAnomalyScorer 전용 훅 — z 대신 model 참조가 필요
+        # (pipeline/common_baselines.py).
         if hasattr(self.anomaly_scorer, "set_model"):
             self.anomaly_scorer.set_model(self.model)
-        # CADEMADScorer 전용 훅 — dd=cade와 함께 선택됐을 때만 CADEDriftDetector에
-        # 연결한다(components/cade/cade_anomaly_scorer.py "2026-08-14"/"2026-08-25"
-        # 절 참고, 2026-08-25부터 인코더 nn.Module이 아니라 detector 객체 전체를
-        # 넘긴다 — score()가 detector의 min_anomaly_score()에 위임하기 위해).
-        # hasattr 이중 체크로 두 컴포넌트가 우연히 같은 이름의 속성/메서드를
-        # 가진 경우와 구분한다.
+        # SSFMemoryManager 전용 훅(Item 1+2) — 드리프트 시 버퍼 부족분을
+        # 현재 모델로 pseudo-label해서 채울 때 필요(ssf_memory_manager.py
+        # 참고). 누락되면 그 backfill 경로(드리프트+버퍼가 목표치 아래로
+        # 줄어드는 라운드)에서만 크래시하는데, NSL-KDD에서는 안 걸리고
+        # UNSW-NB15의 `dd=ssf/ss=ssf/mm=ssf` 콤보에서 실제로 걸린 걸
+        # 스모크 테스트로 확인했다(2026-09-11).
+        if hasattr(self.memory_manager, "set_model"):
+            self.memory_manager.set_model(self.model)
+        # CADEMADScorer 전용 훅 — dd=cade와 함께 선택됐을 때만 연결
+        # (components/cade/cade_anomaly_scorer.py).
         if hasattr(self.anomaly_scorer, "set_private_encoder") and hasattr(self.drift_detector, "min_anomaly_score"):
             self.anomaly_scorer.set_private_encoder(self.drift_detector)
 
@@ -144,31 +157,22 @@ class CLClient:
         self.batch_size = global_hparams["batch_size"]
         self.epochs_per_experience = global_hparams["epochs_per_experience"]
 
-        # 2026-07-30 재설계: 이전에는 experience 0에서 한 번 뽑은 고정
-        # 정상 참조 표본(_normal_reference_raw)을 실험 내내 재사용했다(논문에
-        # 없는 개념, docs/metric_justification.md 참고). CADE 원 논문의
-        # median/MAD 계산은 "그 시점에 라벨이 있는 정상 데이터 전체"를 쓰지만,
-        # CADE 자체에는 이 테스트베드처럼 반복되는 라운드 개념이 없어 "매
-        # 라운드 뭘 기준으로 재보정할지"는 애초에 답이 없는 질문이었다. 별도
-        # 고정 표본을 새로 만드는 대신, 이미 라벨 예산으로 선택된 이번 라운드
-        # 데이터(selected_data) 중 label=0인 것만 걸러 쓰기로 했다 —
-        # normal_reference_size라는 별도 파라미터가 필요 없어지고,
-        # labeling_budget 비율에 자동으로 비례한다. 이번 라운드에 정상 라벨
-        # 선택 샘플이 하나도 없는 극단적 경우를 위해 마지막으로 성공한
-        # 재보정 결과(self._s_ref)를 캐시해 재사용한다(run_experience 참고).
+        # 정상 참조 표본은 별도 고정 세트가 아니라 이번 라운드 selected_data
+        # 중 label=0인 것(docs/metric_justification.md).
+        # 정상 라벨 선택 샘플이 없는 라운드는 마지막 성공한 self._s_ref로 폴백.
         self._s_ref: Optional[torch.Tensor] = None
         self._round = 0
+        self._held_out_normal_reference = held_out_normal_reference
+        # 전역 RNG 오염 격리(2026-09-14, _compute_ssf_masks() 참고)에 쓸
+        # 이 인스턴스 전용 시드.
+        self._seed = global_hparams.get("seed", 42)
 
     def forward_batched(self, x: torch.Tensor
                         ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """model(x)를 self.batch_size 단위로 나눠 실행하고 (z, x_hat, logit)을
-        이어붙여 반환한다. NSL-KDD/UNSW-NB15는 experience 하나가 수천~수만 행이라
-        한 번에 통과시켜도 문제없었지만, CICIDS2018은 experience 하나가 수백만
-        행이라 그대로 통과시키면 GPU 메모리가 터진다(실측: CUDA OOM, GPU 서버에서
-        확인). Step 4(학습)는 이미 self.batch_size로 나눠 돌고 있었으므로, 그
-        외 forward 호출(step 2/3/7의 drift 감지·fit·평가)에도 동일하게 배치를
-        적용한다 — 호출부가 이미 `torch.no_grad()`로 감싸므로 여기서는 그래디언트
-        관리를 하지 않는다(기존 호출 패턴과 동일)."""
+        이어붙여 반환한다. experience당 행 수가 큰 경우 한 번에 통과시키면
+        CUDA OOM이 날 수 있어(GPU 서버 실측) 배치 단위로 나눈다. 호출부가
+        이미 `torch.no_grad()`로 감싸므로 그래디언트 관리는 하지 않는다."""
         n = len(x)
         if n <= self.batch_size:
             return self.model(x)
@@ -180,6 +184,40 @@ class CLClient:
             x_hats.append(x_hat)
             logits.append(logit)
         return torch.cat(zs, dim=0), torch.cat(x_hats, dim=0), torch.cat(logits, dim=0)
+
+    def _compute_ssf_masks(self, new_data: torch.Tensor, buf_data: Optional[torch.Tensor],
+                            new_logit: Optional[torch.Tensor] = None,
+                            buf_logit: Optional[torch.Tensor] = None) -> SSFMaskContext:
+        """SSF 원문(`ssf_masks.py`가 이식한 utils.py:96-190)을 라운드당
+        1회 계산 — drift 여부와 무관하게 계산하고 sample_selector/
+        memory_manager가 공유해서 쓴다(Item 1+2). control_res/treatment_res는
+        현재 모델의 sigmoid(classifier(x_hat)) 점수(Item 10 적용 후) —
+        Step 2가 `dd=ssf`처럼 이미 이 값을 계산해뒀으면(`new_logit`/
+        `buf_logit` 인자) 재사용해 중복 forward를 피한다."""
+        self.model.eval()
+        with torch.no_grad():
+            if new_logit is None:
+                _, _, new_logit = self.forward_batched(new_data)
+            treatment_res = torch.sigmoid(new_logit).squeeze(-1).detach()
+            if buf_data is not None and len(buf_data) > 0:
+                if buf_logit is None:
+                    _, _, buf_logit = self.forward_batched(buf_data.to(self.device))
+                control_res = torch.sigmoid(buf_logit).squeeze(-1).detach()
+            else:
+                control_res = treatment_res.new_zeros(0)
+        # 전역 RNG 오염 격리(2026-09-14, 모듈 docstring "전역 RNG 오염" 참고)
+        # — optimize_ssf_masks() 내부(_optimize_old_mask/_optimize_new_mask)의
+        # M_c/M_t 초기화(torch.rand)가 전역 RNG를 소비해, ss=ssf/mm=ssf 여부에
+        # 따라 그 뒤 메인 모델 학습 루프가 보는 셔플 시퀀스가 달라지던 문제.
+        # 라운드마다(self._round) 다른 파생 시드로 격리한다.
+        with torch.random.fork_rng():
+            torch.manual_seed(derived_seed(self._seed, "ssf_masks", self._round))
+            M_c_bin, M_t_bin, M_t_cont, M_c_cont = optimize_ssf_masks(
+                control_res, treatment_res, self.device)
+        return SSFMaskContext(
+            buf_data=buf_data, control_res=control_res, M_c_bin=M_c_bin,
+            new_data=new_data, treatment_res=treatment_res, M_t_bin=M_t_bin,
+            M_t_cont=M_t_cont, M_c_cont=M_c_cont)
 
     @staticmethod
     def _label_budget_int(n: int, labeling_budget: Dict[str, Any]) -> int:
@@ -207,8 +245,12 @@ class CLClient:
                 기존 이진 라벨 방식으로 폴백 — 다른 컴포넌트는 이 인자를 모른다).
 
         Returns:
-            {'round', 'drift_detected', 'drift_score', 'avg_train_loss',
-             'threshold', 'eval_scores' (T개 Tensor), 'eval_labels' (T개 Tensor)}
+            {'round', 'exp_idx', 'drift_detected', 'drift_score',
+             'avg_train_loss', 'threshold', 'eval_scores' (T개 Tensor),
+             'eval_labels' (T개 Tensor), 'n_selected', 'label_budget_int',
+             'n_optimizer_steps', 'first_epoch_avg_loss',
+             'last_epoch_avg_loss'} — 마지막 5개는 15절 스모크 테스트
+            정량 게이트(experiments/smoke_test.py)가 읽는 진단 필드.
         """
         self._round += 1
         new_data = train_data.to(self.device)
@@ -216,11 +258,11 @@ class CLClient:
 
         # ---- Step 2: Drift 감지 (buf_ref = 이전 experience까지의 버퍼) ----
         buf_data, _ = self.memory_manager.get_buffer()
+        new_logit = buf_logit = None  # dd=cade처럼 공유 표현을 안 쓰면 None 유지
         if self.drift_detector.uses_shared_representation:
             self.model.eval()
             with torch.no_grad():
                 _, _, new_logit = self.forward_batched(new_data)
-                buf_logit = None
                 if buf_data is not None:
                     _, _, buf_logit = self.forward_batched(buf_data.to(self.device))
             drift_score = self.drift_detector.get_drift_score(new_logit, buf_logit)
@@ -230,30 +272,34 @@ class CLClient:
             drift_score = self.drift_detector.get_drift_score(new_data, buf_raw)
             drift_detected = self.drift_detector.detect(new_data, buf_raw)
 
+        # Item 1+2 — SSF 공유 마스크(M_c/M_t)를 라운드당 1회 계산해
+        # sample_selector/memory_manager가 공유한다(둘 중 하나라도 소비할
+        # 때만). Step 2가 이미 shared-representation 경로로 new_logit/
+        # buf_logit을 계산했다면 재사용 — dd=cade와 짝지어진 경우만 별도
+        # forward(`_compute_ssf_masks` 내부에서 처리).
+        ssf_ctx: Optional[SSFMaskContext] = None
+        if (hasattr(self.sample_selector, "set_ssf_masks")
+                or hasattr(self.memory_manager, "set_ssf_masks")):
+            ssf_ctx = self._compute_ssf_masks(new_data, buf_data, new_logit, buf_logit)
+            if hasattr(self.sample_selector, "set_ssf_masks"):
+                self.sample_selector.set_ssf_masks(ssf_ctx)
+            if hasattr(self.memory_manager, "set_ssf_masks"):
+                self.memory_manager.set_ssf_masks(ssf_ctx)
+
         # ---- Step 3: 샘플 선택과 라벨 예산 확정 ----
         if self.track == "B":
-            # CND-IDS 원 논문(Fuhrman et al., Algorithm 1: "Get Xtrain from
-            # experience data Ei" -> "Fit CFE to Xtrain")은 label_budget
-            # 개념 없이 experience 전체를 그대로 학습에 쓴다.
-            # CNDIDSAntiForgetting.compute_loss()도 selected_labels를 전혀
-            # 쓰지 않는 라벨-프리 설계다(12.5절, "라벨-프리 준수" 참고) —
-            # 즉 Track B는 애초에 라벨을 한 개도 소비하지 않으므로,
-            # "라벨링 비용 절약"을 명목으로 한 label_budget 제한을 적용하면
-            # 아낀 라벨 비용 없이 원 논문 대비 데이터만 1/10로 줄어드는
-            # 결과가 된다(실측 확인 후 사용자 결정,
-            # docs/metric_justification.md 참고). Track B는 label_budget
-            # 게이트를 건너뛰고 new_data 전체를 그대로 쓴다.
+            # CND-IDS 원 논문(Fuhrman et al., Algorithm 1)은 label_budget
+            # 없이 experience 전체를 학습에 쓴다. CNDIDSAntiForgetting.
+            # compute_loss()도 selected_labels를 쓰지 않는 라벨-프리 설계
+            # (사용자 결정, docs/metric_justification.md).
             label_budget_int = len(new_data)
             selected_data = new_data
             selected_labels = new_labels
             selected_category = train_category
         else:
             label_budget_int = self._label_budget_int(len(new_data), labeling_budget)
-            # SSFSampleSelector 전용 훅 — 이진 라벨 쿼터보다 다중클래스 쿼터가
-            # 전체 성능과 U2R 라운드 성능 둘 다 더 낫다는 걸 재검증 후 확인해
-            # 채택했다(ssf_sample_selector.py 모듈 docstring "2026-08-26
-            # 재검증" 절 참고 — 한 번 기각했다가 낡은 A/B 비교였음이 밝혀져
-            # 다시 채택함).
+            # SSFSampleSelector 전용 훅 — 다중클래스 쿼터 채택 근거는
+            # ssf_sample_selector.py "재검증" 절.
             if hasattr(self.sample_selector, "select_with_category") and train_category is not None:
                 sel_idx = self.sample_selector.select_with_category(
                     new_data, new_labels, train_category, label_budget_int, drift_score)
@@ -265,12 +311,31 @@ class CLClient:
             selected_data = new_data[sel_idx]
             selected_labels = new_labels[sel_idx]
             selected_category = train_category[sel_idx] if train_category is not None else None
-        # selected_data(Track A는 라벨 예산 안의 데이터, Track B는 위에서
-        # 정한 대로 experience 전체) 중 실제로 "정상(label=0)"이라고 알려진
-        # 서브셋 — CADE-MAD/PCA 재보정(step 6)과 CND-IDS 클러스터링(아래)
-        # 양쪽에서 "정상 참조"로 쓴다. 별도로 고정된 참조 표본을 만들지 않고
-        # selected_data에서 바로 걸러내므로 데이터 규모에 자동으로 비례한다
-        # (docs/metric_justification.md 참고).
+            if ssf_ctx is not None:
+                # SSFMemoryManager가 "대표적이지만 미선택인 잔여"를 가려낼
+                # 때 씀(ssf_memory_manager.py 참고) — new_data 기준 인덱스.
+                ssf_ctx.sel_idx = torch.as_tensor(
+                    sel_idx, dtype=torch.long, device=new_data.device)
+            # Item 8b — SPIDER self-training(Algorithm 1의 (c) 요소).
+            # mm=spider일 때만, GPMAntiForgetting처럼 이 훅을 구현한
+            # anti_forgetting에만 sel_idx의 여집합(라벨 예산 밖 잔여)을
+            # 전달한다 — Track B는 selected_data가 new_data 전체라 여집합이
+            # 항상 비고, af=cndids는 애초에 이 훅이 없어 자연히 no-op.
+            if self.combo["memory_manager"] == "spider" and hasattr(self.anti_forgetting, "set_self_training_pool"):
+                sel_mask = torch.zeros(len(new_data), dtype=torch.bool, device=new_data.device)
+                sel_mask[torch.as_tensor(sel_idx, dtype=torch.long, device=new_data.device)] = True
+                self.anti_forgetting.set_self_training_pool(new_data[~sel_mask])
+            # GPMAntiForgetting 전용 훅(2026-09-14, gpm_anti_forgetting.py
+            # "라벨예산 면제" 절 참고) — CADEDriftDetector/SPIDERMemoryManager와
+            # 같은 근거(원 논문에 라벨예산 개념 없음)로, SVD 기저 계산에 쓸
+            # activation 표본을 selected_data(라벨예산 서브셋)가 아니라
+            # new_data(라운드 전체)에서 직접 뽑도록 라운드당 1회 넘겨준다 —
+            # 분류기 학습 자체(task loss)는 여전히 selected_data만 쓴다.
+            if (getattr(self.anti_forgetting, "consumes_full_round_data", False)
+                    and hasattr(self.anti_forgetting, "set_full_round_data")):
+                self.anti_forgetting.set_full_round_data(new_data, new_labels)
+        # selected_data 중 label=0 서브셋 — anomaly_scorer 재보정(step 6)과
+        # CND-IDS 클러스터링의 "정상 참조"로 씀.
         normal_subset = selected_data[selected_labels == 0]
 
         if self.drift_detector.uses_shared_representation:
@@ -278,34 +343,40 @@ class CLClient:
             with torch.no_grad():
                 _, _, sel_logit = self.forward_batched(selected_data)
             self.drift_detector.fit(sel_logit, selected_labels)
-        elif hasattr(self.drift_detector, "fit_with_category") and selected_category is not None:
-            # CADEDriftDetector 전용 훅 — 다중클래스 family로 pairing/centroid를
-            # 만든다(components/cade/cade_drift_detector.py "2026-08-25" 절 참고).
-            self.drift_detector.fit_with_category(selected_data, selected_labels, selected_category)
+        elif hasattr(self.drift_detector, "fit_with_category") and train_category is not None:
+            # CADEDriftDetector 전용 — family 단위 pairing/centroid.
+            # consumes_full_round_data(2026-09-12, docs/design_decisions.md
+            # 5절) — CADE 원문에 라벨 예산 개념이 없어 selected_data(라벨 예산 통과분)
+            # 대신 new_data(그 라운드 전체)로 학습시킨다.
+            if getattr(self.drift_detector, "consumes_full_round_data", False):
+                self.drift_detector.fit_with_category(new_data, new_labels, train_category)
+            else:
+                self.drift_detector.fit_with_category(selected_data, selected_labels, selected_category)
         else:
             self.drift_detector.fit(selected_data, selected_labels)
 
-        # CND-IDS 전용 훅 — CND_IDS.py:fit() 진입부와 동일하게, 미니배치 학습이
-        # 시작되기 전 experience(라운드)당 한 번만 clustering을 수행한다
-        # (components/cndids/cndids_anti_forgetting.py 참고). 이번 라운드에
-        # 정상 라벨 선택 샘플이 하나도 없으면(현실적인 NIDS 데이터에서는
-        # 극히 드묾) 건너뛴다 — 그러면 이전 라운드에 학습된 K-Means/클러스터
-        # 상태가 그대로 유지되고(첫 라운드부터 그런 경우면
-        # CNDIDSAntiForgetting의 기존 폴백대로 전부 "정상"으로 간주).
-        if hasattr(self.anti_forgetting, "on_experience_start") and len(normal_subset) > 0:
+        # CND-IDS 전용 훅 — 미니배치 학습 전 라운드당 1회 clustering
+        # (components/cndids/cndids_anti_forgetting.py). 고정 정상 참조가
+        # 있으면(held_out_normal_reference) 매 라운드 그 시점 스케일로
+        # 먼저 전달한다 — 컴포넌트 내부의 저수지(`_normal_ref_pool`) 로직을
+        # 대체한다(set_held_out_reference가 없거나 참조가 없으면 기존
+        # 저수지 로직 유지, cndids_anti_forgetting.py 참고).
+        has_fixed_ref = False
+        if (self._held_out_normal_reference is not None
+                and hasattr(self.anti_forgetting, "set_held_out_reference")):
+            fixed_ref = self._held_out_normal_reference[exp_idx].to(self.device)
+            self.anti_forgetting.set_held_out_reference(fixed_ref)
+            has_fixed_ref = len(fixed_ref) > 0
+        if hasattr(self.anti_forgetting, "on_experience_start") and (has_fixed_ref or len(normal_subset) > 0):
             self.anti_forgetting.on_experience_start(selected_data, normal_subset)
 
         # ---- Step 4: 모델 학습 (selected_data만, replay_batch는 "이전" 버퍼) ----
         self.model.train()
+        n_sel = len(selected_data)
+
         total_loss = 0.0
         n_steps = 0
-        n_sel = len(selected_data)
-        # 2026-08-14 추가 — 첫 epoch과 마지막 epoch의 평균 손실을 따로
-        # 기록한다. 기존엔 전체 epoch 평균(avg_train_loss) 하나만 반환해서,
-        # smoke_test가 "학습 루프가 실행됐는가"(파라미터 변화량, optimizer
-        # step 횟수)는 검증해도 "손실이 실제로 줄어드는 방향으로 갔는가"는
-        # 전혀 검증하지 못했다(구조 전수 감사에서 발견) — first/last를 함께
-        # 반환해 smoke_test 쪽에서 발산 여부를 직접 판단할 수 있게 한다.
+        # 첫/마지막 epoch 평균 손실을 따로 기록 — smoke_test의 발산 감지용.
         first_epoch_loss_sum, first_epoch_steps = 0.0, 0
         last_epoch_loss_sum, last_epoch_steps = 0.0, 0
         for epoch_idx in range(self.epochs_per_experience):
@@ -323,9 +394,19 @@ class CLClient:
                 if r_data is not None:
                     replay_batch = (r_data.to(self.device), r_labels.to(self.device))
 
+                # Item 8b — SPIDER self-training. GPMAntiForgetting만 이
+                # 훅을 구현하므로 다른 anti_forgetting은 이 분기 자체를
+                # 타지 않는다(hasattr 게이팅).
+                loss_kwargs = {}
+                if hasattr(self.anti_forgetting, "get_self_training_batch"):
+                    self_training_batch = self.anti_forgetting.get_self_training_batch(
+                        self.model, self.batch_size)
+                    if self_training_batch is not None:
+                        loss_kwargs["self_training_batch"] = self_training_batch
+
                 self.optimizer.zero_grad()
                 loss = self.anti_forgetting.compute_loss(
-                    self.model, (batch_data, batch_labels), replay_batch)
+                    self.model, (batch_data, batch_labels), replay_batch, **loss_kwargs)
                 loss.backward()
                 self.anti_forgetting.project_gradients(self.model)
                 self.optimizer.step()
@@ -344,29 +425,42 @@ class CLClient:
         last_epoch_avg_loss = last_epoch_loss_sum / max(last_epoch_steps, 1)
 
         # ---- Step 5: 메모리 갱신 (학습 이후) ----
-        # 2026-08-26 재검증 후에도 기각 유지 — SSFMemoryManager의 다중클래스
-        # category 쿼터는 재검증(최신 코드 기준 4-way A/B) 후에도 이진 쿼터
-        # 보다 나쁨을 재확인했다(ssf_memory_manager.py 모듈 docstring 참고).
-        # 이진 라벨 쿼터만 쓴다.
-        self.memory_manager.update(selected_data, selected_labels, drift_detected)
+        # SSFMemoryManager는 이진 라벨 쿼터만 쓴다 — 다중클래스 쿼터는 A/B로
+        # 더 나쁨을 확인(ssf_memory_manager.py).
+        # SPIDERMemoryManager(Item 8a)는 라벨 예산 서브셋이 아니라 이번
+        # 라운드 전체(new_data)에서 무작위 표본을 뽑는다 — 원문의 "이전
+        # 태스크의 무작위 샘플"과 일치(spider_memory_manager.py 참고).
+        if getattr(self.memory_manager, "consumes_full_round_data", False):
+            self.memory_manager.update(new_data, new_labels, drift_detected)
+        else:
+            self.memory_manager.update(selected_data, selected_labels, drift_detected)
 
         # ---- Step 6: Anomaly Scorer 재보정 ----
-        # normal_subset이 비어있으면(이번 라운드 라벨 예산에 정상 샘플이 하나도
-        # 없었던 경우 — 현실적인 NIDS 데이터에서는 극히 드묾) 재보정을
-        # 건너뛰고 마지막으로 성공한 self._s_ref/scorer 내부 상태를 그대로
-        # 쓴다. score()를 빈 텐서에 호출하면 Track A의 compute_threshold가
-        # median()을 빈 텐서에 호출해 크래시하므로, 애초에 빈 입력으로
-        # score()/재보정을 시도하지 않는다.
-        if len(normal_subset) > 0:
-            # CADEMADScorer가 사설 인코더에 연결된 경우(위 __init__ 참고)는
-            # 원본 데이터를 그대로 넘긴다 — 그 안에서 스스로 재인코딩한다.
+        # Item 5 — PCAScorer(consumes_held_out_reference=True)는 원문의
+        # 고정 참조(init_normal)를 쓴다. held_out_normal_reference가 없는
+        # 호출(단위 테스트 등)은 기존처럼 이번 라운드 normal_subset으로
+        # 폴백한다 — 둘 다 없으면(비어있으면) 재보정을 건너뛰고 self._s_ref를
+        # 그대로 쓴다(빈 텐서로 score()를 호출하면 median()이 크래시).
+        if (getattr(self.anomaly_scorer, "consumes_held_out_reference", False)
+                and self._held_out_normal_reference is not None):
+            ref_raw = self._held_out_normal_reference[exp_idx].to(self.device)
+        elif getattr(self.anomaly_scorer, "consumes_full_round_data", False):
+            # CADEMADScorer 전용(2026-09-12, docs/design_decisions.md 5절) —
+            # dd=cade와 연결된 경우 fit()이 no-op이라 사실상 영향 없고, as=cade_mad가
+            # dd=cade 없이 단독일 때만 실제로 라벨 예산 밖 정상 표본까지 쓴다.
+            ref_raw = new_data[new_labels == 0]
+        else:
+            ref_raw = normal_subset
+        if len(ref_raw) > 0:
+            # CADEMADScorer가 사설 인코더에 연결된 경우 원본 데이터를 그대로
+            # 넘긴다 — 그 안에서 재인코딩.
             if self.anomaly_scorer.uses_shared_representation:
                 self.model.eval()
                 with torch.no_grad():
-                    current_normal_encoded, _, _ = self.forward_batched(normal_subset)
+                    current_normal_encoded, _, _ = self.forward_batched(ref_raw)
                 current_normal_encoded = current_normal_encoded.detach()
             else:
-                current_normal_encoded = normal_subset
+                current_normal_encoded = ref_raw
             self.anomaly_scorer.refit_on_update(current_normal_encoded)
             self._s_ref = self.anomaly_scorer.score(current_normal_encoded).detach()
 
@@ -381,58 +475,32 @@ class CLClient:
                     scores = self.anomaly_scorer.score(z.detach())
                 else:
                     # CADEMADScorer가 사설 인코더에 연결된 경우 — 원본
-                    # 데이터를 그대로 넘긴다(Step 6과 동일한 이유).
+                    # 데이터를 그대로 넘긴다(Step 6과 동일).
                     scores = self.anomaly_scorer.score(test_x.to(self.device))
                 eval_scores.append(scores.cpu())
                 eval_labels.append(test_y.cpu())
 
-        # 2026-09-01 수정 — self.track이 아니라 anomaly_scorer 자체가
-        # 선언하는 threshold_needs_labels로 분기한다(base/anomaly_scorer.py
-        # "2026-09-01" 절 참고). 지금까지는 track과 완전히 겹쳤지만(Track
-        # A=cade_mad/none=False, Track B=pca=True), Track B에 as=cade_mad가
-        # 추가되면서 "Track B이지만 라벨 불필요"인 경우가 처음 생겼다 —
-        # 그 경우도 Track A의 dd=none+as=cade_mad와 동일하게 s_ref 방식을
-        # 써야 한다.
+        # threshold_needs_labels(scorer 속성, base/anomaly_scorer.py)로 분기 —
+        # track이 아니라 scorer 자체 속성인 이유: Track B의 as=cade_mad
+        # 추가로 "Track B인데 라벨 불필요"인 경우가 생겼기 때문.
         if not self.anomaly_scorer.threshold_needs_labels and self._s_ref is not None:
             threshold = self.anomaly_scorer.compute_threshold(self._s_ref, None)
         else:
-            # threshold_needs_labels=True(pca)는 원래도 pooled eval score
-            # 방식. threshold_needs_labels=False인데 self._s_ref가 여태
-            # 한 번도 채워지지 않은 극단적 예외 상황(지금까지 모든 라운드에서
-            # 정상 라벨 선택 샘플이 없었던 경우)에도 크래시하지 않도록 같은
-            # 폴백을 쓴다.
-            #
-            # **2026-08-26 발견·수정 — 미래 라운드 test 라벨이 threshold
-            # 보정에 새어 들어가던 문제**: `eval_scores`/`eval_labels`는
-            # `all_test_splits`(experience 0..T-1 전부) 순서 그대로 쌓이는데,
-            # 여기서 그 전체(`torch.cat(eval_scores)`)를 threshold 계산에
-            # 썼다 — 즉 라운드 `exp_idx`의 모델이 아직 등장하지도 않은
-            # 라운드 `exp_idx+1..T-1`의 실제 라벨까지 미리 보고 그 라벨들
-            # 기준으로 최적 threshold를 고르는 셈이었다(`PCAScorer`의
-            # Best-F, `precision_recall_curve` 기반 오라클 탐색이라 라벨을
-            # 직접 소비한다 — 이 버그 발견 당시엔 Track B의 유일한
-            # anomaly_scorer가 이 경로였다). 이 threshold가 R-matrix의
-            # **대각선(R[i,i], 그 라운드 자신의 test 성능)까지** 결정하므로,
-            # `bwt()`가 쓰는 모든 대각선 값이 미래 정보로 오염된 threshold로
-            # 계산되고 있었다 — 당시 Track B 3개 조합(pca) 전부의 BWT가
-            # 이 영향을 받았다.
-            # eval "범위"(모든 T개 라운드에 대해 채점하는 것, forward
-            # transfer 측정용 — 정당한 리포팅)와 threshold "보정 기준"
-            # (지금까지 실제로 등장한 라운드만 — 인과적으로 정당해야 함)을
-            # 분리한다: threshold는 `eval_scores[:exp_idx+1]`(0..exp_idx,
-            # 이번 라운드 자신의 test 포함, 그 이후는 제외)로만 계산하고,
-            # R-matrix 행 자체(`grid_runner.py`가 `out["eval_scores"]`
-            # 전체로 구성)는 그대로 T개 전부를 채점해 forward transfer
-            # 리포팅은 그대로 유지한다.
+            # threshold 계산을 eval_scores[:exp_idx+1]
+            # (0..exp_idx, 미래 라운드 제외)로 한정한다. 이전엔 전체
+            # eval_scores(0..T-1)를 썼는데, 이러면 아직 등장하지 않은 라운드의
+            # test 라벨로 threshold를 고르는 셈이 되어(PCAScorer의 Best-F가
+            # 라벨을 직접 소비) R-matrix 대각선(R[i,i])과 그걸 쓰는 bwt()가
+            # 미래 정보로 오염됐다. R-matrix 행 자체는 그대로 T개 전부
+            # 채점(forward transfer 리포팅 유지), threshold 보정 기준만 분리.
             causal_scores = torch.cat(eval_scores[:exp_idx + 1])
             causal_labels = torch.cat(eval_labels[:exp_idx + 1])
             threshold = self.anomaly_scorer.compute_threshold(causal_scores, causal_labels)
 
         # ---- Step 8: 다음 라운드 준비 ----
         self.anti_forgetting.on_task_end(self.model)
-        # SPIDERMemoryManager 전용 훅 — 표준 계약(모델 접근 없음) 밖에서
-        # "직전 태스크까지 학습된 모델" 스냅샷이 필요한 유일한 memory_manager
-        # (components/spider_gpm/spider_memory_manager.py 참고).
+        # SPIDERMemoryManager 전용 훅 — 직전 태스크 모델 스냅샷 필요
+        # (components/spider_gpm/spider_memory_manager.py).
         if hasattr(self.memory_manager, "set_snapshot_model"):
             self.memory_manager.set_snapshot_model(self.model)
 

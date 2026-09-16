@@ -10,6 +10,14 @@ from testbed.base.models import BaseCLModel
 
 class BaseAntiForgetting(ABC):
     backbone_type: str  # 'classifier' | 'autoencoder'
+    # GPMAntiForgetting 전용(2026-09-14) — True면 `cl_client.py` Step 3가
+    # SVD 기저 계산용 activation 표본을 selected_data(라벨예산 서브셋)
+    # 대신 new_data(라운드 전체)로 `set_full_round_data()`에 넘긴다(원
+    # 논문에 라벨예산 개념 없음). 기본값 False를 여기 명시 — base/
+    # anomaly_scorer.py, base/drift_detector.py, base/memory_manager.py의
+    # 동일 속성과 계약 통일(2026-09-14 재검토로 이 파일만 빠졌던 것을
+    # 발견·수정).
+    consumes_full_round_data: bool = False
 
     @abstractmethod
     def compute_loss(self, model: BaseCLModel,

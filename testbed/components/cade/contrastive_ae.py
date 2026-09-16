@@ -6,11 +6,19 @@ CADE/cade/autoencoder.py:52-107 — 대칭 encoder/decoder, 마지막 encoder �
   total = contrastive_lambda * L_con + MSE(recon, x)
 기본 margin=10.0, contrastive_lambda=0.1 (CADE/cade/utils.py:68-73).
 
+**논문 Eq.1(제곱거리·제곱힌지)과 다르지만 CADE 실제 공개 코드와는 일치**:
+CADE 논문 Eq.1은 `dist^2`/`relu(margin-dist)^2`(제곱)를 쓰지만, 위
+`autoencoder.py:210-232`의 실제 구현은 제곱하지 않은 L2 거리를 그대로
+쓴다(`contrastive_loss()`의 `dist = sqrt(...)`가 이를 그대로 이식한 것).
+즉 이 구현은 논문 수식과는 다르지만 CADE 저자가 실제로 배포·실행한 코드와는
+정확히 같다 — "원 논문 코드가 있으면 그대로 이식한다"는 이 테스트베드의
+원칙에 따라 공개 코드 쪽을 따랐다.
+
 PRD 12.1절 — 이 클래스는 Track A 메인 분류기와 완전히 독립된 "사설(private)"
 encoder다. CADEDriftDetector가 이를 내부에 소유하며, 메인 모델의 z/logit을
 가져다 쓰지 않는다.
 
-**2026-08-12 발견·수정 — class-aware pairing 누락**: `contrastive_loss()`는
+**class-aware pairing 누락**: `contrastive_loss()`는
 이미 배치를 절반으로 나눠 위치별로 is_same을 계산하지만, 그 배치 자체가
 "어떻게 구성되는가"는 별개 문제였다 — 이전에는 무작위 셔플 후 그냥 슬라이싱만
 했다. CADE 원문(`cade/data.py:268-345`, `epoch_batches()`)은 배치를 "무작위
@@ -25,7 +33,7 @@ class-incremental 분할에서 실측된 U2R 52건 단독 라운드)에서 무�
 설계였다. 원문은 이중 for-loop(batch × position)로 `np.random.choice`를
 호출하지만, 이 테스트베드는 (label, similar 여부) 조합별로 그룹화해 한 번에
 `torch.randint`+gather로 처리한다 — 표본 분포(각 위치가 해당 풀에서 복원추출로
-독립적으로 뽑힘)는 동일하되 CICIDS2018 규모(라운드당 수십만 건)에서도
+독립적으로 뽑힘)는 동일하되 라운드당 데이터가 많은 경우에도
 감당 가능하도록 벡터화했다. 이번 라운드 데이터에 클래스가 하나뿐이면(공격이
 전혀 없는 라운드 등, class-incremental 분할에서 자연 발생) dissimilar 짝을
 구성할 데이터 자체가 없으므로 similar 풀로 대체한다(원 논문이 다루지 않는

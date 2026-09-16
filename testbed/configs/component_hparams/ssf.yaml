@@ -1,10 +1,12 @@
 # SSF 원 논문 근거 (SSF-Strategic-Selection-and-Forgetting/ssf.py, utils.py)
 # 서브에이전트 조사로 파일:라인까지 대조 완료 (testbed/docs/metric_justification.md 참고)
 
-kl_max_iter: 100
-# SSF utils.py:optimize_old_mask/optimize_new_mask 의 고정 "steps=100" 기본값
-# (CLI로 노출되지 않고 코드에 고정됨, ssf.py:230-231에서 override 없이 호출).
-# KL-divergence 기반 마스크(M_c/M_t) 최적화 반복 횟수.
+# kl_max_iter — SSF utils.py:optimize_old_mask/optimize_new_mask의 고정
+# "steps=100" 기본값(CLI로 노출되지 않고 코드에 고정됨, ssf.py:230-231에서
+# override 없이 호출). Item 1+2(공유 마스크, `components/ssf/ssf_masks.py`)
+# 도입 이후로는 이 파일이 아니라 `optimize_ssf_masks()`의 기본값(steps=100)
+# 으로 직접 하드코딩되어 있다 — 원문 자신도 이 값을 설정 가능하게 노출하지
+# 않으므로 컴포넌트 kwargs로 병합할 필요가 없다(참고용 기록만 남긴다).
 
 drift_threshold: 0.05
 # SSF ssf.py:49 — K-S 검정(scipy.stats.ks_2samp) p-value 기준. p < drift_threshold

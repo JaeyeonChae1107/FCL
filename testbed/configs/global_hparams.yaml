@@ -60,7 +60,8 @@ batch_size_track_b: 64
 # 지표가 흐려진다. 이제 `data/dataset_loader.py`의 `load_dataset()`이
 # n_experiences=None(기본)일 때 데이터셋 자신의 실제 공격 category 수로
 # 자동 결정한다("라운드 하나 = 새 공격 유형 하나") — `_count_attack_categories()`
-# 참고. NSL-KDD 4라운드, UNSW-NB15/CICIDS2018은 실제 원본 category 수만큼.
+# 참고. NSL-KDD 4라운드, UNSW-NB15는 실제 원본 category 수만큼(CICIDS2018은
+# 2026-09-11부로 실험 범위에서 제외).
 # 2026-08-11 재검토: hidden_dim/latent_dim은 더 이상 여기 고정값으로 두지
 # 않는다. SSF 원 논문(utils.py:32-36, nearest_pow2=2**round(log2(input_dim));
 # hidden=nearest_pow2//2; latent=nearest_pow2//4)은 이 공식을 데이터셋을

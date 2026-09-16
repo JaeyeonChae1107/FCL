@@ -5,9 +5,9 @@ PR-AUC 내림차순)으로 정렬한 reports/leaderboard_{dataset}.csv를 **데�
 따로** 만든다. Track A/B/전체 1위를 명시하고, 상위 5개는 BWT(+Track A는
 best_f1_reference)도 함께 표시한다.
 
-**데이터셋을 섞지 않는 이유**: NSL-KDD/UNSW-NB15/CICIDS2018은 규모·난이도가
+**데이터셋을 섞지 않는 이유**: NSL-KDD/UNSW-NB15는 규모·난이도가
 서로 크게 달라(예: 같은 조합이라도 F1이 데이터셋마다 0.6대~0.9대까지 벌어짐,
-docs/metric_justification.md 참고) 세 데이터셋 결과를 하나의 표에 섞어 정렬하면
+docs/metric_justification.md 참고) 두 데이터셋 결과를 하나의 표에 섞어 정렬하면
 "어느 조합이 최선인가"가 아니라 "어느 조합이 우연히 가장 쉬운 데이터셋에
 배정됐는가"를 보게 된다. 그래서 데이터셋마다 독립적으로 리더보드를 만들고,
 비교는 반드시 같은 데이터셋 내에서만 한다.
@@ -17,10 +17,19 @@ import glob
 import io
 import json
 import os
-from typing import Any, Dict, List
+import sys
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+
+# 2026-09-14 추가 — Windows 콘솔(cp949 등)에서 print()가 em-dash(—) 같은
+# 문자를 만나면 UnicodeEncodeError로 죽는다(experiments/smoke_test.py 모듈
+# docstring 참고, X-IIoTID 스모크에서 실제로 재현됨). print_report()도 한글
+# 메시지를 많이 출력하므로 동일하게 방어한다.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 from testbed.common.compatibility import NO_CL_BASELINE_COMBO, enumerate_valid_combos
 from testbed.common.result_schema import make_combo_id
@@ -36,11 +45,8 @@ SUMMARY_COLS = [
     "f1", "precision", "recall", "pr_auc", "bwt", "n_drift_detected",
     "f1_delta_vs_no_cl", "bwt_delta_vs_no_cl",
 ]
-# n_drift_detected/f1_delta_vs_no_cl/bwt_delta_vs_no_cl은 2026-09-03 추가 —
-# summary_*.csv가 "한 화면에서 훑어볼 수 있는" 요약이라는 원래 목적을
-# 지키려면, drift 횟수와 no-CL 대비 차이도 별도 파일(drift_summary_*.csv,
-# no_cl_comparison_*.csv)을 열지 않고 여기서 바로 보여야 한다는 사용자
-# 피드백을 반영했다.
+# summary_*.csv가 "한 화면에서 훑어볼 수 있는" 요약이라는 목적을 지키려면
+# drift 횟수와 no-CL 대비 차이도 별도 파일을 열지 않고 여기서 보여야 한다.
 
 
 def load_all_results() -> List[Dict[str, Any]]:
@@ -58,6 +64,22 @@ def load_all_results() -> List[Dict[str, Any]]:
         if result.get("combo_id") in valid_ids:
             results.append(result)
     return results
+
+
+def load_joint_baseline(dataset_name: str) -> Optional[Dict[str, Any]]:
+    """6.2 Joint/Offline 상한선(`grid_runner.py run_joint_baseline()`)
+    결과를 읽는다. `combo_id="JOINT_BASELINE"`이 `enumerate_valid_combos()`
+    의 유효 조합(78개)에 속하지 않아 `load_all_results()`가 걸러내므로(의도된
+    동작 — 그리드와 섞이면 안 됨: perf_matrix가 1×T로 다른 조합의
+    T×T와 모양이 다르고 5-슬롯 값도 전부 "joint" 마커라 정렬/비교 대상이
+    아님), 별도 경로로 직접 읽는다. 2026-09-14 재검토 전까지는 계산만 되고
+    어디에도 리포트되지 않던 항목 — main()/print_report()에서 참고용으로만
+    표시한다."""
+    path = os.path.join(RESULTS_DIR, f"JOINT_BASELINE__{dataset_name}.json")
+    if not os.path.exists(path):
+        return None
+    with io.open(path, encoding="utf-8") as f:
+        return json.load(f)
 
 
 def build_leaderboard(results: List[Dict[str, Any]]) -> pd.DataFrame:
@@ -78,7 +100,7 @@ CHART_COLS = [
 def attach_no_cl_deltas(df: pd.DataFrame, dataset_name: str) -> pd.DataFrame:
     """"지속학습을 전혀 쓰지 않은" 기준선(common/compatibility.py
     NO_CL_BASELINE_COMBO, 사용자 결정) 대비 각 조합의 f1/pr_auc/bwt 차이를
-    계산한다(2026-09-03 추가). 새로 실행하지 않는다 — 그 기준선도
+    계산한다. 새로 실행하지 않는다 — 그 기준선도
     enumerate_valid_combos()에 포함된 그리드의 일부
     (A_dd=none_ss=random_mm=none_af=none_as=none)라 results/에 이미 있는 값을
     그대로 찾아 쓴다.
@@ -105,7 +127,7 @@ def attach_no_cl_deltas(df: pd.DataFrame, dataset_name: str) -> pd.DataFrame:
 def write_drift_summary(df: pd.DataFrame, dataset_name: str) -> None:
     """(drift_detector, sample_selector, memory_manager)별 drift 감지 횟수와
     라운드별 감지율을 집계한다 — "데이터셋별로 drift detection을 몇 번
-    했는지" 질문에 답하기 위한 리포트(2026-09-03 추가).
+    했는지" 질문에 답하기 위한 리포트.
     drift_detected_per_round는 CLClient.run_experience()가 이미 매 라운드
     돌려주던 값을 grid_runner.py가 기록만 한 것이다(학습 경로 무변경).
 
@@ -151,9 +173,17 @@ def write_drift_summary(df: pd.DataFrame, dataset_name: str) -> None:
 
 def write_no_cl_comparison(df: pd.DataFrame, dataset_name: str) -> None:
     """no-CL 기준선(NO_CL_BASELINE_COMBO) 대비 f1/pr_auc/bwt 차이와, 라운드별
-    망각(초반 라운드 성능 대비 마지막 모델의 그 라운드 성능 하락)을 조합별로
-    나란히 보여준다(2026-09-03 추가). perf_matrix(R행렬)는 grid_runner.py가
+    BWT(초반 라운드 성능 대비 마지막 모델의 그 라운드 성능 변화)를 조합별로
+    나란히 보여준다. perf_matrix(R행렬)는 grid_runner.py가
     이미 계산해 저장한 값을 그대로 쓴다 — 추가 학습/평가 없음.
+
+    **부호 규약(2026-09-15 통일)**: `bwt_exp{j}` = R[마지막 라운드][j] -
+    R[j][j] — `common/metrics.py`의 `bwt()`와 정확히 같은 부호(음수=망각,
+    양수=개선). 예전엔 이 열 이름이 `forgetting_exp{j}`이고 부호가 반대
+    (R[j][j] - R[마지막][j], 양수=망각)였는데, `bwt()`·리더보드의 `bwt`
+    컬럼과 방향이 어긋나 있었다(design_decisions.md 7절이 지적한 "BWT 부호
+    규약이 파일마다 다르다"는 문제). 프로젝트 전체에서 "음수=망각"으로
+    통일했다 — 더 이상 방향을 따로 캡션에 명시할 필요가 없다.
 
     Track B(라벨-프리, experience 전체 사용)는 Track A 기준선과 학습 조건
     자체가 다르므로(configs/global_hparams.yaml 참고) f1/bwt 차이는
@@ -179,9 +209,9 @@ def write_no_cl_comparison(df: pd.DataFrame, dataset_name: str) -> None:
         }
         for j in range(min(n_rounds, R.shape[0])):
             row[f"final_f1_exp{j}"] = float(R[-1][j])
-            row[f"forgetting_exp{j}"] = float(R[j][j] - R[-1][j])
+            row[f"bwt_exp{j}"] = float(R[-1][j] - R[j][j])
             row[f"no_cl_final_f1_exp{j}"] = float(baseline_R[-1][j])
-            row[f"no_cl_forgetting_exp{j}"] = float(baseline_R[j][j] - baseline_R[-1][j])
+            row[f"no_cl_bwt_exp{j}"] = float(baseline_R[-1][j] - baseline_R[j][j])
         rows.append(row)
     out_df = pd.DataFrame(rows).sort_values(by="f1", ascending=False).reset_index(drop=True)
     os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -189,14 +219,16 @@ def write_no_cl_comparison(df: pd.DataFrame, dataset_name: str) -> None:
     with io.open(out_path, "w", encoding="utf-8-sig", newline="") as f:
         f.write(f"# 기준선: {baseline['combo_id']} (backbone만 BCE로 계속 학습, "
                 "drift/메모리/망각방지/별도 scorer 없음). Track B 조합은 라벨 예산 "
-                "없이 experience 전체를 쓰므로 학습 조건 자체가 다르다 "
+                "없이 experience 전체를 쓰므로 학습 조건 자체가 다르다. "
+                "bwt_exp{j}는 음수=망각/양수=개선(common/metrics.py의 bwt()와 "
+                "동일 부호) "
                 "(write_no_cl_comparison() docstring 참고)\n")
         out_df.to_csv(f, index=False)
 
 
 def write_per_category_reports(results: List[Dict[str, Any]], dataset_name: str) -> None:
     """공격 category별 recall/망각과, category별 난이도(전 조합 평균)를
-    리포트한다(2026-09-03 추가). data/dataset_loader.py가 이제 보존하는
+    리포트한다. data/dataset_loader.py가 보존하는
     test_category와, grid_runner.py가 이미 계산해 둔 eval_scores/threshold만
     재사용한다 — 추가 forward/학습 없음. per_category_final이 없는(구
     code_version) 결과는 건너뛴다.
@@ -245,11 +277,10 @@ def write_reports(df: pd.DataFrame, dataset_name: str) -> None:
     os.makedirs(REPORTS_DIR, exist_ok=True)
     df.to_csv(os.path.join(REPORTS_DIR, f"leaderboard_{dataset_name}.csv"),
               index=False, encoding="utf-8-sig")
-    # 2026-09-03 수정 — df[SUMMARY_COLS]/df[CHART_COLS]에서 df.reindex(columns=...)로
-    # 바꿨다. attach_no_cl_deltas()가 없거나(no-CL 기준선 결과 자체가 없는
-    # 경우) results/에 이 필드들이 생기기 전(구 code_version)의 결과만 섞여
-    # 있으면 그 컬럼이 df에 아예 없어 df[cols]가 KeyError로 죽는다 — reindex는
-    # 없는 컬럼을 NaN으로 채워 넣을 뿐 죽지 않는다.
+    # df[SUMMARY_COLS]/df[CHART_COLS] 대신 df.reindex(columns=...) 사용 —
+    # results/에 이 필드들이 생기기 전(구 code_version) 결과만 섞여 있으면
+    # 그 컬럼이 df에 없어 df[cols]가 KeyError로 죽는다. reindex는 없는
+    # 컬럼을 NaN으로 채울 뿐 죽지 않는다.
     df.reindex(columns=SUMMARY_COLS).to_csv(
         os.path.join(REPORTS_DIR, f"summary_{dataset_name}.csv"),
         index=False, encoding="utf-8-sig")
@@ -260,7 +291,8 @@ def write_reports(df: pd.DataFrame, dataset_name: str) -> None:
         json.dump(chart_records, f, ensure_ascii=False, indent=2)
 
 
-def print_report(df: pd.DataFrame, dataset_name: str) -> None:
+def print_report(df: pd.DataFrame, dataset_name: str,
+                  joint_baseline: Optional[Dict[str, Any]] = None) -> None:
     print("=" * 70)
     print(f"CL-NIDS-Bench v2.5 리더보드 - {dataset_name}")
     print("=" * 70)
@@ -290,11 +322,8 @@ def print_report(df: pd.DataFrame, dataset_name: str) -> None:
     print("동일한 프로토콜로 채점되므로 위 순위는 두 Track을 함께 비교한 것이다.")
     print()
 
-    # 2026-09-03 수정 — F1/PR-AUC/BWT 한 줄에 drift 감지 횟수와 no-CL 기준선
-    # 대비 ΔF1/ΔBWT까지 한 번에 보여준다(이전엔 top-5를 세 번 따로 순회하며
-    # 흩어져 있었다 — "리더보드를 한 번에 깔끔하게 보고 싶다"는 사용자
-    # 피드백 반영). 값이 없는(구 code_version) 결과는 그 항목만 조용히
-    # 생략한다.
+    # F1/PR-AUC/BWT 한 줄에 drift 감지 횟수와 no-CL 기준선 대비 ΔF1/ΔBWT까지
+    # 한 번에 보여준다. 값이 없는(구 code_version) 결과는 그 항목만 생략한다.
     print("상위 5개 조합:")
     for _, row in df.head(5).iterrows():
         parts = [f"F1={row['f1']:.4f}", f"PR-AUC={row['pr_auc']:.4f}", f"BWT={row['bwt']:.4f}"]
@@ -308,8 +337,8 @@ def print_report(df: pd.DataFrame, dataset_name: str) -> None:
         print(f"  {row['combo_id']}: " + " ".join(parts))
     print()
 
-    # 2026-09-03 추가 — "어떤 공격을 잘/잘 못 감지하는지"를 전체 1위와 no-CL
-    # 기준선에 대해 콘솔에서 바로 보여준다(상세는 reports/per_category_*.csv).
+    # "어떤 공격을 잘/못 감지하는지"를 전체 1위와 no-CL 기준선에 대해 콘솔에서
+    # 바로 보여준다(상세는 reports/per_category_*.csv).
     def _print_category_extremes(label: str, row: "pd.Series") -> None:
         pcf = row.get("per_category_final")
         if not isinstance(pcf, dict) or not pcf:
@@ -327,8 +356,7 @@ def print_report(df: pd.DataFrame, dataset_name: str) -> None:
                 df[df["is_no_cl_baseline"]].iloc[0])
         print()
 
-    # 2026-09-03 추가 — no-CL 기준선을 top-5 밖에서도(대개 여기 속한다 — 지속
-    # 학습 메커니즘이 전혀 없으니) 바로 찾을 수 있도록 별도로 명시한다.
+    # no-CL 기준선은 top-5 밖에 있는 경우가 많아 별도로 명시한다.
     if "is_no_cl_baseline" in df.columns and df["is_no_cl_baseline"].any():
         baseline = df[df["is_no_cl_baseline"]].iloc[0]
         baseline_rank = int(df.index[df["is_no_cl_baseline"]][0]) + 1
@@ -338,8 +366,20 @@ def print_report(df: pd.DataFrame, dataset_name: str) -> None:
               f"- 상세 라운드별 망각 비교는 reports/no_cl_comparison_{dataset_name}.csv 참고")
         print()
 
-    # 2026-09-03 추가 — (drift_detector, sample_selector, memory_manager)별
-    # drift 평균 감지 횟수. 해석 주의는 write_drift_summary() docstring 참고.
+    # 6.2 Joint/Offline 상한선 — 그리드 밖의 참고용 기준선이라 순위표
+    # (leaderboard/summary)에는 섞지 않고 여기서만 별도로 보여준다
+    # (load_joint_baseline() docstring 참고).
+    if joint_baseline is not None:
+        f1_gap = joint_baseline["f1"] - overall_top["f1"]
+        print(f"[Joint/Offline 상한선] F1={joint_baseline['f1']:.4f} "
+              f"PR-AUC={joint_baseline['pr_auc']:.4f} "
+              f"(5-슬롯 구조 없이 전체 데이터를 한 번에 학습 — CL 없이 도달 "
+              f"가능한 참고 상한. 전체 1위 대비 F1 격차={f1_gap:+.4f}, 양수면 "
+              f"Joint가 더 높음)")
+        print()
+
+    # (drift_detector, sample_selector, memory_manager)별 drift 평균 감지
+    # 횟수. 해석 주의는 write_drift_summary() docstring 참고.
     if "drift_detector" in df.columns and "n_drift_detected" in df.columns:
         print("drift 감지 평균 (dd × ss × mm):")
         group_cols = ["drift_detector", "sample_selector", "memory_manager"]
@@ -357,31 +397,46 @@ def main() -> None:
     if not results:
         print("results/ 에 결과 파일이 없습니다. 먼저 grid_runner.py를 실행하세요.")
         return
+    # 2026-09-14 재검토로 발견·수정 — 이전엔 "한 데이터셋 안에 서로 다른
+    # code_version이 섞여 있는가"만 봤다. results/*.json 전부가 **하나의
+    # 낡은** 버전으로 내부적으로 일관돼 있으면(예: RNG 격리·GPM 라벨예산
+    # 면제 반영 이전 결과로만 채워진 상태) 이 검사는 통과해버려 아무
+    # 경고 없이 낡은 결과로 리더보드를 만들었다. 현재 코드의
+    # `compute_code_version()`과 직접 비교해 이 구멍을 막는다.
+    try:
+        from testbed.experiments.grid_runner import compute_code_version
+        current_code_version = compute_code_version()
+    except Exception as exc:  # pragma: no cover - 방어적, 리더보드 생성 자체는 막지 않음
+        print(f"경고: 현재 code_version을 계산할 수 없어({exc}) 낡은 결과 검사를 건너뜁니다.")
+        current_code_version = None
     dataset_names = sorted({r["dataset"] for r in results})
     for dataset_name in dataset_names:
         dataset_results = [r for r in results if r["dataset"] == dataset_name]
-        # 2026-08-26 추가(전수 재검토 중 발견) — grid_runner.py의 run_grid()는
-        # 중간에 끊겨도 이어서 돌릴 수 있게 설계되어 있다(결과 파일이 있으면
-        # code_version이 지금 코드와 일치할 때만 건너뜀). 그 말은 재실행이
-        # 아직 다 끝나지 않은 상태에서 이 스크립트를 돌리면 results/ 안에
-        # "새 코드로 갓 계산된 결과"와 "아직 재계산 못 한 옛 코드 결과"가
-        # 섞여 있을 수 있다는 뜻이다 — 리더보드가 이 둘을 구분 없이 같은
-        # 표에 섞어 정렬하면 조용히 오해를 부를 수 있어, 코드 버전이 섞여
-        # 있으면 경고만 낸다(자동으로 막지는 않는다 — 부분 결과라도 봐야
-        # 할 때가 있으므로).
+        # grid_runner.py의 run_grid()는 중간에 끊겨도 이어서 돌릴 수 있다
+        # (code_version이 일치할 때만 건너뜀) — 재실행이 안 끝난 상태로 이
+        # 스크립트를 돌리면 results/에 새/옛 코드 결과가 섞여 있을 수 있다.
+        # 코드 버전이 섞여 있으면 경고만 낸다(자동으로 막지는 않음 — 부분
+        # 결과라도 봐야 할 때가 있으므로).
         code_versions = {r.get("code_version") for r in dataset_results}
         if len(code_versions) > 1:
             print(f"경고: [{dataset_name}] 결과에 서로 다른 code_version이 섞여 "
                   f"있습니다({sorted(v for v in code_versions if v)}) - grid_runner.py "
                   f"재실행이 아직 끝나지 않았을 수 있습니다. 전체 재실행 완료 후 "
                   f"다시 생성하는 것을 권장합니다.")
+        elif current_code_version is not None and code_versions != {current_code_version}:
+            stale = next(iter(code_versions))
+            print(f"경고: [{dataset_name}] 결과가 전부 낡은 code_version({stale!r})으로 "
+                  f"계산됐습니다 — 현재 코드({current_code_version!r})와 다릅니다. "
+                  "코드를 고친 뒤 grid_runner.py 재실행을 깜빡했을 수 있습니다. "
+                  "`python -m testbed.experiments.grid_runner`로 재실행 후 이 리더보드를 "
+                  "다시 생성하세요.")
         df = build_leaderboard(dataset_results)
         df = attach_no_cl_deltas(df, dataset_name)
         write_reports(df, dataset_name)
         write_drift_summary(df, dataset_name)
         write_no_cl_comparison(df, dataset_name)
         write_per_category_reports(dataset_results, dataset_name)
-        print_report(df, dataset_name)
+        print_report(df, dataset_name, joint_baseline=load_joint_baseline(dataset_name))
 
 
 if __name__ == "__main__":

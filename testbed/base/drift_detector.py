@@ -14,6 +14,13 @@ import torch
 
 class BaseDriftDetector(ABC):
     uses_shared_representation: bool = True
+    # CADEDriftDetector 전용(2026-09-12, CADE 라벨예산 면제) — True면
+    # `cl_client.py` Step 3가 라벨 예산 서브셋(selected_data) 대신 그
+    # 라운드 전체(new_data)로 fit_with_category()를 호출한다. 기본값
+    # False를 여기 명시(2026-09-14 — 이전엔 서브클래스에만 있어 `cl_client.py`
+    # 의 getattr(..., False) 방어에만 의존했다. base/anomaly_scorer.py의
+    # 동일 속성과 계약 통일).
+    consumes_full_round_data: bool = False
 
     @abstractmethod
     def detect(self, new_data: torch.Tensor, buf_ref: Optional[torch.Tensor]) -> bool:

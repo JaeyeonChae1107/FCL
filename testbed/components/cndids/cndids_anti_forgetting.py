@@ -32,13 +32,26 @@ clusterer는 `FeatureExtractors/modules/K_Means.py`)의 메커니즘:
     predict만 한다 — 원본이 `fit()` 진입 시 한 번 클러스터링하고 그 결과를
     epoch 전체에서 재사용하는 것과 동일한 절차다.
 
-`pytorch_metric_learning`은 새 의존성 설치 위험을 피하기 위해(이전 deepod
-사고 참고, docs/metric_justification.md) TripletMarginLoss를 CADE의
-contrastive pairing과 동일한 형태(배치를 반으로 나눠 쌍을 구성, margin
-기반)로 직접 구현했다. 원문(`CND_IDS.py:38-39,76-78`)은
-`TripletMarginMiner(type_of_triplets="semihard")`로 상대 마진 트리플릿을
-쓰는데, `_metric_loss()`는 절대 마진 페어와이즈를 쓴다 — 방향은 같지만
-손실의 수학적 형태가 달라 "같은 목표를 다른 손실 형태로 근사"한 것이다.
+`pytorch_metric_learning`을 회피한 근거("이전 deepod 사고")는 재확인 결과
+**다른 패키지**(`deepod`, DIF 베이스라인용, torch를 1.13.0으로 강제
+다운그레이드시킨 사건) 얘기였다 — `pytorch_metric_learning`은 그 사건과
+무관하고, CND-IDS 자신의 `requirements.txt`에도 `pytorch-metric-
+learning==2.8.1`로 이미 명시돼 있다. dry-run으로 현재 torch(2.12.0)와의
+의존성 충돌이 없음을 확인하고 설치했다 — 원문(`CND_IDS.py:36-39`) 그대로
+`distances.LpDistance()` + `reducers.ThresholdReducer(low=0)` +
+`losses.TripletMarginLoss(margin=2, ...)` + `miners.TripletMarginMiner(
+margin=2, type_of_triplets="semihard")`를 그대로 이식했다(이전의 절대
+마진 페어와이즈 자체 구현 `_metric_loss()`는 대체됐다). 동질 배치(유효
+triplet 0개)에서 손실이 0이 되는 것도 `ThresholdReducer(low=0)`가 그대로
+보존한다(실측 확인).
+
+**A/B 실측(NSL-KDD Track B) — 혼재된 결과, 유지**: `mm=none`: f1 0.906→
+0.862, bwt +0.017→-0.041(소폭 악화), roc_auc/pr_auc도 소폭 하락(0.898→
+0.844/0.872→0.833). `mm=cndids`: f1 0.880→0.874(거의 그대로), bwt +0.082→
++0.001(약화되지만 여전히 비음수), roc_auc/pr_auc는 오히려 개선(0.886→
+0.918/0.898→0.928). Item 3/4처럼 전 조합에서 일관되게 나빠지는 패턴이
+아니라 콤보별로 방향이 다르고 정도도 완만해 유지한다 — 원문 라이브러리를
+실제로 쓰는 쪽이 더 충실하다는 원칙도 함께 고려했다.
 
 **라벨-프리(label-free) 준수**: `new_batch`의 `selected_labels`는 손실 계산에
 쓰지 않는다(PRD 12.5절) — CND-IDS 원본도 pseudo-label 생성에 공격 라벨을
@@ -96,9 +109,11 @@ from typing import List, Optional, Set, Tuple
 import numpy as np
 import torch
 import torch.nn.functional as F
+from pytorch_metric_learning import distances, losses, miners, reducers
 
 from testbed.base.anti_forgetting import BaseAntiForgetting
 from testbed.base.models import BaseCLModel
+from testbed.common.rng_utils import derived_seed
 
 # CND-IDS 원본(modules/K_Means.py:18)은 [100,300,500,1000,2000]을 데이터셋
 # 무관하게 그대로 쓴다 — 스케일링 공식 자체가 없다. Track B가 원 논문처럼
@@ -135,15 +150,31 @@ def _elbow_kmeans_fit(data_np: np.ndarray, candidates: List[int], seed: int = 42
     """CND-IDS modules/K_Means.py:fit()과 동일한 elbow 선택 절차.
 
     원본(`KMeans(n_clusters=i, random_state=42)`)은 n_init을 명시하지 않아
-    설치된 sklearn(1.2.1)의 기본값인 n_init=10이 그대로 적용된다. 이 테스트베드는
-    원본과 달리 experience(라운드)마다 이 elbow 탐색을 반복하므로(원본은 한
-    학습 세션당 한 번), 후보 6개 × n_init=10 조합이 라운드마다 반복되면 비용이
-    크다. elbow 탐색 단계(어떤 K가 좋은지 WCSS 추세만 보면 되는 단계)는
-    n_init=3으로 줄이고, 실제 pseudo-label에 쓰이는 최종 fit만 원본과 동일하게
-    n_init=10(기본값)을 유지한다.
+    "설치된 sklearn의 기본값"에 암묵 의존한다.
+
+    **2026-09-14 재검토로 발견·수정 — 이 "기본값 의존"이 실제로는 버전에
+    따라 다른 값을 뜻한다는 걸 확인했다**: CND-IDS 원문 자신의
+    `requirements.txt`는 `scikit-learn==1.6.1`을 선언하는데, sklearn은
+    1.4부터 `n_init` 기본값이 10→`'auto'`로 바뀌었고 `init='k-means++'`
+    일 때 `'auto'`는 사실상 **1**로 동작한다 — 즉 원문이 실제로 선언한
+    환경에서는 n_init=1이다. 이 저장소의 로컬 sklearn(1.2.1, 구버전)은
+    `n_init='warn'`(→10)이라 우연히 다른 값을 낸다 — 이전 버전의 이
+    docstring은 "로컬에 설치된 1.2.1의 기본값 10이 원본과 동일하다"고
+    잘못 주장하고 있었다(원본이 실제로 선언한 버전을 확인하지 않은 채
+    로컬 환경을 기준점으로 오인). 그렇다고 원문이 실제로 의도한 값이
+    "1.6.1의 `'auto'`가 우연히 내는 1"이라고 보기도 어렵다(저자가 명시적
+    으로 고른 값이 아니라 라이브러리 버전의 부수효과이므로) — 그래서
+    **어느 쪽 버전에도 암묵 의존하지 않도록 n_init을 명시적으로 10으로
+    고정**한다(이 테스트베드 자체의 결정 — 두 버전 중 하나를 "원본"으로
+    특정할 근거가 없어, sklearn 대부분의 역사에서 표준값이었던 10을
+    명시적 상수로 택함). experience(라운드)마다 이 elbow 탐색을
+    반복하므로(원본은 한 학습 세션당 한 번), 후보 6개 × n_init=10 조합이
+    라운드마다 반복되면 비용이 크다 — elbow 탐색 단계(어떤 K가 좋은지
+    WCSS 추세만 보면 되는 단계)만 n_init=3으로 줄이고, 실제 pseudo-label에
+    쓰이는 최종 fit은 n_init=10을 명시적으로 유지한다.
 
     `fit_sample_size`: K 후보가 원 논문 리스트(최대 2000)로 돌아가면서,
-    CICIDS2018처럼 라운드당 선택 데이터가 수십만 건인 경우
+    라운드당 선택 데이터가 수십만 건인 경우
     `KMeans(n_clusters=2000).fit()`을 experience당 7회(elbow 6 + 최종 1)
     반복하는 비용이 감당 불가능해진다(GPM의 `activation_sample_size`와
     같은 종류의 문제). 주어지고 데이터가 그보다 크면 elbow 탐색과 최종 fit
@@ -198,36 +229,15 @@ def _elbow_kmeans_fit(data_np: np.ndarray, candidates: List[int], seed: int = 42
             optimal_k = kneedle.elbow
 
     from sklearn.cluster import KMeans
-    final_km = KMeans(n_clusters=optimal_k, random_state=seed)  # n_init 기본값(10) 유지
+    # n_init을 명시적으로 10으로 고정 — sklearn 버전에 따라 기본값이
+    # 10('1.2.1' 이하) 또는 사실상 1('1.6.1'의 'auto', CND-IDS 원문이
+    # 선언한 버전)로 갈리므로 어느 쪽 암묵 의존도 피한다(위 docstring
+    # "2026-09-14 재검토" 절 참고).
+    final_km = KMeans(n_clusters=optimal_k, random_state=seed, n_init=10)
     final_km.fit(fit_data)
     return final_km
 
 
-def _metric_loss(z: torch.Tensor, pseudo_labels: torch.Tensor, margin: float = 2.0) -> torch.Tensor:
-    """pseudo_labels가 배치 안에서 전부 같은 값이면(같은 클러스터 판정)
-    이 손실은 거리를 좁히기만 한다(`same*dist` 항만 활성화, saturate
-    없음) — 실측: 동질 배치에서 loss=4.43, gradient norm 0.5로 실제
-    임베딩을 뭉갠다. 원문의 미이너(`TripletMarginMiner(type_of_triplets=
-    "semihard")`, `CND_IDS.py:38-39,76-78`)는 anchor당 양성/음성이 둘 다
-    있어야 triplet을 만들 수 있어, pseudo-label이 배치 전체에서 동질적이면
-    유효 triplet이 0개가 되어 손실이 조용히 0이 된다. `on_experience_
-    start`의 정상 참조 풀 수정 이후에도 R2L/U2R류 라운드는 pseudo_ratio가
-    여전히 0.96~0.99대라 이 경로가 자주 발동함을 재확인했다.
-    `pytorch_metric_learning`을 설치하지 않고도, 배치 전체의 pseudo_labels가
-    단일 값이면(유효 triplet이 있을 수 없는 경우) 원문처럼 손실을 0으로
-    만든다."""
-    n = z.shape[0]
-    half = n // 2
-    if half == 0:
-        return z.sum() * 0.0
-    if len(pseudo_labels.unique()) < 2:
-        return z.sum() * 0.0
-    left, right = z[:half], z[half:2 * half]
-    left_l, right_l = pseudo_labels[:half], pseudo_labels[half:2 * half]
-    dist = torch.norm(left - right, dim=1)
-    same = (left_l == right_l).float()
-    loss = same * dist + (1 - same) * F.relu(margin - dist)
-    return loss.mean()
 
 
 class CNDIDSAntiForgetting(BaseAntiForgetting):
@@ -236,10 +246,31 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
     def __init__(self, lambda_r: float = 0.1, lambda_cl: float = 0.1,
                  triplet_margin: float = 2.0,
                  cluster_fit_sample_size: Optional[int] = None,
-                 max_normal_ref: int = 5000, elbow_n_jobs: int = 1):
+                 max_normal_ref: int = 5000, elbow_n_jobs: int = 1,
+                 seed: int = 42):
+        # 2026-09-14 재검토로 발견·수정 — 이 생성자가 `seed`를 안 받아서
+        # `on_experience_start()`가 부르는 `_elbow_kmeans_fit()`이 항상
+        # 자기 함수 기본값(seed=42)에만 암묵 의존했다. `cl_client.py`가
+        # `global_hparams["seed"]`를 컴포넌트 kwargs에 병합해도
+        # `component_registry.build()`의 생성자-시그니처 필터링 때문에
+        # 이 파라미터 자체가 없으면 조용히 버려진다 — 지금(seed=42) 단일
+        # 시드 실행에는 하드코딩 기본값과 우연히 같아 결과에 영향이 없지만,
+        # 멀티시드(43/44...) 재실행 시 Track B(af=cndids, 6개 조합)의
+        # K-Means만 계속 seed=42에 머물러 "시드를 바꿔 분산을 본다"는
+        # 목적 자체가 성립하지 않게 된다 — 멀티시드 진입 전에 고쳐야
+        # 했던 항목.
+        self._seed = seed
         self.lambda_r = lambda_r
         self.lambda_cl = lambda_cl
         self.margin = triplet_margin
+        # CND_IDS.py:36-39 그대로 이식 — distance/reducer/margin이 loss와
+        # miner 양쪽에 동일하게 적용돼야 한다.
+        self._distance = distances.LpDistance()
+        self._reducer = reducers.ThresholdReducer(low=0)
+        self._loss_func = losses.TripletMarginLoss(
+            margin=self.margin, distance=self._distance, reducer=self._reducer)
+        self._mining_func = miners.TripletMarginMiner(
+            margin=self.margin, distance=self._distance, type_of_triplets="semihard")
         self.cluster_fit_sample_size = cluster_fit_sample_size
         self.max_normal_ref = max_normal_ref
         # 2026-09-04 추가 — elbow K 후보 탐색을 joblib으로 병렬화할 때 쓸
@@ -251,7 +282,11 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         self._normal_cluster_ids: Set[int] = set()
         # normal_subset을 인스턴스 수명 전체에 걸쳐 누적한 정상 참조 풀
         # (모듈 docstring 참고) — CADE의 `_category_refs`와 같은 패턴.
+        # `set_held_out_reference()`로 고정 참조(Item 5)가 들어오면 이
+        # 저수지 로직 전체를 대체한다 — 없으면(단위 테스트 등 독립 호출)
+        # 그대로 폴백.
         self._normal_ref_pool: Optional[torch.Tensor] = None
+        self._held_out_reference: Optional[torch.Tensor] = None
         # _pseudo_labels_for_batch()가 매 미니배치마다 다시 계산할 수 있도록
         # 캐시해두는 값들 — on_experience_start()에서 한 번만 채운다.
         self._centers: Optional[torch.Tensor] = None
@@ -259,6 +294,17 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         # PRD 15.4절 — Track B pseudo-label 균형 확인(경고 전용)을 위해 마지막
         # compute_loss 호출에서 생성된 pseudo-label의 다수 클래스 비율을 기록한다.
         self.last_pseudo_label_ratio: Optional[float] = None
+        # 2026-09-14 재검토(Round-2 감사)로 발견 — on_experience_start()의
+        # 저수지 캡 randperm(아래) 전역 RNG 격리용 라운드 카운터.
+        self._on_experience_start_call_count = 0
+
+    def set_held_out_reference(self, ref: torch.Tensor) -> None:
+        """CLClient가 매 라운드 Step 3에서 호출(Item 5) — 스트림 시작 전
+        고정된 정상 참조(원문 `init_normal`, 이번 라운드 시점 scaler로
+        재인코딩된 값)를 전달한다. 이후 `on_experience_start()`가 이 값이
+        있으면(비어있지 않으면) 아래 저수지 로직 전체를 건너뛰고 이 값을
+        그대로 정상 참조로 쓴다."""
+        self._held_out_reference = ref
 
     def on_experience_start(self, selected_data: torch.Tensor,
                              normal_subset: torch.Tensor) -> None:
@@ -266,29 +312,56 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         원본 입력 공간에서 K-Means를 한 번 학습하고, 정상 참조 데이터가 속하는
         클러스터 ID 집합을 구해둔다. CLClient가 학습 루프(step 4) 이전에
         호출한다. `normal_subset`은 이번 라운드 라벨 예산 안에서 선택된
-        데이터 중 label=0인 것만 걸러낸 것이다(비어있지 않을 때만 호출됨 —
-        cl_client.py 참고). 클러스터링 자체는 원문처럼 이번 라운드 데이터로
-        새로 fit하지만, "어떤 클러스터가 정상인가" 판정은 이번 라운드
-        normal_subset이 아니라 누적 정상 참조 풀로 한다(모듈 docstring
-        참고)."""
+        데이터 중 label=0인 것만 걸러낸 것이다. 클러스터링 자체는 원문처럼
+        이번 라운드 데이터로 새로 fit한다.
+
+        "어떤 클러스터가 정상인가" 판정 기준(Item 5로 갱신): `set_held_out_
+        reference()`로 고정 참조가 들어와 있으면(원문의 `init_normal`과
+        같은 역할) 그것을 그대로 쓴다 — 원문은 이 참조가 스트림 전체에서
+        불변이므로 저수지/누적이 필요 없다. 고정 참조가 없으면(단위 테스트
+        등 `CLClient` 없이 독립 호출) 기존 저수지(`_normal_ref_pool`,
+        `normal_subset`을 라운드마다 누적) 로직으로 폴백한다."""
         data_np = selected_data.detach().cpu().numpy()
         self._kmeans = _elbow_kmeans_fit(
-            data_np, list(_CLUSTER_K_CANDIDATES),
+            data_np, list(_CLUSTER_K_CANDIDATES), seed=self._seed,
             fit_sample_size=self.cluster_fit_sample_size,
             elbow_n_jobs=self.elbow_n_jobs)
 
-        if self._normal_ref_pool is not None:
-            combined_ref = torch.cat([self._normal_ref_pool, normal_subset], dim=0)
+        if self._held_out_reference is not None and len(self._held_out_reference) > 0:
+            self._normal_ref_pool = self._held_out_reference.detach()
         else:
-            combined_ref = normal_subset
-        if len(combined_ref) > self.max_normal_ref:
-            # 꼬리 슬라이싱 대신 무작위 표본으로 캡을 적용한다(모듈
-            # docstring 참고) — combined_ref(이전 누적 + 이번 라운드)
-            # 전체에서 균등하게 뽑으므로 이전 라운드 표본도 비율만큼
-            # 살아남는다.
-            perm = torch.randperm(len(combined_ref), device=combined_ref.device)
-            combined_ref = combined_ref[perm[:self.max_normal_ref]]
-        self._normal_ref_pool = combined_ref.detach()
+            if self._normal_ref_pool is not None:
+                combined_ref = torch.cat([self._normal_ref_pool, normal_subset], dim=0)
+            else:
+                combined_ref = normal_subset
+            if len(combined_ref) > self.max_normal_ref:
+                # 꼬리 슬라이싱 대신 무작위 표본으로 캡을 적용한다(모듈
+                # docstring 참고) — combined_ref(이전 누적 + 이번 라운드)
+                # 전체에서 균등하게 뽑으므로 이전 라운드 표본도 비율만큼
+                # 살아남는다.
+                #
+                # 전역 RNG 격리(2026-09-14, Round-2 감사로 발견) — 이
+                # 저수지 폴백 분기는 `set_held_out_reference()`가 없거나
+                # 빈 참조를 넘긴 경우에만 타므로(실제 grid_runner.py/
+                # smoke_test.py 실행에서는 `held_out_normal_reference`가
+                # 거의 항상 채워져 있어 이 분기 자체가 도달되지 않는다 —
+                # design_decisions.md 참고), 지금까지는 여기서 전역 RNG를
+                # 직접 소비해도 실제 결과에 영향이 없었다. 하지만
+                # GPM/SPIDER/CNDIDSMemoryManager의 다른 모든 randperm
+                # 호출은 예외 없이 `fork_rng()`+`derived_seed()`로
+                # 격리돼 있는데 이 호출만 빠져 있어, 향후 이 분기가
+                # 실제로 밟히는 상황(예: 단위 테스트, held_out 참조가
+                # 없는 새 데이터셋)이 생기면 이 컴포넌트 하나가 있고
+                # 없고에 따라 공유 backbone의 RNG 시퀀스가 갈리는
+                # 문제가 재발할 수 있다 — 같은 원칙으로 미리 고친다.
+                with torch.random.fork_rng():
+                    torch.manual_seed(derived_seed(
+                        self._seed, "cndids_normal_ref_cap",
+                        self._on_experience_start_call_count))
+                    perm = torch.randperm(len(combined_ref), device=combined_ref.device)
+                combined_ref = combined_ref[perm[:self.max_normal_ref]]
+            self._normal_ref_pool = combined_ref.detach()
+        self._on_experience_start_call_count += 1
 
         ref_np = self._normal_ref_pool.cpu().numpy()
         ref_clusters = self._kmeans.predict(ref_np)
@@ -296,7 +369,7 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
 
         # 클러스터 배정을 매 미니배치마다 sklearn.predict()로 다시 계산하면
         # (CPU 왕복 + 호출 오버헤드) 라운드당 수만~수십만 번 호출이 반복되어
-        # CICIDS2018 규모에서 감당 불가능하게 느려진다. KMeans.predict()는
+        # 대규모 데이터셋에서 감당 불가능하게 느려진다. KMeans.predict()는
         # 정의상 "유클리드 거리로 가장 가까운 클러스터 중심 찾기"이므로,
         # 중심점(cluster_centers_)만 라운드당 한 번 GPU 텐서로 캐시해두면
         # torch.cdist(...).argmin(dim=1)로 수학적으로 동일한 결과를 GPU에서
@@ -324,6 +397,21 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         pseudo = (~self._is_normal_cluster[cluster_ids]).long()
         return pseudo
 
+    # **2026-09-14 — validation 기반 best-epoch 체크포인팅 검토 후 기각**:
+    # CND-IDS 원문(`CND_IDS.py:100-192`)의 `fit()`이 실제로 80/20 분할 +
+    # 매 epoch validation loss 측정 + 최저 loss epoch 가중치 복원을
+    # 한다는 것 자체는 코드에서 확인된 사실이다. 하지만 이걸 잠시 이식
+    # 시도해보고(별도 `run_own_training_loop`, `cl_client.py` Step 4에
+    # 위임 분기 추가) 재검토한 결과, **이건 CND-IDS 논문이 제안하는
+    # 방법론이 아니라 이 코드의 일반적인 학습 위생(early stopping류)
+    # 관행일 뿐이라는 결론을 내렸다** — 논문 초록이 스스로 밝히는 핵심
+    # 기여는 (i) 계속 갱신되는 feature extractor, (ii) PCA 기반 novelty
+    # detector 둘뿐이고, validation 기반 모델 선택은 언급이 없다(arXiv
+    # 2502.14094 초록 확인). CADE의 MAD 공식이나 SSF의 표본선택처럼
+    # "논문이 제안하는 알고리즘"과 "코드에 흔히 들어가는 일반적인 좋은
+    # 습관"을 구분하지 않은 채 후자를 전자와 같은 급의 "충실도 문제"로
+    # 취급한 게 판단 착오였다 — 사용자 지시로 되돌렸다. `compute_loss()`는
+    # 이 시도 이전 형태로 복원.
     def compute_loss(self, model: BaseCLModel,
                       new_batch: Tuple[torch.Tensor, torch.Tensor],
                       replay_batch: Optional[Tuple[torch.Tensor, torch.Tensor]]
@@ -335,7 +423,12 @@ class CNDIDSAntiForgetting(BaseAntiForgetting):
         pseudo = self._pseudo_labels_for_batch(data)
         ratio = pseudo.float().mean().item()
         self.last_pseudo_label_ratio = max(ratio, 1.0 - ratio)
-        metric_loss = _metric_loss(z, pseudo, self.margin)
+        # CND_IDS.py:76-78 그대로: 먼저 semihard triplet을 채굴한 뒤 그
+        # 인덱스로만 TripletMarginLoss를 계산한다. 유효 triplet이 없으면
+        # (배치 전체가 동질 pseudo-label) miner가 빈 인덱스를 반환하고
+        # ThresholdReducer(low=0)가 손실을 0으로 만든다.
+        triplet_indices = self._mining_func(z, pseudo)
+        metric_loss = self._loss_func(z, pseudo, triplet_indices)
 
         loss = metric_loss + self.lambda_r * recon_loss
 

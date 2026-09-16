@@ -39,8 +39,18 @@ PRD 9절은 `experience_definition.type`으로 `task_incremental`과
 
 ## n_experiences=5, labeling_budget=0.1 선택 근거
 
-- `n_experiences=5`: CND-IDS 원 논문이 X-IIoTID/CICIDS2017/UNSW-NB15를 5개
-  experience로 분할한다고 명시(부록A, `CND-IDS/utils.py`의 여러
+**`n_experiences=5` 부분은 2026-09-03부로 더 이상 사실이 아니다(2026-09-14
+재검토로 발견 — `configs/global_hparams.yaml` 자체는 이미 정확하게
+갱신돼 있었으나 이 문서만 못 따라왔던 stale 서술)**: "CND-IDS 원 논문이
+5개 experience로 분할한다"는 근거로 전 데이터셋에 고정값 5를 강제하던 걸
+폐기하고, 데이터셋 자신의 실제 공격 category 수로 자동 결정하도록 바꿨다
+(`data/dataset_loader.py`의 `_count_attack_categories()`/`load_dataset()`,
+`configs/global_hparams.yaml` 51-64행 주석 참고 — "라운드 하나 = 새 공격
+유형 하나"가 정확히 성립하도록, 데이터셋 간 일치 강제 없음). 아래는 폐기된
+예전 근거를 역사적으로만 남긴다.
+
+- (폐기됨) `n_experiences=5`: CND-IDS 원 논문이 X-IIoTID/CICIDS2017/UNSW-NB15를
+  5개 experience로 분할한다고 명시(부록A, `CND-IDS/utils.py`의 여러
   `create_split_experiences` 호출부에서 확인). 10.1절 global_hparams 기본값.
 - `labeling_budget.value=0.1`(10%): 특정 논문 수치가 아니라 이 테스트베드의
   기본값이다(9절 scenario 스펙 자체가 "테스트베드 기본값"이라고 명시). SSF는

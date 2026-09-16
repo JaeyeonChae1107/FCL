@@ -1,6 +1,5 @@
 """Phase 1 — toy 예시로 지표 계산 로직을 컴포넌트 구현 전에 먼저 검증한다."""
 
-import numpy as np
 import pytest
 
 from testbed.common.metrics import (

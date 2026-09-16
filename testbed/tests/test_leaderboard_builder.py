@@ -48,7 +48,7 @@ def toy_results():
                     per_category_final={
                         "DoS": {"n_test": 100, "first_seen_round": 0,
                                 "recall_at_first_seen": 0.5, "recall_final": 0.3,
-                                "forgetting": 0.2},
+                                "bwt": -0.2},
                     }),
         _toy_result("A_dd=ssf_ss=random_mm=ssf_af=lwf_ssf_as=none", f1=0.8, bwt=0.05,
                     perf_matrix=other_perf, drift_detected_per_round=[False, True],
@@ -57,7 +57,7 @@ def toy_results():
                     per_category_final={
                         "DoS": {"n_test": 100, "first_seen_round": 0,
                                 "recall_at_first_seen": 0.7, "recall_final": 0.85,
-                                "forgetting": -0.15},
+                                "bwt": 0.15},
                     }),
     ]
 
@@ -99,7 +99,7 @@ def test_write_drift_summary_detect_rate_per_round(tmp_path, monkeypatch, toy_re
     assert none_row["detect_rate_exp1"] == pytest.approx(0.0)
 
 
-def test_write_no_cl_comparison_forgetting_columns(tmp_path, monkeypatch, toy_results):
+def test_write_no_cl_comparison_bwt_columns(tmp_path, monkeypatch, toy_results):
     monkeypatch.setattr(lb, "REPORTS_DIR", str(tmp_path))
     df = lb.attach_no_cl_deltas(pd.DataFrame(toy_results), "toy-ds")
     lb.write_no_cl_comparison(df, "toy-ds")
@@ -107,10 +107,11 @@ def test_write_no_cl_comparison_forgetting_columns(tmp_path, monkeypatch, toy_re
     assert out_path.exists()
     out_df = pd.read_csv(out_path, comment="#")
     baseline_row = out_df[out_df["combo_id"] == BASELINE_ID].iloc[0]
-    # exp0: R[0][0]=0.5, 마지막 라운드 R[-1][0]=0.3 -> forgetting 0.2
-    assert baseline_row["forgetting_exp0"] == pytest.approx(0.2)
+    # exp0: R[0][0]=0.5, 마지막 라운드 R[-1][0]=0.3 -> bwt = 0.3-0.5 = -0.2
+    # (음수=망각, common/metrics.py의 bwt()와 동일 부호)
+    assert baseline_row["bwt_exp0"] == pytest.approx(-0.2)
     other_row = out_df[out_df["combo_id"] != BASELINE_ID].iloc[0]
-    assert other_row["no_cl_forgetting_exp0"] == pytest.approx(0.2)
+    assert other_row["no_cl_bwt_exp0"] == pytest.approx(-0.2)
 
 
 def test_write_no_cl_comparison_skipped_without_baseline(tmp_path, monkeypatch):
@@ -129,7 +130,7 @@ def test_write_per_category_reports(tmp_path, monkeypatch, toy_results):
     long_df = pd.read_csv(tmp_path / "per_category_toy-ds.csv")
     assert set(long_df["combo_id"]) == {r["combo_id"] for r in toy_results}
     dos_baseline = long_df[(long_df["combo_id"] == BASELINE_ID) & (long_df["category"] == "DoS")].iloc[0]
-    assert dos_baseline["forgetting"] == pytest.approx(0.2)
+    assert dos_baseline["bwt"] == pytest.approx(-0.2)
 
     difficulty = pd.read_csv(tmp_path / "category_difficulty_toy-ds.csv")
     dos_row = difficulty[difficulty["category"] == "DoS"].iloc[0]

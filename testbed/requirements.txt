@@ -29,9 +29,16 @@ scipy>=1.7          # 로컬 확인: 1.15.3
 PyYAML>=5.4         # 로컬 확인: 6.0.3
 kneed>=0.7          # 로컬 확인: 0.8.6
 
-# CICIDS2018 자동 다운로드 전용(data/dataset_loader.py의
-# _download_cicids2018_from_s3). <repo_root>/CICIDS2018/*.csv를 직접
-# 채워두면 이 패키지 없이도 동작한다. 자동 다운로드는 공식 AWS Open Data
-# 버킷(s3://cse-cic-ids2018/)을 익명(unsigned) 요청으로 받아오므로 AWS
-# 계정/자격증명이 필요 없다 — 전체 약 6.9GB.
-boto3>=1.26         # 로컬 확인: 1.43.57 (다른 패키지들과 같은 이유로 하한선만)
+# CND-IDS(af=cndids)의 실제 triplet loss/miner (CND_IDS.py:4,36-39) — 이전엔
+# "deepod 사고"(별개 패키지, DIF 베이스라인용으로 torch 1.13.0 강제 다운그레이드)와
+# 혼동해 설치를 피했으나 무관함을 확인, dry-run으로 torch>=2.0과 충돌 없음을
+# 확인 후 설치.
+pytorch-metric-learning>=2.8  # 로컬 확인: 2.9.0 (CND-IDS 자신은 2.8.1 고정)
+
+# components/cndids/cndids_anti_forgetting.py가 elbow_n_jobs>1일 때만
+# `from joblib import Parallel, delayed`로 직접 import한다(2026-09-04 추가,
+# component_hparams/cndids.yaml 참고 — 기본값 1이면 이 경로 자체가 안 타서
+# 지금까지 문제가 드러나지 않았다). scikit-learn이 내부적으로 joblib에
+# 의존해 지금까지는 간접 설치로 항상 딸려 왔지만, 코드가 직접 import하는
+# 이상 명시적으로 선언해야 맞다(2026-09-14 Round-5 감사로 발견).
+joblib>=1.0          # 로컬 확인: 1.5.2 (scikit-learn의 전이 의존성으로 이미 설치돼 있었음)

@@ -65,7 +65,7 @@ def bwt(r_matrix: Sequence[Sequence[float]]) -> float:
 
     BWT = (1 / (T-1)) * sum_{i=0}^{T-2} (R_{T-1,i} - R_{i,i})
 
-    주의(2026-08-12 정정): 이 공식은 "CND-IDS 원 논문"이 아니라 CND-IDS
+    주의: 이 공식은 "CND-IDS 원 논문"이 아니라 CND-IDS
     저장소에 포함된 **ADCN 비교 베이스라인**의 평가 코드
     (`AutonomousDCN/ADCNmainloop.py:418`)에서 옮긴 것이다—
     `BWT = 1/(nTask-1)*(sum(allTaskAccuracies)-sum(postTaskAcc))`.
@@ -121,8 +121,8 @@ def build_r_matrix(f1_grid: List[List[float]]) -> np.ndarray:
 
 def per_category_counts(y_true: np.ndarray, y_pred: np.ndarray,
                         category: np.ndarray) -> Dict[str, Dict[str, int]]:
-    """category(문자열 라벨)별 혼동 계수 — 2026-09-03 추가(공격 유형별 탐지
-    성능 리포팅용, 리더보드 정렬에는 쓰지 않는다).
+    """category(문자열 라벨)별 혼동 계수 — 공격 유형별 탐지 성능 리포팅용,
+    리더보드 정렬에는 쓰지 않는다.
 
     정상/공격 판정은 category 문자열이 아니라 `y_true`(0=정상, 1=공격)로 한다
     — 데이터셋마다 정상 표기가 다르고("normal"/"Benign"), UNSW-NB15는 정상

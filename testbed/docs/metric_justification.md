@@ -3,6 +3,26 @@
 이 문서는 PRD(`CL-NIDS-Bench v2.5`) 0절/6절이 요구하는 "논문 근거 기록"을 위한
 문서다. 코드에 반영된 모든 알고리즘적 판단은 아래에 근거를 남긴다.
 
+**공지(2026-09-14) — 이 문서는 시간순 작업 일지(append-only)다, "현재값"을
+찾는 용도로 읽지 말 것**: 위에서 인용하는 "PRD"는 이 저장소 어디에도 없다
+(`testbed/docs/design_decisions.md`의 서두 참고). 이 문서 전체에 걸쳐 나오는
+조합 수("93개"/"96개"/"90개" 등), `TRACK_A_DD_INERT_VALUES`(현재 이름은
+`TRACK_A_DD_INERT_VALUES_BY_AS`), `n_experiences=5` 같은 수치는 **그 문단이
+작성된 시점의 상태를 기록한 역사적 사실**이지 지금의 값이 아니다(그리드는
+2026-09-14 재검토로 최종 **78개**로 바뀌었다). 지금 유효한 cross-cutting
+설계 결정과 그 근거는 `design_decisions.md`를 보고, 이 문서는 "왜 그 결정을
+그때 내렸는지"의 상세 히스토리가 필요할 때만 참고할 것 — 아래 내용을 최신
+값으로 고치는 일은 하지 않는다(그러면 실제 작업 시점의 기록이 훼손된다).
+
+**공지(2026-09-11)**: 사용자가 CICIDS2018을 실험 범위에서 완전히 제외하고
+NSL-KDD/UNSW-NB15 2종만으로 실험하기로 결정했다(n_experiences 자동결정
+도입 후 CICIDS2018만 성능이 붕괴하는 문제가 계기). 관련 코드(`_load_cicids2018_raw`
+등)와 의존성(`boto3`)은 `data/dataset_loader.py`/`requirements.txt`에서
+제거했다. 아래 CICIDS2018 관련 절들은 그 결정 이전의 작업 기록이며 더 이상
+활성 코드를 설명하지 않는다 — 삭제하지 않고 남겨두는 건 그 안의 하이퍼파라미터
+결정 근거(K-means 스케일링, MinMaxScaler 스트리밍 등) 중 일부가 NSL-KDD/
+UNSW-NB15에도 일반적으로 적용되는 설계 판단이기 때문이다.
+
 ## 사용자 지시로 추가된 변경 (PRD 4절 compatibility table 자체를 수정)
 
 ### A. anomaly_scorer='none' 추가 (Track A, 54개 조합 신규 → 전체 63→117개)

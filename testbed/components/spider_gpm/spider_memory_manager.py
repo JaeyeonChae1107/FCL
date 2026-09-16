@@ -15,6 +15,16 @@ SPIDER는 GPM(anti_forgetting) 외에 별도의 유한 버퍼 메모리 M을 두
      바로 직전 태스크까지 학습된 모델(f_θ^(t-1))로 실시간 pseudo-label을
      생성해 학습에 사용한다.
 
+**Item 8a — 버퍼가 라벨 예산 서브셋에서 채워지던 결함**: "1번(무작위 샘플)"이
+실제로는 `update(selected_data, ...)`로 라벨 예산(Track A 기준 10%)만큼만
+골라진 서브셋에서 뽑혀, 원문의 "이전 태스크 전체에서 무작위"보다 표본
+다양성이 훨씬 좁았다. `consumes_full_round_data=True` 클래스 속성을 두고
+`cl_client.py` Step 5가 이걸 보고 `selected_data` 대신 `new_data`(이번
+라운드 전체)를 넘기도록 수정 — 이미 라벨을 버리는 컴포넌트라 본문 수정은
+불필요했다. A/B(NSL-KDD): `mm=spider/af=none/as=cade_mad` f1 0.705→0.800,
+bwt -0.060→+0.010; `mm=spider/af=gpm/as=cade_mad` f1 0.806→0.863(bwt
++0.007→-0.007, 거의 0 유지) — 둘 다 개선.
+
 이 세 가지를 그대로 구현한다. 3번(pseudo-labeling)은 표준 BaseMemoryManager
 계약(모델 접근 없음) 밖의 정보가 필요하므로, `NoAnomalyScorer.set_model()`/
 `CNDIDSAntiForgetting.on_experience_start()`와 같은 패턴으로 선택적 훅
@@ -25,10 +35,10 @@ anti_forgetting.on_task_end와 같은 시점) 그 라운드까지 학습된 모�
 Track B(CND-IDS)에서 쓰일 때는 `CNDIDSAntiForgetting.compute_loss()`가 애초에
 replay_batch의 라벨을 쓰지 않으므로(라벨-프리 원칙) pseudo-label 값 자체는
 소비되지 않는다 — "라벨 없는 무작위 교체 버퍼"라는 핵심 성질만 공유하면 되고,
-Track A/B 양쪽 모두에서 이 메모리 매니저를 쓸 수 있다(사용자 지시).
+Track A/B 양쪽 모두에서 이 메모리 매니저를 쓸 수 있다.
 
-**2026-08-26 발견 — 위 "Track A/B 양쪽 모두" 근거는 라벨-프리(CND-IDS)
-경로만 검증한 것이었다**: 4개 논문 컴포넌트 전수 재감사에서, Track A의
+**위 "Track A/B 양쪽 모두" 근거는 라벨-프리(CND-IDS) 경로만 검증한
+것이었다**: Track A의
 `af=lwf_ssf`(`SSFAntiForgetting.compute_loss`)와 `af=none`
 (`NoAntiForgetting.compute_loss`)는 CND-IDS와 달리 `replay_batch`의
 라벨을 **실제로** BCE 손실에 쓴다는 걸 재확인했다. 그런데 `mm=spider`와
@@ -52,13 +62,31 @@ import torch
 
 from testbed.base.memory_manager import BaseMemoryManager
 from testbed.base.models import BaseCLModel
+from testbed.common.rng_utils import derived_seed
 
 
 class SPIDERMemoryManager(BaseMemoryManager):
-    def __init__(self, max_size: int = 1000):
+    """**전역 RNG 오염(2026-09-14 재검토로 발견, 수정)**: `update()`/
+    `get_replay_batch()`의 `torch.randperm`이 전역 RNG를 소비한다 —
+    `mm=spider`일 때만 호출되므로, 이 슬롯 값 하나로 그 뒤 메인 모델
+    학습이 보는 난수 시퀀스 전체가 갈라진다(`gpm_anti_forgetting.py`
+    모듈 docstring "전역 RNG 오염" 참고, 같은 문제 패턴). `torch.random.
+    fork_rng()`로 격리한다."""
+
+    # Item 8a — SPIDER 원문의 버퍼는 "이전 태스크의 무작위 샘플"이지 라벨
+    # 예산으로 골라진 서브셋이 아니다(이미 라벨을 버리는 컴포넌트이므로
+    # 이번 라운드 전체 데이터를 받아도 라벨-프리 성질은 그대로 유지된다).
+    # `cl_client.py` Step 5가 이 속성을 보고 `selected_data` 대신
+    # `new_data`(라운드 전체)를 넘긴다.
+    consumes_full_round_data = True
+
+    def __init__(self, max_size: int = 1000, seed: int = 42):
         self.max_size = max_size
         self._buf_data: Optional[torch.Tensor] = None
         self._snapshot_model: Optional[BaseCLModel] = None
+        self._seed = seed
+        self._update_round = 0
+        self._replay_call_count = 0
 
     def update(self, selected_data: torch.Tensor, selected_labels: torch.Tensor,
                drift_detected: bool = False) -> None:
@@ -66,7 +94,10 @@ class SPIDERMemoryManager(BaseMemoryManager):
         # "단순 교체 정책(No MRP)" — 기존 버퍼를 누적하지 않고 통째로 교체한다.
         n = len(selected_data)
         k = min(self.max_size, n)
-        idx = torch.randperm(n, device=selected_data.device)[:k]
+        with torch.random.fork_rng():
+            torch.manual_seed(derived_seed(self._seed, "spider_update", self._update_round))
+            idx = torch.randperm(n, device=selected_data.device)[:k]
+        self._update_round += 1
         self._buf_data = selected_data[idx].clone()
 
     def set_snapshot_model(self, model: BaseCLModel) -> None:
@@ -96,7 +127,10 @@ class SPIDERMemoryManager(BaseMemoryManager):
         if self._buf_data is None:
             return None, None
         n = min(batch_size, len(self._buf_data))
-        idx = torch.randperm(len(self._buf_data), device=self._buf_data.device)[:n]
+        with torch.random.fork_rng():
+            torch.manual_seed(derived_seed(self._seed, "spider_replay", self._replay_call_count))
+            idx = torch.randperm(len(self._buf_data), device=self._buf_data.device)[:n]
+        self._replay_call_count += 1
         data = self._buf_data[idx]
         return data, self._pseudo_label(data)
 

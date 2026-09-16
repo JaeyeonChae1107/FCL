@@ -26,6 +26,7 @@ from testbed.base.drift_detector import BaseDriftDetector
 from testbed.base.memory_manager import BaseMemoryManager
 from testbed.base.models import BaseCLModel
 from testbed.base.sample_selector import BaseSampleSelector
+from testbed.common.rng_utils import derived_seed
 
 
 class NoDriftDetector(BaseDriftDetector):
@@ -39,13 +40,27 @@ class NoDriftDetector(BaseDriftDetector):
 
 
 class RandomSelector(BaseSampleSelector):
+    """**전역 RNG 오염(2026-09-14 재검토로 발견, 수정)**: `select()`의
+    `torch.randperm`이 전역 RNG를 소비한다 — `ss=random`(Track A 대부분
+    조합의 기본값)일 때마다 매 라운드 발동해, 그 뒤 메인 모델 학습이
+    보는 난수 시퀀스가 이 호출 여부·시점에 좌우된다(`components/cade/
+    cade_drift_detector.py` 모듈 docstring "전역 RNG 오염" 참고, 같은
+    문제 패턴). `torch.random.fork_rng()`로 격리한다."""
+
+    def __init__(self, seed: int = 42):
+        self._seed = seed
+        self._round = 0
+
     def select(self, new_data: torch.Tensor, new_labels: torch.Tensor,
                label_budget: int, drift_score: float) -> List[int]:
         n = len(new_data)
         k = min(label_budget, n)
         if k <= 0:
             return []
-        idx = torch.randperm(n)[:k]
+        with torch.random.fork_rng():
+            torch.manual_seed(derived_seed(self._seed, "random_selector_select", self._round))
+            idx = torch.randperm(n)[:k]
+        self._round += 1
         return idx.tolist()
 
 
@@ -112,12 +127,15 @@ class NoAnomalyScorer(BaseAnomalyScorer):
         pass  # 별도 학습 없음 — 분류기 자체가 이미 학습되어 있다.
 
     def score(self, data: torch.Tensor) -> torch.Tensor:
-        # data는 z(잠재표현). classifier head로 logit을 복원해 sigmoid
-        # 확률을 점수로 쓴다(높을수록 공격) — SSF/SPIDER가 실제로 보는 값.
+        # data는 z(잠재표현). classifier는 z가 아니라 x_hat(재구성)을
+        # 입력으로 받으므로(base/models.py "Item 10" 참고, SSF 원문
+        # `classifier(decoder(z))`와 일치) forward()가 실제로 하는 계산을
+        # 여기서 재현한다 — z를 받는다는 PRD 12.1절의 계약 자체는 유지된다.
         if self._model is None:
             raise RuntimeError("NoAnomalyScorer.set_model()이 호출되지 않았다.")
         with torch.no_grad():
-            logit = self._model.classifier(data)
+            x_hat = self._model.decoder(data)
+            logit = self._model.classifier(x_hat)
         return torch.sigmoid(logit).squeeze(-1)
 
     def compute_threshold(self, eval_scores: torch.Tensor,

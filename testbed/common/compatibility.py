@@ -1,6 +1,4 @@
-"""Backbone-Type 정합성 — PRD 4절.
-
-이 표가 이 프로젝트 전체에서 유일하게 유효한 슬롯 값 목록이다.
+"""Backbone-Type 정합성 — PRD 4절. 유일하게 유효한 슬롯 값 목록.
 
 | 슬롯 | Track A(classifier) 전용 | Track B(autoencoder) 전용 | 공통 |
 |---|---|---|---|
@@ -10,67 +8,63 @@
 | anti_forgetting | lwf_ssf, gpm | cndids | none |
 | anomaly_scorer | none | pca | cade_mad |
 
-Track A의 anomaly_scorer에 `none`(분류기 자체 sigmoid(logit) 판정 — SSF/SPIDER
-원 논문의 실제 방식)을 추가했다(사용자 지시) — CADE의 MAD 채점 방식(cade_mad)과
-비교해 "CADE 채점을 빌려오는 게 실제로 도움이 되는가"를 검증하기 위함이다.
+- Track A `anomaly_scorer=none`: 분류기 sigmoid(logit) 직접 판정(SSF/SPIDER
+  원 논문 방식). cade_mad와 비교용.
+- `memory_manager=spider`: SPIDER 원 논문의 유한 버퍼 메커니즘(라벨 없는
+  무작위 샘플, experience마다 전체 교체, 직전 태스크 스냅샷 모델로
+  pseudo-labeling). Track A/B 공통.
+- Track B `anomaly_scorer`: pca만. dif/lof는 CND-IDS가 비교용으로 인용한
+  제3자 baseline(부록A)이라 제외.
+- Track B `cade_mad` 추가(93→96개 조합): Track A/B가 같은
+  `FCLAutoEncoder`를 공유해 z를 만든다(`base/models.py`) — CADEMADScorer가
+  소비하는 z는 Track A/B에서 구조적으로 동일. threshold 계산은
+  `threshold_needs_labels` 플래그(scorer 속성, `base/anomaly_scorer.py`)로
+  분기하므로 Track B의 cade_mad도 s_ref 기반 median+MAD를 그대로 쓴다.
 
-memory_manager의 `fifo`(특정 논문 근거 없는 공통 baseline)는 SPIDER 원 논문의
-실제 "유한 버퍼 메모리(M)" 메커니즘(`spider` — 라벨 없는 무작위 샘플, 매
-experience마다 전체 교체(No MRP), 직전 태스크 스냅샷 모델로 pseudo-labeling)
-으로 대체했다. Track A/B 양쪽에서 쓸 수 있다(사용자 지시).
+## drift_detector의 (sample_selector, memory_manager, anomaly_scorer) 조건부 제약
 
-Track B의 anomaly_scorer는 `pca`만 남겼다 — `dif`/`lof`는 CND-IDS 원 논문
-자체의 제안 방법이 아니라 CND-IDS가 비교를 위해 인용한 제3자 baseline이라
-(부록A), 삭제했다(사용자 지시).
+Track A에서 `drift_detector` 출력(get_drift_score/detect)의 소비처는 두
+곳뿐이다 — `SSFSampleSelector`(drift_score), `SSFMemoryManager`
+(drift_detected). `memory_manager='none'`이면 버퍼가 없어 비교 대상 자체가
+없다.
 
-**2026-09-01 추가 — Track B에 `cade_mad` 추가(93→96개 조합)**: Track A/B
-전체 재감사에서 발견해 사용자 승인 후 반영. `base/models.py`가 이미
-확인해주듯 Track A/B는 애초에 같은 `FCLAutoEncoder` 하나를 공유해 z를
-만든다(`backbone_type`/`required_backbone` 자체가 런타임에 검사되지 않는
-문서용 표기임은 `docs/metric_justification.md` "발견했지만 낮은 우선순위라
-손대지 않은 것" 절 참고) — 즉 `CADEMADScorer`가 소비하는 z는 Track A든
-Track B든 구조적으로 동일하고, `dd=none`+`as=cade_mad`(Track A, "CADE의
-대조학습 없이 MAD 채점 방식만 쓰면 어떤가"라는 정당한 재조합, 위
-component_registry.py 참고)와 대칭으로 "CND-IDS의 라벨-프리 표현학습 위에서
-CADE의 median+MAD 채점 방식만 쓰면 어떤가"도 똑같이 정당한 재조합이다.
-`anomaly_scorer`의 threshold 계산 방식은 이제 track이 아니라
-`threshold_needs_labels` 플래그(scorer 자체의 속성, `base/anomaly_scorer.py`
-"2026-09-01" 절)로 분기하므로, Track B에서도 `cade_mad`는 (pca의 Best-F
-대신) 정상 참조(s_ref) 기반 median+MAD를 그대로 쓴다 — CND-IDS의
-"라벨 없이 학습" 원칙(표현학습 자체는 여전히 라벨을 안 씀)과 충돌하지
-않는다(Track B의 기존 pca도 threshold 계산 자체는 Best-F로 라벨을 쓰므로,
-"threshold 계산에 라벨을 쓰는가"는 이미 pca에서도 track 고유의 제약이
-아니었다).
+`sample_selector='random'`+`memory_manager`가 `'none'`/`'spider'`, 또는
+`memory_manager='none'`(sample_selector 무관) — 이 조합들에서 drift_detector
+출력은 파이프라인 어디에도 영향을 주지 않는다. 실측(leaderboard_for_chart.json):
+이 조건의 216개 dd-비교 쌍 중 36쌍에서 `dd=none`과 `dd=ssf`가 f1/precision/
+recall까지 완전 동일(SSFDriftDetector의 K-S 검정이 비교 표본 없이 항상
+"drift 없음"으로 퇴화).
 
-## drift_detector의 (sample_selector, memory_manager) 조건부 제약
+**2026-09-14 재검토로 두 가지 정정(전역 RNG 오염 격리 이후 재실측)**:
 
-Track A에서 `drift_detector`의 출력(get_drift_score()/detect())은 두 소비처만
-있다 — `SSFSampleSelector`(drift_score로 extremity 블렌딩), `SSFMemoryManager`
-(drift_detected로 eviction 비율 결정). 게다가 SSF/CADE 두 detector 모두
-"비교할 과거 표본"이 있어야 의미가 있는데, `memory_manager='none'`이면
-버퍼(`buf_ref`) 자체가 없어 비교 대상이 없다.
+1. **`("ssf", "spider")`를 활성에서 제외**: 이 쌍이 활성으로 분류된 근거는
+   "SSFSampleSelector가 drift_score를 소비한다"였는데, `ssf_sample_selector.py`
+   재작성(2026-09-14, SSFMaskContext 기반으로 전면 재작성) 이후 실제 코드를
+   다시 보니 `drift_score`는 시그니처에만 남아있고 전혀 쓰이지 않는다
+   (`_quota_select()`가 `M_t_cont`만 랭킹에 씀). `SPIDERMemoryManager.update()`
+   도 `drift_detected` 인자를 받기만 하고 본문에서 안 읽는다(단순 무작위
+   교체). 즉 이 쌍의 두 컴포넌트 다 drift 신호를 안 쓴다 — 실측(NSL-KDD,
+   `ss=ssf/mm=spider/af=gpm/as=none`)으로 `dd=none`과 `dd=cade`가 f1/bwt/
+   pr_auc 소수점 8자리까지 완전히 동일함을 확인했다.
 
-즉 `sample_selector='random'`이면서 `memory_manager`가 `'none'` 또는
-`'spider'`인 경우(SPIDERMemoryManager도 drift_detected를 소비하지 않음),
-그리고 `memory_manager='none'`인 경우는 `sample_selector`가 `'ssf'`여도
-(버퍼가 없어 SSFSampleSelector에 넘어가는 drift_score 자체가 항상 0으로
-퇴화) — 이 셋 다 `drift_detector`의 출력이 파이프라인 어디에도 영향을 줄 수
-없다. 실측(leaderboard_for_chart.json)으로 확인한 결과, 이 조건에 해당하는
-216개 dd-비교 쌍 중 36쌍에서 `dd=none`과 `dd=ssf`가 f1/precision/recall까지
-완전히 동일했다 — **이 둘만** 진짜 무의미한 중복 비교였다(SSFDriftDetector의
-K-S 검정은 비교할 과거 표본이 없으면 항상 "drift 없음"으로 퇴화하므로,
-`dd=none`과 계산 결과가 항상 같아진다).
-
-`dd=cade`는 같은 조건에서도 단 한 번도 `dd=none`과 동일해지지 않았다(0/…쌍) —
-CADE의 `fit()`이 사설 contrastive AE를 실제로 학습시키며 전역 RNG를 소비해
-이후 랜덤 시드 흐름을 바꿔놓기 때문에, 신호 자체는 안 쓰여도 결과값은
-달라진다. 이건 "완전히 동일해지는 중복"이 아니라 "잡음으로 인한 차이"라
-성격이 다르다 — 사용자 지시로, 소수점까지 완전히 일치하는 진짜 중복(`ssf`가
-`none`과 겹치는 경우)만 제거하고, 값 자체가 다른 `cade`는 계속 별도
-조합으로 남긴다. 그래서 `TRACK_A_DD_ACTIVE_SS_MM`에 없는(=drift_detector가
-비활성인) (sample_selector, memory_manager) 조합에서는 `drift_detector`가
-`'none'`과 `'cade'` 두 값만 순회하고 `'ssf'`(=`'none'`의 완전한 중복)만
-제외한다 — `enumerate_valid_combos()`와 `docs/metric_justification.md` 참고.
+2. **`dd=cade`의 "비활성 조합에서도 유지" 근거가 `anomaly_scorer`에 따라
+   갈린다**: 예전엔 "CADE의 사설 encoder 학습이 전역 RNG를 오염시켜(신호
+   자체는 안 쓰여도) 결과값이 달라진다"는 이유로 `dd=cade`를 모든 비활성
+   조합에 유지했다. 이번 세션에 `torch.random.fork_rng()`로 그 RNG 오염
+   자체를 격리하면서(`cade_drift_detector.py` 참고) 이 근거가 무효화됐다 —
+   실측(NSL-KDD, `ss=random/mm=none/af=none/as=none` 및 `ss=ssf/mm=spider/
+   af=gpm/as=none` 둘 다) `dd=none`과 `dd=cade`가 완전히 동일함을 확인.
+   **단, `as=cade_mad`일 때는 여전히 다르다** — `CLClient.__init__`이
+   `dd=cade`+`as=cade_mad`를 `CADEMADScorer.set_private_encoder()`로
+   연결해(`uses_shared_representation`을 False로 전환) 공유 backbone
+   대신 CADE의 대조학습 표현공간을 쓰게 만들기 때문이다(이건 RNG 오염과
+   무관한, 의도된 구조적 연결). 실측: 같은 조합에 `as=cade_mad`만 바꾸면
+   `dd=none` f1=0.7992 vs `dd=cade` f1=0.4493로 뚜렷이 다름.
+   따라서 비활성 (ss,mm) 조합에서 `drift_detector`가 순회할 값은
+   `anomaly_scorer`에 따라 갈린다 — `as=cade_mad`면 `['none','cade']`
+   (여전히 서로 다른 결과), 그 외(`as=none`)면 `['none']`만(`'cade'`는
+   이제 `'none'`과 완전 중복이라 제외 — `'ssf'`가 이미 그랬던 것과 같은
+   이유).
 """
 
 import itertools
@@ -87,26 +81,27 @@ TRACK_A_GRID: Dict[str, List[str]] = {
     "sample_selector": ["random", "ssf"],
     "memory_manager": ["none", "spider", "ssf"],
     "anomaly_scorer": ["cade_mad", "none"],
-}  # 슬롯별 허용값 카탈로그 (validate_combo의 값 검증에 사용). 실제 조합 수는
-   # drift_detector의 조건부 제약(TRACK_A_DD_ACTIVE_SS_MM, TRACK_A_DD_INERT_VALUES)
-   # 때문에 단순 itertools.product(3*3*2*3*2=108)가 아니라 90개다 —
+}  # 슬롯별 허용값 카탈로그. 실제 조합 수는 72개(단순 곱 108이 아님, 2026-09-14
+   # 재검토로 90→72) — TRACK_A_DD_ACTIVE_SS_MM/TRACK_A_DD_INERT_VALUES_BY_AS,
    # enumerate_valid_combos() 참고.
 
-# drift_detector가 실제로 소비되는 (sample_selector, memory_manager) 조합만
-# drift_detector 3개 값을 전부 순회한다. 그 외(비활성) 조합에서는
-# TRACK_A_DD_INERT_VALUES만 순회한다 — 위 모듈 docstring의 근거 참고.
+# drift_detector 3개 값을 전부 순회하는 (sample_selector, memory_manager).
+# 그 외는 TRACK_A_DD_INERT_VALUES_BY_AS만 순회 — 모듈 docstring 참고.
 TRACK_A_DD_ACTIVE_SS_MM: List[Tuple[str, str]] = [
     ("random", "ssf"),   # SSFMemoryManager가 drift_detected를 소비
-    ("ssf", "spider"),   # SSFSampleSelector가 drift_score를 소비 (버퍼 있음)
-    ("ssf", "ssf"),       # 둘 다 소비
+    ("ssf", "ssf"),       # 위와 동일 이유(SSFSampleSelector 자체는 drift_score
+                           # 미소비 — 모듈 docstring 2026-09-14 정정 1번 참고)
 ]
 
-# 비활성 (sample_selector, memory_manager) 조합에서 순회할 drift_detector
-# 값 — 'ssf'는 이런 조합에서 'none'과 f1/precision/recall이 소수점까지
-# 완전히 동일해지는 진짜 중복이라 제외한다. 'cade'는 값 자체가 'none'과
-# 다르므로(RNG 오염 때문이긴 하지만 "완전히 동일"은 아님) 남긴다 — 모듈
-# docstring 참고.
-TRACK_A_DD_INERT_VALUES: List[str] = ["none", "cade"]
+# 비활성 (sample_selector, memory_manager)에서 순회할 drift_detector 값 —
+# anomaly_scorer에 따라 갈린다(모듈 docstring 2026-09-14 정정 2번 참고).
+# as=cade_mad면 dd=cade가 사설 encoder 연결로 여전히 dd=none과 다른 결과를
+# 내므로 유지, 그 외(as=none)는 RNG 오염 격리 이후 dd=cade≡dd=none이 실측
+# 확인돼 완전 중복이라 제외.
+TRACK_A_DD_INERT_VALUES_BY_AS: Dict[str, List[str]] = {
+    "cade_mad": ["none", "cade"],
+    "none": ["none"],
+}
 
 TRACK_B_GRID: Dict[str, List[str]] = {
     "anti_forgetting": ["cndids"],
@@ -114,23 +109,16 @@ TRACK_B_GRID: Dict[str, List[str]] = {
     "sample_selector": ["random"],
     "memory_manager": ["none", "spider", "cndids"],
     "anomaly_scorer": ["pca", "cade_mad"],
-}  # itertools.product -> 1*1*1*3*2 = 6개 (2026-09-01: cade_mad 추가, 위
-   # 모듈 docstring "2026-09-01" 절 참고)
+}  # itertools.product -> 6개 (cade_mad 추가)
 
 SLOTS = ["drift_detector", "sample_selector", "memory_manager",
          "anti_forgetting", "anomaly_scorer"]
 
-# 2026-09-03 추가 — "지속학습을 전혀 쓰지 않은" 기준선(사용자 결정). backbone
-# (FCLAutoEncoder)이 매 experience 새 데이터로 BCE만으로 계속 학습하고
-# drift 감지·메모리/리플레이·망각방지·별도 anomaly scorer가 전부 없는 naive
-# fine-tuning — 판정은 분류기 sigmoid 0.5(SSF/SPIDER 원 논문 방식). 그리드에
-# 이미 포함된 조합이라(ss=random/mm=none은 dd-비활성 조합이라 dd=none이
-# 순회됨) 별도 실행이 필요 없고, leaderboard_builder.py가 이 조합의 결과를
-# 기준선으로 삼아 다른 조합의 f1/pr_auc/bwt 차이와 라운드별 망각을
-# 나란히 보여준다. "억지로 성능을 낮춘" 기준선이 아니다 — Track A 공통
-# 조건(라벨 예산 10%, epoch 200)을 다른 Track A 조합과 똑같이 받는다. Track B
-# (라벨 없이 experience 전체 사용)와의 비교는 학습 조건이 다름을 리포트에
-# 명시한다.
+# naive fine-tuning 기준선(사용자 결정) — backbone이 매
+# experience BCE로 계속 학습, drift/메모리/망각방지/별도 scorer 없음, 판정은
+# 분류기 sigmoid 0.5. 그리드에 이미 포함된 조합. Track A 공통 조건(라벨 예산
+# 10%, epoch 200) 그대로 받음 — Track B(라벨 없이 experience 전체 사용)와는
+# 학습 조건이 다르다는 점을 리포트에서 별도 표시.
 NO_CL_BASELINE_COMBO: Dict[str, str] = {
     "track": "A",
     "drift_detector": "none",
@@ -142,24 +130,21 @@ NO_CL_BASELINE_COMBO: Dict[str, str] = {
 
 
 def enumerate_valid_combos() -> List[dict]:
-    """Track A(90개)와 Track B(6개)를 각각 직접 구성해 concat한 96개만
-    생성한다 — "생성 후 제외" 로직은 쓰지 않는다 (PRD 4.2절).
-
-    Track A는 (sample_selector, memory_manager)별로 drift_detector가 실제로
-    소비되는 조합에서만 3개 값을 전부 순회하고, 그 외(비활성) 조합에서는
-    TRACK_A_DD_INERT_VALUES(['none', 'cade'])만 순회한다 — 'ssf'는 비활성
-    조합에서 'none'과 완전히 동일한 결과를 내는 진짜 중복이라 제외하되,
-    'cade'는 값 자체가 다르므로(모듈 docstring 참고) 남긴다.
-    """
+    """Track A(72개)와 Track B(6개)를 직접 구성해 concat한 78개만 생성한다
+    (2026-09-14 재검토로 90→72, 96→78 — 모듈 docstring 정정 1/2번 참고).
+    활성 (ss,mm)은 drift_detector 3개 값 전부, 비활성은
+    `TRACK_A_DD_INERT_VALUES_BY_AS[anomaly_scorer]`만 순회한다 — dd가
+    anomaly_scorer에 의존하므로 as_ 루프를 dd 루프보다 바깥에 둔다."""
     combos = []
     ss_mm_pairs = list(itertools.product(
         TRACK_A_GRID["sample_selector"], TRACK_A_GRID["memory_manager"]))
     for ss, mm in ss_mm_pairs:
-        dd_values = (TRACK_A_GRID["drift_detector"]
-                     if (ss, mm) in TRACK_A_DD_ACTIVE_SS_MM else TRACK_A_DD_INERT_VALUES)
-        for dd in dd_values:
-            for af in TRACK_A_GRID["anti_forgetting"]:
-                for as_ in TRACK_A_GRID["anomaly_scorer"]:
+        is_active = (ss, mm) in TRACK_A_DD_ACTIVE_SS_MM
+        for af in TRACK_A_GRID["anti_forgetting"]:
+            for as_ in TRACK_A_GRID["anomaly_scorer"]:
+                dd_values = (TRACK_A_GRID["drift_detector"] if is_active
+                             else TRACK_A_DD_INERT_VALUES_BY_AS[as_])
+                for dd in dd_values:
                     combos.append({
                         "drift_detector": dd,
                         "sample_selector": ss,
@@ -172,7 +157,7 @@ def enumerate_valid_combos() -> List[dict]:
         combo = dict(zip(TRACK_B_GRID.keys(), values))
         combo["track"] = "B"
         combos.append(combo)
-    assert len(combos) == 96, f"expected 96 valid combos, got {len(combos)}"
+    assert len(combos) == 78, f"expected 78 valid combos, got {len(combos)}"
     assert NO_CL_BASELINE_COMBO in combos, "NO_CL_BASELINE_COMBO가 유효 조합에 없음"
     return combos
 
@@ -200,11 +185,13 @@ def validate_combo(combo: dict) -> None:
         ss = combo["sample_selector"]
         mm = combo["memory_manager"]
         dd = combo["drift_detector"]
+        as_ = combo["anomaly_scorer"]
         is_active = (ss, mm) in TRACK_A_DD_ACTIVE_SS_MM
-        if not is_active and dd not in TRACK_A_DD_INERT_VALUES:
+        allowed_inert_dd = TRACK_A_DD_INERT_VALUES_BY_AS[as_]
+        if not is_active and dd not in allowed_inert_dd:
             raise IncompatibleComboError(
                 f"Track A: drift_detector={dd!r}는 sample_selector={ss!r} + "
-                f"memory_manager={mm!r} 조합에서 'none'과 완전히 동일한 결과를 "
-                f"내는 중복이라 무효 조합이다(중복 방지 — "
-                f"docs/metric_justification.md 참고). 허용값: "
-                f"{TRACK_A_DD_INERT_VALUES}.")
+                f"memory_manager={mm!r} + anomaly_scorer={as_!r} 조합에서 "
+                f"'none'과 완전히 동일한 결과를 내는 중복이라 무효 조합이다"
+                f"(중복 방지 — 모듈 docstring 2026-09-14 정정 참고). 허용값: "
+                f"{allowed_inert_dd}.")

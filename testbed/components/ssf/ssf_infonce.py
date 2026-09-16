@@ -2,7 +2,9 @@
 
 SSF-Strategic-Selection-and-Forgetting/utils.py:458-492 (`InfoNCELoss`). SSF는
 이 손실을 latent feature가 아니라 디코더 출력(recon_vec)에 적용한다
-(`ssf.py:139,310,326` — `criterion(recon_vec, labels)`; `criterion =
+(`ssf.py:139,280,310` — `criterion(recon_vec, labels)`(2026-09-14 재검토로
+인용 줄번호 정정, 이전엔 326으로 잘못 적혀 있었음 — 326행은 무관한
+`distillation_loss = F.mse_loss(recon_vec, teacher_recon_vec)`); `criterion =
 InfoNCELoss(device, tem)`, `tem=0.02`는 `ssf.py:47,76`의 고정값) — 재구성
 표현 공간에서 정상표본끼리는 서로 가깝게(분자), 정상-공격 쌍은 InfoNCE
 분모로 밀어내는 대조 손실이다. 정상(label=0)인 행만 anchor로 쓴다 — SSF가
@@ -45,10 +47,13 @@ def ssf_infonce_loss(recon: torch.Tensor, labels: torch.Tensor,
     logits_normal_normal = logits_normal[:, normal_mask]
     abnormal_mask = ~normal_mask
     if abnormal_mask.any():
-        sum_of_vium = torch.exp(logits_normal[:, abnormal_mask]).sum(dim=1, keepdim=True)
+        # anchor(정상)별 공격 표본과의 유사도 exp합 — InfoNCE 분모의 "negative"
+        # 항. 이전 이름(sum_of_vium)이 오타로 보여 의미가 불명확해 개명했다
+        # (2026-09-14, 로직 변경 없음).
+        sum_negative_exp = torch.exp(logits_normal[:, abnormal_mask]).sum(dim=1, keepdim=True)
     else:
-        sum_of_vium = torch.zeros(n_normal, 1, device=features.device)
+        sum_negative_exp = torch.zeros(n_normal, 1, device=features.device)
 
-    denominator = torch.exp(logits_normal_normal) + sum_of_vium
+    denominator = torch.exp(logits_normal_normal) + sum_negative_exp
     log_probs = logits_normal_normal - torch.log(denominator)
     return -log_probs * temperature

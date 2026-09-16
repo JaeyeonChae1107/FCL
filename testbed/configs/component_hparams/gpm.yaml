@@ -21,3 +21,14 @@ max_basis_ratio: 0.9
 # 도달함을 확인했다 — 풀랭크가 되면 project_gradients()가 그 레이어
 # 그래디언트를 완전히 0으로 만들어 학습이 조용히 멈춘다. 항상 ambient
 # dimension의 10%는 학습 가능하게 남겨둔다.
+
+activation_sample_size: 2000
+# 2026-09-15 Round-9 감사로 발견 — `GPMAntiForgetting.__init__`의 생성자
+# 기본값(2000)으로만 존재하고 이 yaml에는 빠져 있어, 다른 "원문 근거 없는
+# 테스트베드 자체 값"(cade.yaml의 max_category_ref/target_replay_fraction
+# 등)과 달리 yaml만 보고는 이 값의 존재·근거를 알 수 없었다 — 여기 명시해
+# 그 일관성을 맞춘다(동작 변화 없음, 기존 기본값 그대로). GPM 원 논문의
+# 태스크당 대표 표본 수는 300(고정)인데, 이 값은 CUDA OOM 방지 목적으로
+# 정한 것이라 애초에 논문 근거가 아니었다 — 300으로 낮춰 A/B했더니
+# 뚜렷이 나빠져(f1 0.8462→0.7162, bwt +0.0285→+0.0046) 2000을 유지한다
+# (`gpm_anti_forgetting.py` "GPM 기저 계산 — 공식 코드 재대조" 절 참고).

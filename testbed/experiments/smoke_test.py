@@ -5,11 +5,10 @@ valid combo 각각에 대해 experience 전체(라운드 수·class-incremental 
 줄인 설정으로 실행해 15.1~15.5의 정량 기준을 assert 조건으로 적용한다(아래
 SMOKE_* 상수). 실패한 combo는 본 그리드(Phase 3)에서 실행하지 않는다.
 
-라운드당 행 수 제한(SMOKE_MAX_*_ROWS_PER_EXPERIENCE): CICIDS2018은 중복 제거
-후 약 1,208만 행(라운드당 train 약 193만/test 약 48만, NSL-KDD의 80~100배).
-전체를 그대로 돌리면 본 그리드와 비슷한 비용을 스모크가 한 번 더 낸다.
-라운드 수와 class-incremental 구조는 그대로 두고 라운드당 행 수만 category별
-최소 개수를 보장하며 서브샘플링한다.
+라운드당 행 수 제한(SMOKE_MAX_*_ROWS_PER_EXPERIENCE): 라운드 규모가 큰
+데이터셋에서 전체를 그대로 돌리면 본 그리드와 비슷한 비용을 스모크가 한 번
+더 낸다. 라운드 수와 class-incremental 구조는 그대로 두고 라운드당 행 수만
+category별 최소 개수를 보장하며 서브샘플링한다.
 
 과거 SMOKE_N_EXPERIENCES=2로 앞 2개 라운드만 검사했을 때, class-incremental
 분할이 희귀 category(R2L/U2R)와 공격 없는 라운드를 항상 뒤쪽에 배치하는
@@ -23,8 +22,23 @@ import io
 import json
 import math
 import os
+import sys
 import traceback
 from typing import Any, Dict, List, Optional
+
+# 2026-09-14 추가 — Windows 콘솔(cp949 등 비-UTF-8 코드페이지)에서 print()가
+# em-dash(—, U+2014) 같은 문자를 만나면 UnicodeEncodeError로 프로세스
+# 전체가 죽는다(예외가 print() 호출 자체에서 나서 run_all()의 try/except가
+# 감싸는 범위 밖 — 15.4 게이트 경고 메시지, "[SKIP] ... —" 로그 등 이
+# 파일 곳곳의 한글 메시지가 이 문자를 쓴다). X-IIoTID 스모크에서 실제로
+# 이 크래시가 발생해 "특정 콤보가 원인 불명으로 죽는다"로 오인했던 것 —
+# 격리 재현하면 멀쩡히 통과하는데, run_all() 안에서 이 특정 콤보의 15.4
+# 경고를 출력하려는 순간에만 죽어서 마치 그 콤보 자체의 버그처럼 보였다.
+# stdout/stderr을 UTF-8로 강제해 원천 차단한다(reconfigure는 파이썬
+# 3.7+에서 사용 가능, 이 프로젝트는 3.10).
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 import numpy as np
 import torch
@@ -57,8 +71,8 @@ SMOKE_EPOCHS_PER_EXPERIENCE_TRACK_B = 5
 # 같은 캡/축출 경로도 이 규모에서 발동한다. 상한보다 작은 라운드는 그대로
 # 둔다(no-op).
 #
-# SMOKE_MIN_ROWS_PER_CATEGORY: 비율대로만 뽑으면 CICIDS2018의 희귀 공격
-# category가 라운드에서 통째로 사라진다. 각 category는 최소 이 개수(원래
+# SMOKE_MIN_ROWS_PER_CATEGORY: 비율대로만 뽑으면 희귀 공격 category가
+# 라운드에서 통째로 사라진다. 각 category는 최소 이 개수(원래
 # 더 적으면 전부)를 남긴다. 50은 NSL-KDD U2R 라운드(1.35만 중 52건, 0.38%)
 # 규모다. test는 test_y(이진)로만 층화(experience 딕셔너리에 test category
 # 없음). None이면 상한 미적용(디버깅용).
@@ -209,7 +223,8 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
     torch.manual_seed(hp.get("seed", 42))
     model = FCLAutoEncoder(input_dim=input_dim, hidden_dim=hp["hidden_dim"],
                             latent_dim=hp["latent_dim"])
-    client = CLClient(model, combo, hp, component_hparams, device=device)
+    client = CLClient(model, combo, hp, component_hparams, device=device,
+                       held_out_normal_reference=dataset.get("held_out_normal_reference"))
 
     experiences = dataset["experiences"][:SMOKE_N_EXPERIENCES]
     all_test_splits = [(e["test_X"], e["test_y"]) for e in experiences]
@@ -291,7 +306,12 @@ def run_smoke_test_for_combo(combo: Dict[str, Any], dataset: Dict[str, Any],
         # 15.2b: roc_auc — 예측 쏠림과 별개로 점수 순위 자체가 라벨과 맞는
         # 방향인지 검사(threshold 무관). dd=cade+ss=ssf+as=cade_mad가
         # roc_auc≈0.15(무작위보다 나쁨)로 사실상 고장난 채 15.2/15.3만으로는
-        # 안 걸렸던 사례가 있었다. 단일 클래스 라운드는 정의되지 않아 건너뜀.
+        # 안 걸렸던 사례가 있었다. 단일 클래스 라운드는 정의되지 않아 건너뜀
+        # (2026-09-14 명시 — 여기는 값을 리포트에 남기는 게 아니라 "검사할지
+        # 말지"를 정하는 게이트라 건너뛰는 게 맞다. `grid_runner.py`의 같은
+        # 상황은 최종 결과 필드에 값을 채워야 해서 NaN을 쓴다 — 셋이 서로
+        # 다른 게 아니라 "게이트"와 "리포트 필드"라는 다른 문맥에 맞는
+        # 처리다).
         if len(torch.unique(all_labels)) >= 2:
             round_roc_auc = float(roc_auc_score(all_labels.numpy(), all_scores.numpy()))
             if round_roc_auc < 0.5:
@@ -532,7 +552,9 @@ if __name__ == "__main__":
              "'--device cuda'로 실행한다.")
     parser.add_argument(
         "--datasets", default="nsl-kdd,unsw-nb15",
-        help="쉼표로 구분한 데이터셋 이름 목록 (nsl-kdd, unsw-nb15, cicids2018 중).")
+        help="쉼표로 구분한 데이터셋 이름 목록 (nsl-kdd, unsw-nb15, x-iiotid 중). "
+             "기본값은 X-IIoTID를 포함하지 않는다 — 78-combo 스모크 재확인이 "
+             "아직 안 끝났다면(design_decisions.md 7절) 명시적으로 추가할 것.")
     parser.add_argument(
         "--no-resume", action="store_true",
         help="이미 지금 코드 버전으로 기록된 결과가 있어도 전부 다시 돌린다 "
@@ -545,7 +567,10 @@ if __name__ == "__main__":
              "나눠 같은 GPU(또는 여러 GPU)를 동시에 쓰기 위한 용도. 결과는 "
              "공유 파일이 아니라 샤드 전용 파일(smoke_test_results.shard{i}of{n}.json)"
              "에 저장되므로, 모든 샤드가 끝난 뒤 --merge-shards n으로 반드시 "
-             "합쳐야 grid_runner.py가 결과를 인식한다.")
+             "합쳐야 grid_runner.py가 결과를 인식한다. 여러 GPU를 나눠 쓸 때는 "
+             "프로세스마다 CUDA_VISIBLE_DEVICES를 GPU 하나로 고정할 것 — "
+             "README.md 'CUDA_VISIBLE_DEVICES' 절 참고(fork_rng 오버헤드/경고 "
+             "방지, 결과값에는 영향 없음).")
     parser.add_argument(
         "--merge-shards", type=int, default=None, metavar="N",
         help="조합을 실행하지 않고, smoke_test_results.shard{i}ofN.json(i=0..N-1) "

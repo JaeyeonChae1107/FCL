@@ -3,5 +3,17 @@ __pycache__/
 *.pyo
 .DS_Store
 CICIDS2018/
-CICIDS2018/
 testbed/data/.cache/
+
+# 2026-09-15 추가(Round-7 감사로 발견) — 원본 데이터셋/논문 저장소의 대용량
+# 파일이 이 .gitignore에 빠져 있어, SSF-Strategic-Selection-and-Forgetting과
+# UNSW-NB15-raw 아래 raw CSV(합계 약 230MB)가 이미 git 히스토리에 커밋돼
+# 있고(원격 origin에도 이미 push된 상태) X-IIoTID-raw(339MB, 아직 미추적)도
+# 언제든 실수로 `git add -A` 한 번에 커밋될 위험이 있었다. 이미 커밋된
+# 과거 이력은 되돌리려면 히스토리 재작성(force-push 필요)이 필요해 여기서
+# 임의로 처리하지 않는다 — 앞으로 더 커지는 것만 막는다.
+SSF-Strategic-Selection-and-Forgetting/*_pre_data/
+UNSW-NB15-raw/
+X-IIoTID-raw/
+CADE/data/
+CADE/models/

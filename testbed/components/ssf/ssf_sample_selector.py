@@ -1,142 +1,108 @@
-"""SSF SampleSelector — KL-divergence 기반 마스크 최적화 (PRD 4절/12.3절).
+"""SSF SampleSelector — 공유 마스크(M_t) 기반 대표 표본 선택 (PRD 4절/12.3절,
+Item 1+2).
 
-SSF 원 논문 근거: utils.py의 optimize_old_mask/optimize_new_mask가 고정
-steps=100(kl_max_iter, CLI 노출 없음)으로 각 샘플에 소프트 마스크를 부여하고,
-10-bin 히스토그램 분포 간 KL divergence를 최소화하도록 SGD로 최적화한 뒤
-0.5 임계값으로 이진화해 대표 샘플을 선택한다(utils.py:109-194).
+SSF 원 논문 근거: `select_and_update_representative_samples[_when_drift]()`
+(`utils.py:192-388`)가 `representative_new = x_test_this_epoch[M_t_bin.bool()]`
+로 대표 표본을 고르고, 부족하면 `M_t` 점수 상위부터, 그것도 부족하면
+무작위로 채운다. `M_t`(연속 마스크)는 `CLClient._compute_ssf_masks()`가
+라운드당 1회 계산해(`ssf_masks.py`) `set_ssf_masks()`로 넘겨준다 —
+`SSFMemoryManager`와 같은 마스크를 공유한다.
 
-PRD 12.3절 select() 인터페이스는 모델/로짓을 넘기지 않으므로(new_data,
-new_labels, label_budget, drift_score만 입력) — SSF 원문이 로짓/재구성-유사도
-분포에 적용하던 히스토그램을, 이 테스트베드에서는 new_data의 제1주성분
-투영값(스칼라) 분포에 적용한다. KL-마스크 최적화라는 핵심 메커니즘은 동일하게
-유지하되, 이 인터페이스가 제공하는 입력(원본 feature)으로 대체한 것이다.
+**이전 버전과의 차이(재검증 후 재작성)**: 이전에는 이 클래스가 `select()`
+인터페이스(모델/로짓을 받지 않음) 제약 때문에 마스크를 자체적으로(제1주성분
+투영값 분포로) 근사 계산했고, drift_score를 반영하기 위해 "대표성 점수"와
+"분포 중심에서 먼 정도(extremity)"를 선형 블렌딩하는 자체 장치를 뒀다.
+원문을 재대조한 결과 `optimize_old_mask`/`optimize_new_mask`(마스크 계산
+자체)는 drift 여부와 완전히 무관하게 계산되고, drift 감지 결과는
+memory_manager의 갱신 분기 선택에만 영향을 준다는 게 확인돼 — "선택
+단계에서 drift로 점수를 블렌딩한다"는 개념 자체가 원문에 없었다. 이제
+`CLClient`가 공유 마스크를 계산해 넘겨주므로 이 클래스는 자체 마스크
+계산도, extremity/drift_weight 블렌딩도 하지 않고 `M_t_cont`(연속값)를
+그대로 랭킹에 쓴다.
 
-**drift_score 소비**: 이 테스트베드의 목적은 원본 코드 재현이 아니라 "어떤
-호환 조합이 최적인가"를 비교하는 것이다(사용자 지시) — 그러려면
-drift_detector 슬롯(none/ssf/cade)이 실제로 결과를 바꿔야 비교 자체가
-성립한다. 처음에는 KL 목표 분포 자체를 drift_score로 바꿔봤지만, bin별
-가중치가 "합(sum)"으로 계산되는 구조상 표본이 적은 극단 bin은 목표를 아무리
-올려도 top-k 결과 자체가 거의 안 바뀌는 것을 실제로 확인했다(최적화 loss는
-달라져도 순위가 안 바뀜 — 미묘한 SGD 수렴 특성에 의존하는 취약한 설계였음).
+**category 쿼터는 유지**: 균일-히스토그램 대체 시절부터 있던 문제(선택
+비율이 라운드마다 클래스/family 구성에 따라 왜곡되는 것)는 마스크 계산
+방식과 무관하게 여전히 유효하다 — label_budget을 그룹(이진 라벨 또는
+`train_category`)별로 먼저 배정하고, 그 쿼터 안에서 대표 표본을 뽑는다
+(`_quota_select`). 이 쿼터 로직은 이전 버전과 동일하게 유지한다(A/B로
+이미 검증된 테스트베드 확장 — 선택기의 category 쿼터가 이진보다 낫다는
+결론, `docs/metric_justification.md` 참고).
 
-그래서 **직접적이고 검증 가능한 방식**으로 다시 짰다: (1) 평시 목표(균등
-분포)로 계산한 대표성 점수 `mask_final`과 (2) 분포 중심에서 얼마나 먼지를
-직접 재는 `extremity` 점수를 각각 [0,1]로 정규화한 뒤, `drift_weight`
-비율로 선형 블렌딩해서 top-k를 뽑는다. drift_weight=0이면 순수 대표성 선택,
-1에 가까울수록 순수 극단값(새 패턴/이상치) 선택으로 수렴한다 — 두 기준의
-선형 결합이므로 blending 비율이 바뀌면 top-k 결과도 실제로 바뀐다는 것을
-보장할 수 있다.
+**2026-09-14 정정 — "부족/과다" 분기 누락 발견 및 수정**: 원문
+(`utils.py:192-257`)을 다시 정독한 결과, 지난 버전이 "언제나
+`torch.topk(M_t_cont, k)`"로 단순화했던 게 원문의 실제 두 분기와 다름을
+발견했다. 원문은:
+  1. 먼저 이진마스크 통과분(`representative_new = x_test_this_epoch[
+     M_t_bin.bool()]`)을 구한다.
+  2. 통과분이 쿼터보다 **많으면**(`utils.py:247-251`) 그 통과분 **안에서만**
+     `M_t`(연속) 점수로 상위 k개를 추린다.
+  3. 통과분이 쿼터보다 **적으면**(`utils.py:235-246`) 통과분을 전부 쓰고,
+     모자란 만큼을 마스크 미달(비통과) 표본 중에서 **무작위**로 채운다
+     (연속 점수로 이어서 채우지 않는다).
 
-**중요한 수정(실제 데이터에서 발견된 붕괴 재현 후 수정)**: UNSW-NB15처럼
-experience 간 분포가 극심하게 흔들리는 데이터에서는 drift_detected=True가
-연속된 여러 experience에 걸쳐 계속 발동한다. `extremity`는 라벨과 무관하게
-"분포 중심에서 먼 정도"만 재기 때문에, drift_weight가 계속 높게 유지되는
-상태로 여러 라운드가 누적되면 선택된 학습 데이터가 점점 라벨 균형을 잃은
-이상치 위주로 치우쳐, 분류기가 완전히 붕괴하는 현상을 실제로 재현했다
-(`A_dd=ssf_ss=ssf_mm=ssf_af=lwf_ssf`와 `A_dd=cade_ss=ssf_mm=ssf_af=lwf_ssf`
-조합, UNSW-NB15, 마지막 라운드에서 F1=0으로 완전 붕괴 — ablation으로
-memory_manager가 아니라 이 extremity 블렌딩이 원인임을 확인). CADE의
-drift_score는 상한이 없어(수백까지 커짐) tanh가 거의 즉시 1로 포화되므로,
-상한값 0.3까지도 붕괴를 막기에 부족했다 — 0.2까지도 두 실패 사례 모두에서
-붕괴를 재현했고, 0.1에서 두 사례 모두 안정화되는 것을 직접 확인한 뒤 이
-값으로 낮췄다(0.05는 오히려 0.1보다 불안정 — 이 근방에서 비단조적인 민감한
-동역학이라는 뜻이므로, 정밀 튜닝보다 실제 최악 사례 2건에서 안정성이 확인된
-값을 보수적으로 채택했다). `max_drift_influence` 기본값 0.1 — drift_detector가
-결과에 영향을 주긴 하되, 대표성 선택을 압도해 학습을 불안정하게 만들지는
-않도록 하는 안전장치다.
+쿼터(k) ≤ 이진마스크 통과 수일 때는 두 방식이 수학적으로 동일하다(이진
+통과분이 전부 연속점수 0.5 이상이라, 전체에서 top-k를 뽑아도 결과가
+같음) — 그래서 이전 A/B(재검증 절 위 문단)가 이 차이를 못 잡아냈을
+가능성이 높다. 갈리는 건 쿼터가 통과 수보다 **클 때만**인데, 그 경우
+지난 버전은 마스크 미달 후보 중 "점수가 높은 순"으로 결정론적으로
+채웠지만 원문은 "무작위"로 채운다 — 마스크가 걸러낸 비대표 표본
+중에서까지 점수로 편향된 선택을 하면, 원문이 의도한 "부족분은 편향 없이
+채운다"는 취지와 어긋난다. `_quota_select()`가 이 두 분기를 그룹별로 정확히 재현하도록 수정했다
+(`_select_within_group()` 참고).
 
-**2026-08-26 발견·수정 — 균일-히스토그램 대체가 라운드마다 예측 불가능하게
-클래스/family 비율을 왜곡하는 문제**: 4개 논문 컴포넌트 전수 재감사에서,
-위 KL-마스크 최적화가 "제1주성분 투영값의 분포"만 보고 어떤 표본이 어떤
-클래스인지는 전혀 모른다는 걸 재확인했다 — 그 결과 어느 클래스가 우연히
-어느 bin에 몰려 있는지에 따라 선택 비율이 라운드마다 완전히 달라진다.
-실측(NSL-KDD)으로 R2L 라운드(공격 995건)는 비례 기대치(99.5건) 대비 82%
-적은 18건만 선택됐는데, U2R 라운드(52건)는 거의 정확히 비례대로 선택되는
-등 들쭉날쭉했다. `select()`를 `_quota_select()`로 리팩터링해 label_budget을
-먼저 그룹(이진 라벨) 구성비대로(최소 1개) 배정하고, 그 쿼터 안에서만 위
-KL+extremity 메커니즘을 적용하도록 했다. 이진 쿼터만으로는 "공격" 예산
-안에서 서로 다른 family까지는 공평해지지 않는다는 것도 확인해(U2R 라운드
-자체 학습 성능이 여전히 낮게 나옴 — `ssf_memory_manager.py`의 같은 절
-참고), `train_category`(다중클래스)로 쿼터를 나누는 `select_with_category()`
-를 추가해봤다.
-
-**한 번 기각했다가, 잘못된 비교였음이 밝혀져 재검증 후 채택함**: 처음엔
-`select_with_category()`/`SSFMemoryManager.update_with_category()`(둘 다
-같은 이유로 시도) 각각을 A/B 실측(NSL-KDD, `dd=ssf/ss=ssf/mm=ssf/
-af=lwf_ssf/as=cade_mad`)해 이진 쿼터가 가장 낫다고 결론 내리고 둘 다
-되돌렸다. 그런데 재감사(4개 병렬 에이전트) 과정에서, 이 A/B가 그 사이
-바뀐 `data/dataset_loader.py`의 MinMaxScaler 시간 유출 수정 **이전**
-숫자와 비교된, 이미 낡은 비교였다는 게 밝혀졌다(같은 "이진 쿼터만"
-콤보를 현재 코드로 다시 재보면 f1=0.7291이 아니라 0.6565가 나온다 —
-전처리가 바뀌면 4개 변형 전부의 절대 수치가 같이 움직이므로 순위까지
-바뀔 수 있다는 걸 놓쳤었다). 현재 코드 기준으로 4개 변형을 전부 다시
-측정한 결과:
-  - 이진 쿼터만: f1=0.6565, roc_auc=0.7150, diag-F1=[0.851,0.554,0.257,
-    0.009,0.0]
-  - **선택기만 category 쿼터: f1=0.7040, roc_auc=0.6451, diag-F1=
-    [0.846,0.556,0.254,0.067,0.0]** ← 전체 f1도, U2R 라운드 자체 성능도
-    이진 쿼터보다 낫다.
-  - 버퍼만 category 쿼터: f1=0.5107, roc_auc=0.5101(거의 무작위) — 여전히
-    나쁨.
-  - 둘 다 category 쿼터: f1=0.5879, roc_auc=0.5276 — 여전히 이진보다 나쁨.
-결론이 뒤집혔다: **선택기의 category 쿼터는 채택**(전체 성능과 U2R 둘 다
-개선), **버퍼의 category 쿼터는 여전히 기각**(단독으로도, 선택기와
-합쳐도 더 나쁨 — `ssf_memory_manager.py`의 같은 절 참고). "실측 우선"
-원칙을 지키려면 실측 자체가 최신 코드 기준이어야 한다는 교훈이 남는다 —
-그리드 전체에 영향 주는 변경(전처리 등) 이후에는 이전 A/B 결론을 그대로
-믿지 않고 재확인해야 한다.
+**A/B 실측(NSL-KDD smoke, 2026-09-14)**: 결과가 갈렸다 —
+`dd=ssf/ss=ssf/mm=ssf/af=lwf_ssf/as=cade_mad`(SSF 풀 조합)는 f1
+0.6915→0.7749, bwt +0.0312→+0.0074, pr_auc 0.8499→0.8799로 **개선**.
+반면 `dd=none/ss=ssf/mm=none/af=none/as=cade_mad`(선택기 단독)는 f1
+0.7479→0.7210, bwt -0.0405→-0.0850으로 **악화**. 이번 수정은 "더 나은
+방식을 새로 시도"가 아니라 "원문과 다르게 동작하던 실제 버그를 원문대로
+고친 것"이라 결과가 갈려도 유지한다(사용자 지시) — 원인 분석은 추후
+필요하면(예: 무작위 보충이 SSF 마스크의 의도된 표본 다양성을 방해하는
+방향으로 상호작용하는지) 별도로.
 """
 
 from typing import List
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 from testbed.base.sample_selector import BaseSampleSelector
+from testbed.common.rng_utils import derived_seed
+from testbed.components.ssf.ssf_masks import SSFMaskContext
 
 
 class SSFSampleSelector(BaseSampleSelector):
-    def __init__(self, kl_max_iter: int = 100, num_bins: int = 10,
-                 max_drift_influence: float = 0.1):
-        self.kl_max_iter = kl_max_iter
-        self.num_bins = num_bins
-        # drift_weight의 상한 — 위 docstring의 붕괴 재현 참고. 대표성 선택을
-        # 완전히 압도하지 못하도록 제한한다.
-        self.max_drift_influence = max_drift_influence
+    """**전역 RNG 오염(2026-09-14 재검토로 발견, 수정)**: `_quota_select()`
+    안의 `torch.rand`(폴백)/`_select_within_group()`의 `torch.randperm`
+    (쿼터가 마스크 통과 수보다 클 때 무작위 보충)이 전역 RNG를 소비한다 —
+    `ss=ssf`일 때만 발동하므로, 이 슬롯 값 하나로 그 뒤 메인 모델 학습이
+    보는 난수 시퀀스가 갈라진다(`common_baselines.py`의 `RandomSelector`
+    모듈 docstring 참고, 같은 문제 패턴). `torch.random.fork_rng()`로
+    라운드당 한 번 격리한다."""
 
-    def _scalar_projection(self, data: torch.Tensor) -> torch.Tensor:
-        centered = data - data.mean(dim=0, keepdim=True)
-        try:
-            _, _, Vh = torch.linalg.svd(centered, full_matrices=False)
-            proj = centered @ Vh[0]
-        except Exception:
-            proj = centered.mean(dim=1)
-        return proj
+    def __init__(self, seed: int = 42):
+        self._ctx: SSFMaskContext = None
+        self._seed = seed
+        self._round = 0
 
-    def _histogram_bins(self, scores: torch.Tensor) -> torch.Tensor:
-        lo, hi = scores.min(), scores.max()
-        if (hi - lo).abs() < 1e-12:
-            return torch.zeros(len(scores), dtype=torch.long, device=scores.device)
-        edges = torch.linspace(lo.item(), hi.item(), self.num_bins + 1, device=scores.device)
-        bins = torch.bucketize(scores, edges[1:-1])
-        return bins
+    def set_ssf_masks(self, ctx: SSFMaskContext) -> None:
+        """CLClient가 Step 3 진입 시 라운드당 1회 호출(Item 1+2)."""
+        self._ctx = ctx
 
     def select(self, new_data: torch.Tensor, new_labels: torch.Tensor,
                label_budget: int, drift_score: float) -> List[int]:
-        return self._quota_select(new_data, new_labels, label_budget, drift_score)
+        return self._quota_select(new_data, new_labels, label_budget)
 
     def select_with_category(self, new_data: torch.Tensor, new_labels: torch.Tensor,
                               category, label_budget: int, drift_score: float) -> List[int]:
         """CLClient 전용 훅 — `train_category`(다중클래스)가 있으면 이진
-        라벨 대신 그걸로 쿼터를 나눈다. 한 번 기각했다가 재감사에서 잘못된
-        비교였음이 밝혀져 다시 채택했다 — 아래 "2026-08-26 재검증" 절 참고."""
+        라벨 대신 그걸로 쿼터를 나눈다(모듈 docstring 참고)."""
         codes = np.unique(np.asarray(category), return_inverse=True)[1]
         group = torch.tensor(codes, dtype=torch.long, device=new_data.device)
-        return self._quota_select(new_data, group, label_budget, drift_score)
+        return self._quota_select(new_data, group, label_budget)
 
     def _quota_select(self, new_data: torch.Tensor, group: torch.Tensor,
-                       label_budget: int, drift_score: float) -> List[int]:
+                       label_budget: int) -> List[int]:
         n = len(new_data)
         if n == 0:
             return []
@@ -144,117 +110,80 @@ class SSFSampleSelector(BaseSampleSelector):
         if k == n:
             return list(range(n))
 
-        # 2026-08-26 발견·수정 — 균일-히스토그램 대체 방식이 라운드별로
-        # 예측 불가능하게 그룹(클래스/category) 비율을 왜곡하는 문제(4개
-        # 논문 컴포넌트 전수 재감사에서 발견). KL 최적화는 "제1주성분
-        # 투영값의 분포"만 보고 그룹은 전혀 모르므로, 어느 그룹이 어느
-        # bin에 몰려 있는지에 따라 선택 비율이 완전히 달라진다 — 실측
-        # (NSL-KDD)으로 R2L 라운드(공격 995건)는 비례 기대치(99.5건) 대비
-        # 82% 적은 18건만 선택됐는데, U2R 라운드(52건)는 거의 정확히
-        # 비례대로 선택되는 등 라운드마다 들쭉날쭉했다. label_budget을
-        # 그룹 구성비대로(최소 1개) 먼저 배정하고, 그 쿼터 안에서만 아래
-        # KL-마스크 최적화+extremity 블렌딩을 적용한다 — "대표성 있는
-        # 표본을 뽑는다"는 핵심 메커니즘은 그룹 내부에서 그대로 작동하되,
-        # 그룹 간 비율 자체는 더 이상 히스토그램 우연에 좌우되지 않는다.
-        groups = group.unique().tolist()
-        if len(groups) > 1:
-            idx_by_group = {g: (group == g).nonzero(as_tuple=True)[0] for g in groups}
-            counts = {g: len(idx_by_group[g]) for g in groups}
-            quotas = {g: min(max(1, round(k * counts[g] / n)), counts[g]) for g in groups}
-            diff = k - sum(quotas.values())
-            order = sorted(groups, key=lambda g: counts[g], reverse=True)
-            i = 0
-            while diff != 0 and i < 10000:
-                g = order[i % len(order)]
-                if diff > 0 and quotas[g] < counts[g]:
-                    quotas[g] += 1
-                    diff -= 1
-                elif diff < 0 and quotas[g] > 0:
-                    quotas[g] -= 1
-                    diff += 1
-                i += 1
+        # 전역 RNG 오염 격리(클래스 docstring 참고) — 아래 torch.rand 폴백과
+        # _select_within_group()의 randperm을 라운드당 하나의 파생 시드로
+        # 감싼다.
+        with torch.random.fork_rng():
+            torch.manual_seed(derived_seed(self._seed, "ssf_quota_select", self._round))
 
-            selected: List[int] = []
-            for g in groups:
-                if quotas[g] <= 0:
-                    continue
-                grp_idx = idx_by_group[g]
-                local_topk = self._select_within_group(
-                    new_data[grp_idx], quotas[g], drift_score)
-                selected.extend(grp_idx[local_topk].tolist())
-            return selected
+            if self._ctx is None or self._ctx.new_data.shape[0] != n:
+                # set_ssf_masks()가 호출되지 않았거나(단위 테스트 등 독립 호출)
+                # new_data가 컨텍스트와 어긋나는 극단 상황 — 크래시 대신 무작위
+                # 선택으로 폴백한다(원문에 없는 경계 케이스, common_baselines.py
+                # RandomSelector와 동일한 성격). 이진마스크도 같은 방식(0.5 컷)
+                # 으로 일관되게 파생시킨다.
+                m_t_cont = torch.rand(n, device=new_data.device)
+                m_t_bin = (m_t_cont >= 0.5)
+            else:
+                m_t_cont = self._ctx.M_t_cont
+                m_t_bin = self._ctx.M_t_bin.bool()
 
-        return self._select_within_group(new_data, k, drift_score).tolist()
+            groups = group.unique().tolist()
+            if len(groups) > 1:
+                idx_by_group = {g: (group == g).nonzero(as_tuple=True)[0] for g in groups}
+                counts = {g: len(idx_by_group[g]) for g in groups}
+                quotas = {g: min(max(1, round(k * counts[g] / n)), counts[g]) for g in groups}
+                diff = k - sum(quotas.values())
+                order = sorted(groups, key=lambda g: counts[g], reverse=True)
+                i = 0
+                while diff != 0 and i < 10000:
+                    g = order[i % len(order)]
+                    if diff > 0 and quotas[g] < counts[g]:
+                        quotas[g] += 1
+                        diff -= 1
+                    elif diff < 0 and quotas[g] > 0:
+                        quotas[g] -= 1
+                        diff += 1
+                    i += 1
 
-    def _select_within_group(self, new_data: torch.Tensor, k: int,
-                              drift_score: float) -> torch.Tensor:
-        """단일 그룹(클래스) 안에서 KL 마스크 최적화 + extremity 블렌딩으로
-        top-k 인덱스(그 그룹 내부 기준)를 뽑는다 — `select()`가 클래스별로
-        호출한다(위 "2026-08-26" 절 참고)."""
-        n = len(new_data)
-        if k >= n:
-            return torch.arange(n, device=new_data.device)
+                selected: List[int] = []
+                for g in groups:
+                    if quotas[g] <= 0:
+                        continue
+                    grp_idx = idx_by_group[g]
+                    chosen_local = self._select_within_group(
+                        m_t_cont[grp_idx], m_t_bin[grp_idx], quotas[g])
+                    selected.extend(grp_idx[chosen_local].tolist())
+                result = selected
+            else:
+                result = self._select_within_group(m_t_cont, m_t_bin, k).tolist()
 
-        scores = self._scalar_projection(new_data)
-        bins = self._histogram_bins(scores)
+        self._round += 1
+        return result
 
-        # 목표 분포: bin마다 균등.
-        #
-        # **2026-08-14 정정 — "SSF의 대표성 개념을 표현한 것"이 아니다**:
-        # 구조 전수 감사에서 utils.py:109-190을 다시 정독한 결과, SSF의
-        # 실제 목표 분포는 균일분포가 전혀 아님을 확인했다 —
-        # `optimize_old_mask`/`optimize_new_mask`의 `bin_tgt_c`/`bin_tgt_t`
-        # (utils.py:134,175)는 **treatment_res(현재 윈도우의 실제 관측
-        # 분포)의 경험적 히스토그램**이다. 즉 SSF의 진짜 메커니즘은
-        # "선택된 표본이 지금 실제로 관측되는(드리프트됐을 수 있는) 분포를
-        # 따라가도록" 마스크를 최적화하는 drift-추종형 선택이지, "값 범위
-        # 전체에 고르게 퍼뜨리는" 다양성 극대화가 아니다. 이 균일분포
-        # 대체는 인터페이스 제약상 불가피했다 — `select()`는 old/control
-        # 분포에 접근할 방법이 없고(버퍼나 모델을 안 받음), SSF 원문의
-        # M_t 최적화 자체도 M_c(old mask)에 의존하는 구조라(utils.py:177)
-        # SampleSelector 혼자서는 애초에 원문 메커니즘을 재현할 수 없다.
-        # 즉 이건 "SSF 개념의 단순화"가 아니라 "SSF의 핵심 메커니즘을
-        # 포기하고 완전히 다른 대체 휴리스틱(균일 커버리지)을 쓴 것"이다.
-        # (drift_score와 무관하게 항상 균등 — 아래에서 별도로 블렌딩한다.)
-        target_dist = torch.full((self.num_bins,), 1.0 / self.num_bins, device=new_data.device)
-
-        mask_logit = torch.zeros(n, requires_grad=True, device=new_data.device)
-        optimizer = torch.optim.SGD([mask_logit], lr=1.0)
-
-        for _ in range(self.kl_max_iter):
-            optimizer.zero_grad()
-            mask = torch.sigmoid(mask_logit)
-            bin_weights = torch.zeros(self.num_bins, device=new_data.device)
-            for b in range(self.num_bins):
-                sel = bins == b
-                if sel.any():
-                    bin_weights[b] = mask[sel].sum()
-            bin_dist = bin_weights / (bin_weights.sum() + 1e-10)
-            loss = F.kl_div((bin_dist + 1e-10).log(), target_dist, reduction="sum")
-            loss.backward()
-            optimizer.step()
-
-        mask_final = torch.sigmoid(mask_logit).detach()
-
-        def _min_max_norm(x: torch.Tensor) -> torch.Tensor:
-            lo, hi = x.min(), x.max()
-            if (hi - lo).abs() < 1e-12:
-                return torch.zeros_like(x)
-            return (x - lo) / (hi - lo)
-
-        representativeness = _min_max_norm(mask_final)
-        extremity = _min_max_norm((scores - scores.mean()).abs())
-
-        # drift_score(0 이상, base/drift_detector.py 계약)는 0일 때 순수
-        # 대표성 선택이어야 한다. sigmoid(0)=0.5라 부적절 — tanh(0)=0이고 큰
-        # 값에서 1로 수렴하는 tanh를 쓴다. math.tanh(float64)로 바꾸면 torch의
-        # float32 tanh와 최하위 비트가 달라져 top-k 선택이 실제로 바뀌는 것을
-        # 확인해서(회귀 테스트로 적발) 원래의 torch.tanh 계산을 그대로 두고
-        # device만 명시한다.
-        drift_weight = self.max_drift_influence * torch.tanh(
-            torch.tensor(float(drift_score), device=new_data.device))
-        combined = (1 - drift_weight) * representativeness + drift_weight * extremity
-
-        # PRD 15.1절의 label_budget 5% 이내 일치 요구를 정확히 지키기 위해
-        # top-k로 선택한다(이진화만 쓰면 budget을 넘거나 못 채울 수 있음).
-        return torch.topk(combined, k).indices
+    @staticmethod
+    def _select_within_group(cont: torch.Tensor, bin_mask: torch.Tensor, quota: int
+                              ) -> torch.Tensor:
+        """SSF 원문(`utils.py:192-257`)의 두 분기를 그대로 재현한다 —
+        모듈 docstring "2026-09-14 정정" 절 참고. `cont`/`bin_mask`는 이미
+        하나의 그룹(카테고리 쿼터 적용 시) 또는 전체(단일 그룹)로 슬라이싱된
+        상태로 들어온다 — 반환값은 그 슬라이스 기준 **로컬** 인덱스다.
+        """
+        rep_local = bin_mask.nonzero(as_tuple=True)[0]
+        n_rep = len(rep_local)
+        if n_rep >= quota:
+            # 원문 utils.py:247-251 — 통과분이 쿼터보다 많으면 그 안에서만
+            # 연속점수(M_t) 상위 quota개.
+            rep_scores = cont[rep_local]
+            top_of_rep = torch.topk(rep_scores, quota).indices
+            return rep_local[top_of_rep]
+        # 원문 utils.py:235-246 — 통과분이 쿼터보다 적으면 전부 쓰고,
+        # 모자란 만큼을 마스크 미달(비통과) 표본 중 무작위로 채운다
+        # (연속점수로 이어서 채우지 않는다 — 여기가 이전 버전의 실제 버그).
+        non_rep_local = (~bin_mask).nonzero(as_tuple=True)[0]
+        need = min(quota - n_rep, len(non_rep_local))
+        if need > 0:
+            perm = torch.randperm(len(non_rep_local), device=cont.device)[:need]
+            fallback_local = non_rep_local[perm]
+            return torch.cat([rep_local, fallback_local])
+        return rep_local

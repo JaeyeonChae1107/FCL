@@ -1,7 +1,9 @@
 # CADE 원 논문 근거 (CADE/cade/utils.py, CADE/cade/detect.py, CADE/cade/autoencoder.py)
 # 서브에이전트 조사로 파일:라인까지 대조 완료 (testbed/docs/metric_justification.md 참고)
 
-# --- CADEMADScorer (anomaly_scorer='cade_mad') ---
+# --- t_mad: CADEMADScorer (anomaly_scorer='cade_mad')와 CADEDriftDetector
+# 자신의 drift 판정(cade_drift_detector.py) 둘 다 이 값을 공유해서 쓴다
+# (2026-09-14 재검토로 확인 — 이전엔 CADEMADScorer 전용처럼만 서술돼 있었음).
 t_mad: 3.5
 # CADE detect.py:97-104, utils.py:77-78 "mad_threshold" 기본값.
 # threshold = median(s_ref) + t_mad * MAD(s_ref) (PRD 3.4/3.5절)
@@ -9,6 +11,23 @@ t_mad: 3.5
 # --- CADEDriftDetector 내부 사설 encoder(contrastive AE) 학습 하이퍼파라미터 ---
 # PRD 10.2절이 요구하는 필수 필드는 t_mad뿐이지만, 사설 encoder 학습에 쓰이는
 # 값도 원문과 동일하게 맞춰 재현 충실도를 높인다.
+
+encoder_hidden_dim: 64
+encoder_latent_dim: 16
+# `CADEDriftDetector.__init__`의 파라미터 이름이 이전엔 `hidden_dim`/
+# `latent_dim`이라 `cl_client.py`의 전역 kwargs 병합(공유 backbone의
+# SSF 공식 값)이 가장 마지막에 덮어써 이 야ml에 뭘 넣어도 무시됐다 —
+# `encoder_hidden_dim`/`encoder_latent_dim`으로 개명해 그 충돌을 없앴다.
+# 값 근거: CADE 원문의 IDS 실험 스크립트(`CADE/run_cade_exp_ids_
+# infiltration.sh:13`(2026-09-14 재검토로 줄번호 정정, 이전엔 9로 잘못
+# 적혀있었음 — 값 자체(64-32-16)는 처음부터 정확했음) `--cae-hidden
+# 64-32-16`)는 3-hidden-layer(64→32→16,
+# 마지막이 latent) 구조다. 이 테스트베드의 `ContrastiveAutoEncoder`는
+# `FCLAutoEncoder`와 같은 단일 hidden layer 설계(input→hidden→latent)라
+# 이 3층 구조를 그대로 옮길 수 없다 — 원문 스펙의 첫 값(64)과 마지막 값(16)을
+# 각각 hidden/latent로 쓰는 2층 근사를 택했다. input_dim(데이터셋마다 다름)과
+# 무관한 고정값이다(원문도 데이터셋별로 이 값을 조정하지 않는다).
+
 contrastive_margin: 10.0
 # CADE cade/utils.py:72-73 "-m"/margin 기본값. contrastive loss:
 # L_con = is_same*dist + (1-is_same)*relu(margin-dist)  (autoencoder.py:224-226)
@@ -58,3 +77,23 @@ max_category_ref: 500
 # 대조학습 배치에도 리플레이로 섞어 넣어 방지한다), 자세한 실측 경위는
 # `docs/metric_justification.md`의 "CADE 다중클래스(family) centroid 연결"
 # 절과 `components/cade/cade_drift_detector.py` 모듈 docstring 참고.
+
+target_replay_fraction: 0.15
+# 원문 근거 없음 — 이 테스트베드 고유의 보정 장치(2026-09-12 도입, 수정
+# 계획 2.2절). `consumes_full_round_data` 도입으로 `fit_with_category()`가
+# `selected_data`(라벨 예산 10%) 대신 `new_data`(그 라운드 전체, 최대 10배
+# 큼)를 받게 되면서, `_replay_known_categories`가 합치는 과거 category
+# replay(`max_category_ref`로 캡, 고정 크기)가 결합 anchor 풀에서 상대적으로
+# 희석되어 과거 family 구분 능력을 잃는 회귀를 NSL-KDD smoke A/B로 확인했다
+# (`dd=cade+as=cade_mad`: f1 0.2688→0.1345, bwt -0.0738→-0.4402). replay를
+# 이 비율만큼 복원추출로 오버샘플링해 anchor 풀에서 최소 이 비율은 차지하게
+# 보정한다. 값 자체는 NSL-KDD smoke 스케일(10 epoch, 행 캡)에서 {0.08, 0.15,
+# 0.20, 0.30, 0.50}을 스윕해 찾은 국소최적점이다 — 비단조적: 0.15에서
+# f1=0.4405/bwt=-0.1306로 가장 좋았고 위아래로 갈수록(0.08: f1=0.1742/
+# bwt=-0.4108, 0.30: f1=0.2784/bwt=-0.2760, 0.50: f1=0.2151/bwt=-0.3622)
+# 나빠졌다. 더 복잡한 콤보(dd=cade/ss=ssf/mm=ssf/af=lwf_ssf/as=cade_mad)에서도
+# 0.15로 f1 0.2901→0.4478(개선), bwt +0.1045→-0.1078(다소 나빠짐 — 다만
+# 이전 baseline 자체가 row1 diag=0.006로 거의 붕괴 상태였다가 이제 실제
+# 학습이 일어나며 생기는 자연스러운 트레이드오프로 판단, 절대적 f1/pr_auc가
+# 훨씬 나아졌으므로 순net 개선으로 채택). 단일 시드·단일 데이터셋·smoke
+# 스케일 스윕이라 과적합 위험이 있음 — 6.8절 멀티시드 실행 시 재검증 대상.
