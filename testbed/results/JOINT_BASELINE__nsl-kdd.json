@@ -1,0 +1,85 @@
+{
+  "combo_id": "JOINT_BASELINE",
+  "exp_name": "JOINT_BASELINE__nsl-kdd",
+  "dataset": "nsl-kdd",
+  "drift_detector": "joint",
+  "sample_selector": "joint",
+  "memory_manager": "joint",
+  "anti_forgetting": "joint",
+  "anomaly_scorer": "joint",
+  "track": "JOINT",
+  "f1": 0.8068306852691343,
+  "precision": 0.9269822006472492,
+  "recall": 0.7142523182420323,
+  "pr_auc": 0.9005603526659627,
+  "bwt": 0.0,
+  "perf_matrix": [
+    [
+      0.9231636030706388,
+      0.8912671232876713,
+      0.2872123507136615,
+      0.17745803357314152
+    ]
+  ],
+  "roc_auc": 0.8946504217342108,
+  "labeling_cost": 1.0,
+  "training_time_sec": 322.9469575881958,
+  "memory_footprint": 0,
+  "memory_footprint_peak": 0,
+  "memory_footprint_avg": 0.0,
+  "avg_inference_latency_ms": 0.00028340760658107135,
+  "best_f1_reference": 0.8685904894887906,
+  "seed": 42,
+  "code_version": "3b4cd5228ed6",
+  "drift_detected_per_round": [],
+  "drift_score_per_round": [],
+  "n_drift_detected": 0,
+  "per_category_final": {
+    "DoS": {
+      "n_test": 7458,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.8787878787878788,
+      "recall_final": 0.8787878787878788,
+      "bwt": 0.0
+    },
+    "Probe": {
+      "n_test": 2421,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.8599752168525403,
+      "recall_final": 0.8599752168525403,
+      "bwt": 0.0
+    },
+    "R2L": {
+      "n_test": 2754,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.17901234567901234,
+      "recall_final": 0.17901234567901234,
+      "bwt": 0.0
+    },
+    "U2R": {
+      "n_test": 200,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.185,
+      "recall_final": 0.185,
+      "bwt": 0.0
+    }
+  },
+  "per_category_recall_history": {
+    "DoS": [
+      0.8787878787878788
+    ],
+    "Probe": [
+      0.8599752168525403
+    ],
+    "R2L": [
+      0.17901234567901234
+    ],
+    "U2R": [
+      0.185
+    ]
+  },
+  "normal_fpr": 0.07434867675831532,
+  "normal_fpr_history": [
+    0.07434867675831532
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "combo_id": "A_dd=none_ss=ssf_mm=ssf_af=none_as=none",
+  "exp_name": "A_dd=none_ss=ssf_mm=ssf_af=none_as=none__nsl-kdd",
+  "dataset": "nsl-kdd",
+  "drift_detector": "none",
+  "sample_selector": "ssf",
+  "memory_manager": "ssf",
+  "anti_forgetting": "none",
+  "anomaly_scorer": "none",
+  "track": "A",
+  "f1": 0.6659826604422101,
+  "precision": 0.9746246246246246,
+  "recall": 0.5058053455933921,
+  "pr_auc": 0.8636948670939867,
+  "bwt": -0.12445261759773096,
+  "perf_matrix": [
+    [
+      0.9223691776883267,
+      0.8048780487804879,
+      0.011424491253123885,
+      0.0
+    ],
+    [
+      0.8873145893292008,
+      0.903537684025489,
+      0.00635593220338983,
+      0.09090909090909091
+    ],
+    [
+      0.8617615954071612,
+      0.8303928487414726,
+      0.11638795986622075,
+      0.04580152671755725
+    ],
+    [
+      0.8085680285600952,
+      0.6805890227576974,
+      0.07977991746905087,
+      0.06530612244897958
+    ]
+  ],
+  "roc_auc": 0.7851393064440375,
+  "labeling_cost": 0.09999916136228311,
+  "training_time_sec": 71.36550855636597,
+  "memory_footprint": 1000,
+  "memory_footprint_peak": 6108,
+  "memory_footprint_avg": 2277.0,
+  "avg_inference_latency_ms": 0.0031801341187454777,
+  "best_f1_reference": 0.746209546327767,
+  "seed": 42,
+  "code_version": "3b4cd5228ed6",
+  "drift_detected_per_round": [
+    false,
+    false,
+    false,
+    false
+  ],
+  "drift_score_per_round": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "n_drift_detected": 0,
+  "per_category_final": {
+    "DoS": {
+      "n_test": 7458,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.860284258514347,
+      "recall_final": 0.6832931080718692,
+      "bwt": -0.17699115044247782
+    },
+    "Probe": {
+      "n_test": 2421,
+      "first_seen_round": 1,
+      "recall_at_first_seen": 0.849235852953325,
+      "recall_final": 0.5249896736885584,
+      "bwt": -0.3242461792647666
+    },
+    "R2L": {
+      "n_test": 2754,
+      "first_seen_round": 2,
+      "recall_at_first_seen": 0.06318082788671024,
+      "recall_final": 0.04212055192447349,
+      "bwt": -0.021060275962236752
+    },
+    "U2R": {
+      "n_test": 200,
+      "first_seen_round": 3,
+      "recall_at_first_seen": 0.04,
+      "recall_final": 0.04,
+      "bwt": 0.0
+    }
+  },
+  "per_category_recall_history": {
+    "DoS": [
+      0.860284258514347,
+      0.8061142397425584,
+      0.7648163046393135,
+      0.6832931080718692
+    ],
+    "Probe": [
+      0.6815365551425031,
+      0.849235852953325,
+      0.7290375877736472,
+      0.5249896736885584
+    ],
+    "R2L": [
+      0.005809731299927378,
+      0.0032679738562091504,
+      0.06318082788671024,
+      0.04212055192447349
+    ],
+    "U2R": [
+      0.0,
+      0.065,
+      0.03,
+      0.04
+    ]
+  },
+  "normal_fpr": 0.01740294511378849,
+  "normal_fpr_history": [
+    0.013489856863350838,
+    0.030583873957367932,
+    0.026670785706930284,
+    0.01740294511378849
+  ]
+}

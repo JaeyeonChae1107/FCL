@@ -1,0 +1,140 @@
+{
+  "combo_id": "JOINT_BASELINE",
+  "exp_name": "JOINT_BASELINE__x-iiotid",
+  "dataset": "x-iiotid",
+  "drift_detector": "joint",
+  "sample_selector": "joint",
+  "memory_manager": "joint",
+  "anti_forgetting": "joint",
+  "anomaly_scorer": "joint",
+  "track": "JOINT",
+  "f1": 0.9908792091132633,
+  "precision": 0.9930719710305286,
+  "recall": 0.9886961093585699,
+  "pr_auc": 0.9994460000666439,
+  "bwt": 0.0,
+  "perf_matrix": [
+    [
+      0.9407540394973071,
+      0.9979702300405955,
+      0.9154013015184382,
+      0.9920622321003334,
+      0.9984974633646215,
+      0.982060380201003,
+      0.9434137291280148,
+      0.9958540016287851,
+      0.9625668449197862
+    ]
+  ],
+  "roc_auc": 0.9995072888137998,
+  "labeling_cost": 1.0,
+  "training_time_sec": 1671.316577911377,
+  "memory_footprint": 0,
+  "memory_footprint_peak": 0,
+  "memory_footprint_avg": 0.0,
+  "avg_inference_latency_ms": 0.00017773451758031406,
+  "best_f1_reference": 0.9910293351412771,
+  "seed": 42,
+  "code_version": "3b4cd5228ed6",
+  "drift_detected_per_round": [],
+  "drift_score_per_round": [],
+  "n_drift_detected": 0,
+  "per_category_final": {
+    "C&C": {
+      "n_test": 573,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.9144851657940664,
+      "recall_final": 0.9144851657940664,
+      "bwt": 0.0
+    },
+    "Exfiltration": {
+      "n_test": 4427,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.9995482267901513,
+      "recall_final": 0.9995482267901513,
+      "bwt": 0.0
+    },
+    "Exploitation": {
+      "n_test": 227,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.9295154185022027,
+      "recall_final": 0.9295154185022027,
+      "bwt": 0.0
+    },
+    "Lateral _movement": {
+      "n_test": 6319,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.9889222978319354,
+      "recall_final": 0.9889222978319354,
+      "bwt": 0.0
+    },
+    "RDOS": {
+      "n_test": 28252,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.9996814384822313,
+      "recall_final": 0.9996814384822313,
+      "bwt": 0.0
+    },
+    "Reconnaissance": {
+      "n_test": 25518,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.9707265459675524,
+      "recall_final": 0.9707265459675524,
+      "bwt": 0.0
+    },
+    "Tampering": {
+      "n_test": 1024,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.9931640625,
+      "recall_final": 0.9931640625,
+      "bwt": 0.0
+    },
+    "Weaponization": {
+      "n_test": 13452,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.9999256616116563,
+      "recall_final": 0.9999256616116563,
+      "bwt": 0.0
+    },
+    "crypto-ransomware": {
+      "n_test": 92,
+      "first_seen_round": 0,
+      "recall_at_first_seen": 0.9782608695652174,
+      "recall_final": 0.9782608695652174,
+      "bwt": 0.0
+    }
+  },
+  "per_category_recall_history": {
+    "C&C": [
+      0.9144851657940664
+    ],
+    "Exfiltration": [
+      0.9995482267901513
+    ],
+    "Exploitation": [
+      0.9295154185022027
+    ],
+    "Lateral _movement": [
+      0.9889222978319354
+    ],
+    "RDOS": [
+      0.9996814384822313
+    ],
+    "Reconnaissance": [
+      0.9707265459675524
+    ],
+    "Tampering": [
+      0.9931640625
+    ],
+    "Weaponization": [
+      0.9999256616116563
+    ],
+    "crypto-ransomware": [
+      0.9782608695652174
+    ]
+  },
+  "normal_fpr": 0.0065374986652112525,
+  "normal_fpr_history": [
+    0.0065374986652112525
+  ]
+}
